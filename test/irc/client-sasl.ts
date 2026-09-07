@@ -225,6 +225,33 @@ describe("IrcClient SASL", function () {
 		expect(client.account).to.equal("");
 	});
 
+	it("tells the manager to stop a refused login connecting by itself", function () {
+		// The same credentials would be refused again at every page load, and
+		// an autoconnecting network that never registers leaves no way back
+		// to the connect screen to fix them (manager.ts onSaslRejected).
+		let rejected = 0;
+		const {client, transport} = setup({onSaslRejected: () => rejected++});
+
+		offer(transport, `${OFFERED_CAPS} sasl=PLAIN`);
+		transport.line("AUTHENTICATE +");
+		transport.line(":irc.test 904 alice :SASL authentication failed");
+
+		expect(rejected).to.equal(1);
+		expectAborted(transport, client);
+	});
+
+	it("leaves autoconnect alone when the deploy connects anyway", function () {
+		// Nothing was dropped, so there is no loop to break.
+		let rejected = 0;
+		const {transport} = setup({...CARRY_ON, onSaslRejected: () => rejected++});
+
+		offer(transport, `${OFFERED_CAPS} sasl=PLAIN`);
+		transport.line("AUTHENTICATE +");
+		transport.line(":irc.test 904 alice :SASL authentication failed");
+
+		expect(rejected).to.equal(0);
+	});
+
 	it("reports a 904 and still completes registration when the deploy allows it", function () {
 		const {client, transport} = setup(CARRY_ON);
 		offer(transport, `${OFFERED_CAPS} sasl=PLAIN`);

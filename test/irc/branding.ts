@@ -7,6 +7,7 @@ import {
 	brandingString,
 	expandNick,
 	getBranding,
+	nickFromAccount,
 	loadBranding,
 	normalizeBranding,
 	resetBranding,
@@ -56,6 +57,8 @@ describe("branding", function () {
 				saveNetworks: true,
 				allowCustomServer: true,
 				saslDisconnectOnFail: true,
+				guestAccess: true,
+				signIn: false,
 			});
 		});
 
@@ -81,6 +84,8 @@ describe("branding", function () {
 				saveNetworks: false,
 				allowCustomServer: true,
 				saslDisconnectOnFail: true,
+				guestAccess: true,
+				signIn: false,
 			});
 			expect(config.strings).to.deep.equal({"connect.submit": "Go"});
 		});
@@ -164,12 +169,85 @@ describe("branding", function () {
 				saveNetworks: true,
 				allowCustomServer: false,
 				saslDisconnectOnFail: true,
+				signIn: false,
+				guestAccess: true,
 			});
 			expect(brandingFeatures({appName: "x"}).allowCustomServer).to.equal(true);
 			expect(
 				brandingFeatures(normalizeBranding({features: {saslDisconnectOnFail: false}}))
 					.saslDisconnectOnFail
 			).to.equal(false);
+		});
+	});
+
+	describe("the sign-in panel", function () {
+		const network = {host: "irc.testnet.example"};
+
+		it("is off unless a deploy asks for it", function () {
+			expect(brandingFeatures(normalizeBranding({})).signIn).to.equal(false);
+			expect(brandingFeatures(normalizeBranding({defaultNetwork: network})).signIn).to.equal(
+				false
+			);
+		});
+
+		it("needs a network to sign in to", function () {
+			// The panel has no server fields, so without a default network
+			// there is nothing it could connect to.
+			const config = normalizeBranding({features: {signIn: true}});
+
+			expect(config.features?.signIn).to.equal(true);
+			expect(brandingFeatures(config).signIn).to.equal(false);
+			expect(brandingFeatures(config).allowCustomServer).to.equal(true);
+		});
+
+		it("pins the server once it is on", function () {
+			const features = brandingFeatures(
+				normalizeBranding({defaultNetwork: network, features: {signIn: true}})
+			);
+
+			expect(features.signIn).to.equal(true);
+			// Even though nothing set allowCustomServer: there are no server
+			// fields to offer, and a ?host= link must not slip past them.
+			expect(features.allowCustomServer).to.equal(false);
+		});
+
+		it("offers guest access unless the network requires an account", function () {
+			const guests = normalizeBranding({defaultNetwork: network, features: {signIn: true}});
+			const members = normalizeBranding({
+				defaultNetwork: network,
+				features: {signIn: true, guestAccess: false},
+			});
+
+			expect(brandingFeatures(guests).guestAccess).to.equal(true);
+			expect(brandingFeatures(members).guestAccess).to.equal(false);
+		});
+
+		it("carries its own strings", function () {
+			const config = normalizeBranding({
+				strings: {"connect.guestSubmit": "Just let me in"},
+			});
+
+			expect(brandingString("connect.guestSubmit", config)).to.equal("Just let me in");
+			expect(brandingString("connect.signInTitle", config)).to.equal("Sign in");
+			// The intro is empty by default: a deploy adds one or gets none.
+			expect(brandingString("connect.signInIntro", config)).to.equal("");
+		});
+	});
+
+	describe("nickFromAccount", function () {
+		it("keeps an account name that is already a legal nick", function () {
+			expect(nickFromAccount("rubin", "guest1")).to.equal("rubin");
+			expect(nickFromAccount("a_b-c[2]", "guest1")).to.equal("a_b-c[2]");
+		});
+
+		it("drops what a nick may not contain", function () {
+			expect(nickFromAccount("first last", "guest1")).to.equal("firstlast");
+			expect(nickFromAccount("user@example.com", "guest1")).to.equal("userexamplecom");
+		});
+
+		it("falls back when nothing usable is left", function () {
+			expect(nickFromAccount("", "guest1")).to.equal("guest1");
+			expect(nickFromAccount("...", "guest1")).to.equal("guest1");
 		});
 	});
 

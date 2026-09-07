@@ -102,6 +102,17 @@ export function createNetwork(options: CreateNetworkOptions): IrcClient {
 					saved.save({...current, port, tls});
 				}
 			},
+			// A refused login stops the entry connecting by itself: the same
+			// credentials would be refused again at every page load, and a
+			// network that never registers is not one the user can get back
+			// to the connect screen from.
+			onSaslRejected() {
+				const current = saved.get(entry.uuid);
+
+				if (current?.autoconnect) {
+					saved.save({...current, autoconnect: false});
+				}
+			},
 		});
 		clients.set(entry.uuid, client);
 

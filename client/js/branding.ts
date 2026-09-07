@@ -46,6 +46,22 @@ export interface BrandingFeatures {
 	 * reported in the lobby, but the connection goes ahead as a stranger.
 	 */
 	saslDisconnectOnFail?: boolean;
+	/**
+	 * Show a sign-in panel — account and password, or a nick and "Connect as
+	 * guest" — instead of the connect form. For a deploy that is its own
+	 * network's client rather than a general IRC client: there is no server
+	 * to choose, so the first screen asks who you are, not where to go.
+	 *
+	 * Default false. Requires `defaultNetwork` (there would be nothing to
+	 * sign in to) and pins the server the way `allowCustomServer: false`
+	 * does; `brandingFeatures()` resolves both.
+	 */
+	signIn?: boolean;
+	/**
+	 * Offer "Connect as guest" on the sign-in panel. Default true. `false`
+	 * leaves only the account form, for a network that requires an account.
+	 */
+	guestAccess?: boolean;
 }
 
 /**
@@ -186,6 +202,13 @@ export const BRANDING_STRINGS: Record<string, string> = {
 	"connect.savedNetworksEmpty":
 		"No saved networks yet. Networks you connect to are remembered here.",
 	"connect.submit": "Connect",
+	// The sign-in panel (`features.signIn`).
+	"connect.signInTitle": "Sign in",
+	"connect.signInIntro": "",
+	"connect.signInSubmit": "Sign in",
+	"connect.rememberMe": "Stay signed in on this device",
+	"connect.guestTitle": "No account?",
+	"connect.guestSubmit": "Connect as guest",
 	"help.about": "About",
 	"help.website": "Website",
 	"help.documentation": "Documentation",
@@ -205,6 +228,8 @@ export const DEFAULT_BRANDING: BrandingConfig = {
 		saveNetworks: true,
 		allowCustomServer: true,
 		saslDisconnectOnFail: true,
+		signIn: false,
+		guestAccess: true,
 	},
 	strings: {},
 };
@@ -245,13 +270,33 @@ export function expandNick(nick: string, random: () => number = Math.random): st
 	return nick.replace(/[?%]/g, () => String(Math.floor(random() * 10) % 10));
 }
 
-/** Resolved defaults from `features`, with unset flags filled in as `true`. */
+/**
+ * The nick a signed-in user gets: their account name with everything a nick
+ * may not contain removed (services allow spaces and dots that IRC does
+ * not). Falls back to `fallback` — the deploy's guest pattern — when nothing
+ * usable is left, so a connection is never attempted with an empty nick.
+ */
+export function nickFromAccount(account: string, fallback: string): string {
+	const nick = account.replace(/[^A-Za-z0-9[\]\\`_^{|}-]/g, "");
+	return nick.length > 0 ? nick : fallback;
+}
+
+/**
+ * Resolved defaults from `features`, with unset flags filled in as `true` —
+ * except `signIn`, which is opt-in and needs a `defaultNetwork` to sign in
+ * to. A sign-in deploy shows no server fields at all, so it also pins the
+ * host the way `allowCustomServer: false` does.
+ */
 export function brandingFeatures(config: BrandingConfig = current): Required<BrandingFeatures> {
+	const signIn = config.features?.signIn === true && config.defaultNetwork !== undefined;
+
 	return {
 		multiNetwork: config.features?.multiNetwork !== false,
 		saveNetworks: config.features?.saveNetworks !== false,
-		allowCustomServer: config.features?.allowCustomServer !== false,
+		allowCustomServer: !signIn && config.features?.allowCustomServer !== false,
 		saslDisconnectOnFail: config.features?.saslDisconnectOnFail !== false,
+		signIn,
+		guestAccess: config.features?.guestAccess !== false,
 	};
 }
 
@@ -547,9 +592,13 @@ export function normalizeBranding(
 		"saveNetworks",
 		"allowCustomServer",
 		"saslDisconnectOnFail",
+		"guestAccess",
 	] as const) {
 		features[key] = optionalBoolean(rawFeatures[key]) ?? defaults.features?.[key] ?? true;
 	}
+
+	// Opt-in, so it is the one flag a missing value leaves off.
+	features.signIn = optionalBoolean(rawFeatures.signIn) ?? defaults.features?.signIn ?? false;
 
 	const config: BrandingConfig = {
 		appName: optionalString(source.appName) ?? defaults.appName,

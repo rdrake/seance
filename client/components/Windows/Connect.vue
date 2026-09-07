@@ -9,7 +9,99 @@
 		<div v-if="!fromLink" class="header">
 			<SidebarToggle />
 		</div>
-		<form class="container" method="post" action="" @submit.prevent="onSubmit">
+		<form
+			v-if="signInMode"
+			class="container sign-in"
+			method="post"
+			action=""
+			@submit.prevent="onSubmit"
+		>
+			<h1 class="title">{{ t("connect.signInTitle") }}</h1>
+
+			<div v-if="linkNotice" class="connect-notice connect-link-notice">
+				{{ linkNotice }}
+			</div>
+
+			<p v-if="signInIntro" class="sign-in-intro">{{ signInIntro }}</p>
+
+			<div class="connect-row connect-network">
+				<label>Network</label>
+				<div class="input-wrap">
+					<strong>{{ networkLabel }}</strong>
+				</div>
+			</div>
+			<div class="connect-row">
+				<label for="connect:saslAccount">Account</label>
+				<input
+					id="connect:saslAccount"
+					v-model.trim="form.saslAccount"
+					class="input"
+					name="saslAccount"
+					maxlength="100"
+					autocomplete="username"
+					required
+				/>
+			</div>
+			<div class="connect-row">
+				<label for="connect:saslPassword">Password</label>
+				<RevealPassword v-slot:default="slotProps" class="input-wrap password-container">
+					<input
+						id="connect:saslPassword"
+						ref="passwordInput"
+						v-model="form.saslPassword"
+						class="input"
+						:type="slotProps.isVisible ? 'text' : 'password'"
+						name="saslPassword"
+						maxlength="300"
+						autocomplete="current-password"
+						required
+					/>
+				</RevealPassword>
+			</div>
+			<div v-if="showSavedNetworks" class="connect-row">
+				<label></label>
+				<div class="input-wrap">
+					<label class="tls">
+						<input v-model="rememberMe" type="checkbox" name="rememberMe" />
+						{{ t("connect.rememberMe") }}
+					</label>
+				</div>
+			</div>
+
+			<div v-if="notice" class="connect-notice">{{ notice }}</div>
+			<div v-if="submitted" class="connect-notice">
+				Connecting as <strong>{{ submitted.nick }}</strong> to
+				<strong>{{ networkLabel }}</strong
+				>…
+			</div>
+
+			<div :class="{'link-approval-buttons': fromLink}">
+				<button v-if="fromLink" type="button" class="btn btn-cancel" @click="cancelLink">
+					Not now
+				</button>
+				<button type="submit" class="btn">{{ t("connect.signInSubmit") }}</button>
+			</div>
+
+			<template v-if="guestAccess">
+				<h2 class="sign-in-guest">{{ t("connect.guestTitle") }}</h2>
+				<div class="connect-row">
+					<label for="connect:guestNick">Nick</label>
+					<input
+						id="connect:guestNick"
+						v-model.trim="guestNick"
+						class="input nick"
+						name="guestNick"
+						pattern="[^\s:!@]+"
+						maxlength="100"
+						@keydown.enter.prevent="onGuest"
+					/>
+				</div>
+				<button type="button" class="btn btn-guest" @click="onGuest">
+					{{ t("connect.guestSubmit") }}
+				</button>
+			</template>
+		</form>
+		<form v-else class="container" method="post" action="" @submit.prevent="onSubmit">
 			<h1 class="title">{{ fromLink ? "Connect to a new server?" : t("connect.title") }}</h1>
 
 			<div v-if="linkNotice" class="connect-notice connect-link-notice">
@@ -240,13 +332,32 @@
 	background: transparent;
 	color: var(--body-color);
 }
+
+/* The sign-in panel: the same rows, with the guest half set apart by a rule
+ * so the two ways in read as two choices rather than one long form. */
+#connect .sign-in-intro {
+	margin: 0 0 1.25rem;
+	color: var(--body-color-muted, inherit);
+}
+
+#connect .sign-in-guest {
+	margin-top: 2rem;
+	padding-top: 1.25rem;
+	border-top: 1px solid var(--chat-rule, rgb(0 0 0 / 15%));
+}
+
+#connect .btn-guest {
+	background: transparent;
+	box-shadow: inset 0 0 0 1px currentcolor;
+	color: var(--button-color, inherit);
+}
 </style>
 
 <script lang="ts">
 import {defineComponent, onMounted, reactive, ref, watch} from "vue";
 
 import {useStore} from "../../js/store";
-import {brandingFeatures, brandingString, expandNick} from "../../js/branding";
+import {brandingFeatures, brandingString, expandNick, nickFromAccount} from "../../js/branding";
 import {autoconnectSavedNetworks, createNetwork} from "../../js/irc/manager";
 import * as saved from "../../js/irc/saved-networks";
 import {defaultPort, SavedNetwork} from "../../js/irc/saved-networks";
@@ -314,6 +425,18 @@ export default defineComponent({
 				Object.assign(form, server);
 			}
 		};
+
+		// The sign-in panel replaces the whole form; `brandingFeatures` only
+		// reports it when there is a `defaultNetwork` to sign in to, and pins
+		// the server when it does.
+		const signInMode = features.signIn;
+		const guestAccess = features.guestAccess;
+		const signInIntro = t("connect.signInIntro");
+		/** The guest half's own field, so prefilling an account leaves it be. */
+		const guestNick = ref(network?.nick ? expandNick(network.nick) : "");
+		/** "Stay signed in": remember the password *and* connect on next load,
+		 * which together are what make the sign-in screen a first-run screen. */
+		const rememberMe = ref(false);
 
 		const showSasl = ref(false);
 		const rememberPassword = ref(false);
@@ -404,6 +527,17 @@ export default defineComponent({
 
 			if (last) {
 				prefill(last);
+
+				if (signInMode) {
+					rememberMe.value = rememberPassword.value;
+
+					// A returning guest gets their own nick back; a returning
+					// account holder gets the account, and the guest field
+					// keeps the deploy's pattern.
+					if (last.sasl !== "plain" && last.nick) {
+						guestNick.value = last.nick;
+					}
+				}
 			} else {
 				showSasl.value = form.sasl === "plain" || !!form.saslAccount;
 			}
@@ -428,7 +562,70 @@ export default defineComponent({
 			}
 		);
 
+		/**
+		 * A sign-in deploy connects to one server, so it keeps one saved
+		 * entry: signing in again — as the same account, as someone else, or
+		 * as a guest — replaces it instead of leaving a list of
+		 * near-identical networks behind (`findMatching` keys on the nick,
+		 * and a guest's nick changes every visit).
+		 */
+		const signInUuid = () =>
+			selectedUuid.value ??
+			saved.list().find((net) => net.host === server.host && net.port === server.port)?.uuid;
+
+		/** The tail every path on this screen shares. */
+		const start = (options: {rememberPassword: boolean; autoconnect: boolean}) => {
+			submitted.value = {...form};
+			notice.value = "";
+			const client = createNetwork({
+				...submitted.value,
+				uuid: (signInMode ? signInUuid() : selectedUuid.value) ?? undefined,
+				pushEnabled: pushEnabled.value,
+				notifyEnabled: notifyEnabled.value,
+				...options,
+			});
+			selectedUuid.value = client.uuid;
+			autoconnectSavedNetworks();
+		};
+
+		/** Sign in: the account and password are the SASL credentials, and the
+		 * account is the nick unless it holds characters a nick may not. */
+		const onSignIn = () => {
+			form.sasl = "plain";
+			// The last resort only comes up for an account with no
+			// nick-legal character at all on a deploy that sets no nick
+			// pattern; an empty NICK must never reach the wire.
+			form.nick = nickFromAccount(
+				form.saslAccount,
+				guestNick.value || expandNick("guest????")
+			);
+
+			const remember = showSavedNetworks && rememberMe.value;
+			start({rememberPassword: remember, autoconnect: remember});
+		};
+
+		/** Connect as a guest: no SASL, and nothing kept for the next visit. */
+		const onGuest = () => {
+			const nick = guestNick.value.trim();
+
+			if (!/^[^\s:!@]+$/.test(nick)) {
+				notice.value = "Choose a nick to connect as a guest.";
+				return;
+			}
+
+			form.nick = nick;
+			form.sasl = "";
+			form.saslAccount = "";
+			form.saslPassword = "";
+			start({rememberPassword: false, autoconnect: false});
+		};
+
 		const onSubmit = () => {
+			if (signInMode) {
+				onSignIn();
+				return;
+			}
+
 			form.sasl = showSasl.value ? "plain" : "";
 
 			if (!showSasl.value) {
@@ -436,18 +633,10 @@ export default defineComponent({
 				form.saslPassword = "";
 			}
 
-			submitted.value = {...form};
-			notice.value = "";
-			const client = createNetwork({
-				...submitted.value,
-				uuid: selectedUuid.value ?? undefined,
+			start({
 				rememberPassword: showSasl.value && rememberPassword.value,
 				autoconnect: autoconnect.value,
-				pushEnabled: pushEnabled.value,
-				notifyEnabled: notifyEnabled.value,
 			});
-			selectedUuid.value = client.uuid;
-			autoconnectSavedNetworks();
 		};
 
 		const cancelLink = async () => {
@@ -480,6 +669,12 @@ export default defineComponent({
 		return {
 			form,
 			t,
+			signInMode,
+			guestAccess,
+			signInIntro,
+			guestNick,
+			rememberMe,
+			onGuest,
 			hostLocked,
 			networkLabel,
 			showSavedNetworks,

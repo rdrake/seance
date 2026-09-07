@@ -155,6 +155,14 @@ const pending = new Map();
 const consoleLogs = [];
 const wsFrames = [];
 const failures = [];
+/**
+ * Frame errors a scenario has declared expected (`allowWsFrameErrors`): true
+ * for all of them, or a RegExp matched against the message. A scenario that
+ * deliberately drops a connection sees one every run — the ircd's closing
+ * line arrives after the browser has begun the close handshake — and that is
+ * the path under test, not a defect.
+ */
+let allowWsFrameErrors = null;
 let socket;
 let nextId = 0;
 
@@ -249,10 +257,23 @@ function onEvent(msg) {
 			wsFrames.push({dir: "in", requestId: params.requestId, ...params.response});
 			note(frameLine("←", params.requestId, params.response));
 			break;
-		case "Network.webSocketFrameError":
-			failures.push(`ws frame error: ${params.errorMessage}`);
-			console.log(`ws ERROR [${params.requestId.slice(-6)}] ${params.errorMessage}`);
+		case "Network.webSocketFrameError": {
+			const expected =
+				allowWsFrameErrors === true ||
+				(allowWsFrameErrors instanceof RegExp &&
+					allowWsFrameErrors.test(params.errorMessage));
+
+			if (!expected) {
+				failures.push(`ws frame error: ${params.errorMessage}`);
+			}
+
+			console.log(
+				`ws ERROR [${params.requestId.slice(-6)}] ${params.errorMessage}${
+					expected ? " (expected)" : ""
+				}`
+			);
 			break;
+		}
 		case "Network.webSocketClosed":
 			console.log(`ws close [${params.requestId.slice(-6)}]`);
 			break;
@@ -522,6 +543,10 @@ try {
 
 		if (page.url === null && typeof scenario.url === "string") {
 			page.url = scenario.url;
+		}
+
+		if (scenario.allowWsFrameErrors === true || scenario.allowWsFrameErrors instanceof RegExp) {
+			allowWsFrameErrors = scenario.allowWsFrameErrors;
 		}
 
 		note(`scenario ${scenarioPath}${page.url ? ` on ${page.url}` : ""}`);

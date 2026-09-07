@@ -88,8 +88,19 @@ A scenario is a `.mjs` module in `tools/scenarios/` whose default export is
 `--url=` overrides. The process exits non-zero if any check failed, so a
 scenario doubles as a smoke check.
 
+A WebSocket frame error is normally counted as a failure of its own, because
+one usually means the client sent something the browser or the ircd would not
+carry. A scenario that **deliberately drops a connection** is the exception:
+the ircd's closing line lands after the browser has begun the close handshake,
+so `Data frame received after close` arrives every run. Such a scenario says so
+with `export const allowWsFrameErrors = /after close/` (a RegExp, or `true` for
+all of them); matching errors are still printed, marked `(expected)`, but do
+not fail the run. `sign-in.mjs`, whose subject is a refused login, is the
+example.
+
 ```js
 export const url = "http://localhost:8000/";
+// export const allowWsFrameErrors = /after close/;  // only if it disconnects
 
 export default async function run(page) {
   await page.goto(page.url, {waitForSelector: "#connect form"});
