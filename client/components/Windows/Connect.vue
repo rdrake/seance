@@ -79,7 +79,9 @@
 				<button v-if="fromLink" type="button" class="btn btn-cancel" @click="cancelLink">
 					Not now
 				</button>
-				<button type="submit" class="btn">{{ t("connect.signInSubmit") }}</button>
+				<button type="submit" class="btn btn-signin">
+					{{ t("connect.signInSubmit") }}
+				</button>
 			</div>
 
 			<template v-if="guestAccess">
@@ -342,14 +344,14 @@
 
 #connect .sign-in-guest {
 	margin-top: 2rem;
-	padding-top: 1.25rem;
-	border-top: 1px solid var(--chat-rule, rgb(0 0 0 / 15%));
 }
 
-#connect .btn-guest {
-	background: transparent;
-	box-shadow: inset 0 0 0 1px currentcolor;
-	color: var(--button-color, inherit);
+/* The stock `.btn` is already an outline, so the two ways in would look
+ * alike; the account form is the primary one, and fills. `.btn-guest` keeps
+ * the outline (and its class, which the browser scenario clicks). */
+#connect .btn-signin {
+	background: var(--button-color);
+	color: var(--button-text-color-hover);
 }
 </style>
 
