@@ -73,6 +73,14 @@
 	--highlight-bg-color: #efe8dc;
 	--highlight-border-color: #b08c4f;
 
+	/* An action ("* nick waves"). This was #f39c12 written straight into the
+	 * rule, which is 2.19:1 on this theme's white — under even the 3:1 floor
+	 * WCAG allows large text, for a whole line of normal-sized text. The four
+	 * handoff themes each set their own and were unaffected; `day` had no
+	 * token to set and `morning`, which inherits this file's, sets one below.
+	 * #a85f10 is 4.87:1 on white and still reads as the same amber. */
+	--action-color: #a85f10;
+
 	/* Own messages read a step quieter than everyone else's, but only a step:
 	 * --body-color-muted is sized for labels on a background, and using it for
 	 * a whole message put own text at roughly a third of the contrast of the
@@ -2032,7 +2040,7 @@ textarea.input {
 #chat .msg[data-type="action"] .from,
 #chat .msg[data-type="action"] .content,
 #chat .msg[data-type="action"] .user {
-	color: #f39c12;
+	color: var(--action-color);
 }
 
 #chat .msg[data-type="notice"] .time,
@@ -4272,8 +4280,12 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 	}
 }
 
+/* The count inherits the pill's `--body-color` rather than taking the muted
+ * token: muted is sized against the window background, and the pill lays a
+ * translucent grey over that first, which cost enough contrast to fail AA on
+ * every light theme (day 3.99:1, frost 4.13:1, creama 4.29:1). The count is
+ * the reaction's content, not a label beside it. */
 #chat .msg-reaction-count {
-	color: var(--body-color-muted);
 	font-variant-numeric: tabular-nums;
 }
 

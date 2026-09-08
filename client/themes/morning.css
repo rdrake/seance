@@ -11,6 +11,10 @@
 	--highlight-bg-color: #4d4332;
 	--highlight-border-color: #b08c4f;
 
+	/* style.css darkened this for `day`'s white; on #303e4a the original
+	 * amber is 5.00:1 and the darkened one would be 2.25:1. */
+	--action-color: #f39c12;
+
 	/* Code blocks and their syntax highlighting, on this theme's dark `code`
 	 * background */
 	--md-code-color: #f3f3f3;
