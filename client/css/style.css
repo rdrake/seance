@@ -73,6 +73,32 @@
 	--highlight-bg-color: #efe8dc;
 	--highlight-border-color: #b08c4f;
 
+	/* Own messages read a step quieter than everyone else's, but only a step:
+	 * --body-color-muted is sized for labels on a background, and using it for
+	 * a whole message put own text at roughly a third of the contrast of the
+	 * line above it (5.4:1 against 14.1:1 in coffee) — legible by the letter
+	 * of WCAG and tiring to actually read. Mixed against the body colour it
+	 * stays distinguishable at a glance without dropping out of the page. A
+	 * theme that wants a different distinction overrides this one token. */
+	--self-color: color-mix(in srgb, var(--body-color) 78%, var(--body-color-muted));
+
+	/* The row under the pointer. The message toolbar floats over the top edge
+	 * of its message and, on a wide monitor, over a lot of empty line — the
+	 * band is what says which message it belongs to.
+	 *
+	 * Derived from the text colour the way the theme handoff asks
+	 * (docs/resources/themes/, § Interaction states: `color-mix(in oklab,
+	 * var(--chat-fg) 3%, var(--chat-bg))`), with two deliberate deviations.
+	 * It mixes toward `transparent` rather than the background, so the band
+	 * composes with a mention row instead of replacing its colour — the
+	 * handoff has no layered case and would leave a hovered mention with no
+	 * hover feedback at all. And it is 6%, not 3%: the handoff was sizing a
+	 * resting state, where 3% is right, but this band has to answer "which
+	 * message does that toolbar belong to?" across a wide monitor, and at 3%
+	 * it is about half as visible as the version that was checked against
+	 * that question. */
+	--msg-hover-bg: color-mix(in oklab, var(--body-color) 6%, transparent);
+
 	/* Color of the progress bar shown above the input while a file is being uploaded. Defaults to button color */
 	--upload-progressbar-color: var(--button-color);
 
@@ -1702,6 +1728,54 @@ textarea.input {
 	position: relative;
 }
 
+/* The row under the pointer is banded, because the message toolbar
+ * (`.msg-actions`) floats over the top edge of its message rather than inside
+ * it: on a wide monitor a short line leaves most of the row empty and there is
+ * nothing else saying which message a reply, a reaction or a delete would land
+ * on. The list matches the one that reveals the toolbar (`.msg-actions`,
+ * below) state for state: an emoji picker left open keeps the toolbar on a
+ * row the pointer has since left, and a keyboard user reaches it through
+ * `:focus-within` and never hovers at all — a band that only followed the
+ * pointer would leave both of them pointing at nothing.
+ *
+ * The band is a flat gradient rather than a `background-color` so that it
+ * layers over one instead of replacing it: `.highlight` paints the row from a
+ * more specific selector (`#chat .chat-view[data-type="channel"] .msg.highlight`),
+ * so a colour here would lose the cascade on exactly the rows that most need
+ * the pointer followed, and win it everywhere else by erasing the mention
+ * colour. An image sits on top of whatever colour won. */
+#chat .msg:hover,
+#chat .msg:focus-within,
+#chat .msg:has(.msg-actions.active),
+#chat .msg.actions-open,
+#chat .condensed-summary:hover {
+	background-image: linear-gradient(var(--msg-hover-bg), var(--msg-hover-bg));
+}
+
+/* A condensed block is a `.msg` holding `.msg`s, so hovering a child hovers
+ * the wrapper too and the band would be painted twice. The children and the
+ * summary row carry it; the wrapper never does. */
+#chat .msg[data-type="condensed"]:hover,
+#chat .msg[data-type="condensed"]:focus-within,
+#chat .msg[data-type="condensed"]:has(.msg-actions.active) {
+	background-image: none;
+}
+
+/* Same reason the toolbar is a tap on touch (see `.msg-actions` below):
+ * WebKit fakes a hover on long press, which is also how you start a text
+ * selection, so a band would appear under every attempt to select. On touch
+ * the band follows the toolbar — it comes with `actions-open`. */
+@media (hover: none) {
+	#chat .msg:hover,
+	#chat .condensed-summary:hover {
+		background-image: none;
+	}
+
+	#chat .msg.actions-open {
+		background-image: linear-gradient(var(--msg-hover-bg), var(--msg-hover-bg));
+	}
+}
+
 #chat .unread-marker {
 	position: relative;
 	text-align: center;
@@ -1857,7 +1931,7 @@ textarea.input {
 .user.color-32 { color: #e60082; }
 
 #chat .self .content {
-	color: var(--body-color-muted);
+	color: var(--self-color);
 }
 
 /* A copy of our own message the server has not echoed yet (bus-contract
