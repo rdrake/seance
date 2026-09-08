@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<!--
+  A static harness for the message-row appearance rules in client/css/style.css:
+  the own-message colour (`--self-color`) and the hover band (`--msg-hover-bg`).
+  Neither depends on the store, the IRC layer or a running ircd, so the rows
+  below are the markup Message.vue and MessageCondensed.vue actually emit,
+  pasted flat and served against the built stylesheet.
+
+    corepack yarn build && python3 -m http.server 8100 &
+    node tools/browser-drive.mjs tools/scenarios/message-hover.mjs
+
+  `?theme=coffee` (default) picks which theme file loads; `?theme=frost` etc.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Message rows</title>
+		<link rel="stylesheet" href="/public/css/style.css" />
+		<script>
+			const theme = new URLSearchParams(location.search).get("theme") || "coffee";
+			document.write(
+				`<link rel="stylesheet" href="/public/themes/${encodeURIComponent(theme)}.css">`
+			);
+		</script>
+		<style>
+			body {
+				margin: 0;
+				background: var(--window-bg-color);
+			}
+
+			/* `#chat` is a flex child of a sized container in the app; on its
+			   own it collapses to 0px and clips its rows, which lay out but
+			   cannot be hit-tested — hover would never fire. */
+			#chat {
+				height: 100vh;
+			}
+
+			#chat .messages {
+				padding: 1rem 0;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="chat">
+			<div class="chat-view" data-type="channel">
+				<div class="chat-content">
+					<div class="messages">
+						<div id="msg-1" class="msg" data-type="message" data-from="ibutsu">
+							<span class="time">12:01 </span>
+							<span class="from"><span class="user color-3">ibutsu</span></span>
+							<span class="content"
+								>Someone else's message, at full body contrast.</span
+							>
+						</div>
+						<div id="msg-2" class="msg self" data-type="message" data-from="rdrake">
+							<span class="time">12:02 </span>
+							<span class="from"><span class="user color-7">rdrake</span></span>
+							<span class="content"
+								>My own message. This is the row the contrast complaint was
+								about.</span
+							>
+						</div>
+						<div id="msg-3" class="msg self" data-type="message" data-from="rdrake">
+							<span class="time">12:02 </span>
+							<span class="from"><span class="user color-7">rdrake</span></span>
+							<span class="content"
+								>A second own message, so the two sit next to each other.</span
+							>
+						</div>
+						<div
+							id="msg-4"
+							class="msg highlight"
+							data-type="message"
+							data-from="ibutsu"
+						>
+							<span class="time">12:03 </span>
+							<span class="from"><span class="user color-3">ibutsu</span></span>
+							<span class="content">rdrake: a highlight keeps its own band.</span>
+						</div>
+						<div class="msg" data-type="condensed">
+							<div class="condensed-summary">
+								<span class="time"></span>
+								<span class="from"></span>
+								<span class="content"
+									>3 users joined<button
+										class="toggle-button"
+										aria-label="Toggle status messages"
+									></button
+								></span>
+							</div>
+							<div id="msg-5" class="msg" data-type="join" data-from="pouncy">
+								<span class="time">12:04 </span>
+								<span class="from"></span>
+								<span class="content"
+									><span class="user color-9">pouncy</span> has joined the
+									channel</span
+								>
+							</div>
+							<div id="msg-6" class="msg" data-type="join" data-from="quill">
+								<span class="time">12:04 </span>
+								<span class="from"></span>
+								<span class="content"
+									><span class="user color-12">quill</span> has joined the
+									channel</span
+								>
+							</div>
+						</div>
+						<div id="msg-7" class="msg" data-type="message" data-from="ibutsu">
+							<span class="time">12:05 </span>
+							<span class="from"><span class="user color-3">ibutsu</span></span>
+							<span class="content">A short one.</span>
+							<!-- The toolbar Message.vue renders on hover, so the scenario can
+							     reach the two states that keep it up after the pointer has
+							     left: an open emoji picker (`.msg-actions.active`) and
+							     keyboard focus (`:focus-within`). -->
+							<span class="msg-actions" role="toolbar" aria-label="Message actions">
+								<button type="button" class="msg-action msg-action-reply">↩</button>
+								<button type="button" class="msg-action msg-action-react">
+									😀
+								</button>
+							</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
