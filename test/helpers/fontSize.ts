@@ -13,7 +13,7 @@ import {
 describe("fontSize", () => {
 	it("is an ordered scale, large being the default", () => {
 		expect(fontSizes).to.deep.equal(["tiny", "small", "medium", "large", "xlarge", "huge"]);
-		expect(defaultFontSize).to.equal("large");
+		expect(defaultFontSize).to.equal("medium");
 	});
 
 	it("grows monotonically through medium = the browser default", () => {

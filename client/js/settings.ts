@@ -1,6 +1,6 @@
 import type {TypedStore} from "./store";
 import {mirrorPushPrefs} from "./push-prefs";
-import {normalizeFontSize} from "./helpers/fontSize";
+import {defaultFontSize, normalizeFontSize} from "./helpers/fontSize";
 import {prefersTwelveHourClock} from "./helpers/hourCycle";
 
 const defaultSettingConfig = {
@@ -84,7 +84,10 @@ const defaultConfig = {
 	// values live in style.css, keyed off <html data-font-size="...">, so
 	// themes and the custom stylesheet can override them.
 	fontSize: {
-		default: "large",
+		// From helpers/fontSize.ts, not spelled again here: this was its own
+		// literal and the two drifted apart, so the scale said one thing and
+		// every fresh profile booted at another.
+		default: defaultFontSize,
 		apply(store: TypedStore, value: string) {
 			document.documentElement.dataset.fontSize = normalizeFontSize(value);
 		},
