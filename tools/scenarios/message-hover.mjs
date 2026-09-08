@@ -122,6 +122,36 @@ export default async function run(page) {
 			Number(self) < Number(other)
 		);
 
+		// An action line is a whole message in the action colour, so it has to
+		// clear normal-text AA like any other message. `day` had no
+		// `--action-color` of its own and took #f39c12 straight from the rule:
+		// 2.19:1 on white.
+		const action = await page.evaluate(
+			withHelpers(`_contrast(_fg("#msg-action .content"), _bg()).toFixed(2)`)
+		);
+
+		page.check(
+			`${theme}: action text reads at ${action}:1, at or above 4.5:1`,
+			Number(action) >= 4.5
+		);
+
+		// The reaction count sits on the pill's translucent fill, not on the
+		// row, so the pill is composited first.
+		const count = await page.evaluate(
+			withHelpers(`(() => {
+				const pill = getComputedStyle(document.querySelector("#msg-reacted .msg-reaction"));
+				return _contrast(
+					_fg("#msg-reacted .msg-reaction-count"),
+					_over(pill.backgroundColor, _bg())
+				).toFixed(2);
+			})()`)
+		);
+
+		page.check(
+			`${theme}: reaction count reads at ${count}:1 on its pill, at or above 4.5:1`,
+			Number(count) >= 4.5
+		);
+
 		// The band is derived from each theme's text colour, so its strength
 		// has to be checked per theme: a mix that vanishes on one palette
 		// would leave that theme with the problem the band exists to solve.
