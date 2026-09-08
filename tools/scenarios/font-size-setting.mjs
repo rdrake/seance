@@ -56,13 +56,13 @@ export default async function run(page) {
 		timeout: 20000,
 		label: "chat input up",
 	});
-	page.check("boots at large", (await page.evaluate(DATASET)) === "large");
-	page.check("default root is 20px", (await page.evaluate(ROOT_PX)) === "20px");
-	page.check("input area at 20px", (await page.evaluate(FORM_PX)) === "20px");
-	page.check("sidebar rows at 20px", (await page.evaluate(SIDEBAR_ROW_PX)) === "20px");
-	page.check("header is 3rem = 60px", (await page.evaluate(HEADER_HEIGHT)) === "60px");
-	page.check("footer buttons 3rem = 60px", (await page.evaluate(FOOTER_BTN)) === "60px");
-	await page.screenshot("chat-large");
+	page.check("boots at medium", (await page.evaluate(DATASET)) === "medium");
+	page.check("default root is 16px", (await page.evaluate(ROOT_PX)) === "16px");
+	page.check("input area at 16px", (await page.evaluate(FORM_PX)) === "16px");
+	page.check("sidebar rows at 16px", (await page.evaluate(SIDEBAR_ROW_PX)) === "16px");
+	page.check("header is 3rem = 48px", (await page.evaluate(HEADER_HEIGHT)) === "48px");
+	page.check("footer buttons 3rem = 48px", (await page.evaluate(FOOTER_BTN)) === "48px");
+	await page.screenshot("chat-medium");
 
 	// To Settings → Appearance, by real clicks. Both are <button>s rendered
 	// through custom router-links, not <a>s.
@@ -73,8 +73,8 @@ export default async function run(page) {
 	await page.click(`.settings-menu button.appearance`);
 	await page.waitFor(`!!document.querySelector(${JSON.stringify(SLIDER)})`, {label: "slider up"});
 	page.check(
-		"slider sits at large",
-		(await page.evaluate(`document.querySelector(${JSON.stringify(SLIDER)}).value`)) === "3"
+		"slider sits at medium",
+		(await page.evaluate(`document.querySelector(${JSON.stringify(SLIDER)}).value`)) === "2"
 	);
 
 	// A real drag, all mouse events. Applying every step live re-laid out
@@ -145,10 +145,10 @@ export default async function run(page) {
 	await page.evaluate(
 		`document.querySelector(${JSON.stringify(SLIDER)}).scrollIntoView({block: "center"})`
 	);
-	const down = await drag(3, 1);
+	const down = await drag(2, 1);
 	page.check("drag down: slider held still", !down.moved);
 	page.check("drag down: lands on the stop under the pointer", down.landed === 1);
-	page.check("drag down: page still at large while held", down.heldAt === "large");
+	page.check("drag down: page still at medium while held", down.heldAt === "medium");
 	page.check("drag down: sample shows small (13px) while held", down.sampleAt === "13px");
 	page.check("drag down: small applied on release", (await page.evaluate(DATASET)) === "small");
 	page.check("drag down: root is 13px", (await page.evaluate(ROOT_PX)) === "13px");

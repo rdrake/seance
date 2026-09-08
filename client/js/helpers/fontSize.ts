@@ -4,15 +4,17 @@
 // as a `data-font-size` attribute on <html> (settings.ts) and the sizes live
 // entirely in style.css (`html[data-font-size=...] { font-size: N% }`, of the
 // browser's default font size), so a theme or the custom stylesheet can
-// override them. "large" is the browser default (16px unless the user changed
-// it); "medium" is the 14px the client shipped with before the scale applied
-// to the chrome too. Vue-free: test/helpers/fontSize.ts.
+// override them. "medium" is the browser default (16px unless the user changed
+// it) and is the default here: whatever size someone has told their browser
+// they read at is the right one to start from, and a client that quietly
+// overrides it is answering a question it was not asked. Vue-free:
+// test/helpers/fontSize.ts.
 
 export const fontSizes = ["tiny", "small", "medium", "large", "xlarge", "huge"] as const;
 
 export type FontSize = typeof fontSizes[number];
 
-export const defaultFontSize: FontSize = "large";
+export const defaultFontSize: FontSize = "medium";
 
 export const fontSizeLabels: Record<FontSize, string> = {
 	tiny: "Tiny",
