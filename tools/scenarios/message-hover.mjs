@@ -132,7 +132,7 @@ export default async function run(page) {
 			`getComputedStyle(document.querySelector("#msg-2 .content")).fontWeight`
 		);
 
-		page.check(`${theme}: own message asks for weight 300 (got ${weight})`, weight === "300");
+		page.check(`${theme}: own message asks for weight 285 (got ${weight})`, weight === "285");
 
 		// An action line is a whole message in the action colour, so it has to
 		// clear normal-text AA like any other message. `day` had no
@@ -207,7 +207,7 @@ export default async function run(page) {
 		probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
 		document.body.appendChild(probe);
 		const width = (w) => { probe.style.fontWeight = w; return probe.getBoundingClientRect().width; };
-		const [w400, w300] = [width("400"), width("300")];
+		const [w400, w300] = [width("400"), width("285")];
 		probe.remove();
 		return JSON.stringify({w400: Math.round(w400 * 100) / 100, w300: Math.round(w300 * 100) / 100});
 	})()`);
@@ -216,13 +216,34 @@ export default async function run(page) {
 
 	console.log(
 		w300 === w400
-			? `  note  this browser has no Light face for the UI stack: weight 300 renders as 400 (${w400}px both). Own messages fall back to nick-only marking.`
-			: `  note  weight 300 resolves to a real Light face here: ${w300}px against ${w400}px at 400.`
+			? `  note  this browser has no Light face for the UI stack: weight 285 renders as 400 (${w400}px both). Own messages fall back to nick-only marking.`
+			: `  note  weight 285 resolves to a real Light face here: ${w300}px against ${w400}px at 400.`
 	);
 
 	const isTouch = await page.evaluate(touch);
 
 	// ---- 3: one row bands, and only that row ------------------------------
+	// The clock is out of flow at desktop width and back in flow on a phone,
+	// where a 5rem hanging indent would eat an eighth of the screen. Either way
+	// it must not be painted over the nick — which is exactly what happened
+	// when the narrow rules dropped the row's padding and left the clock at the
+	// desktop column's offset.
+	const clock = await page.evaluate(`(() => {
+		const row = document.querySelector("#msg-1");
+		const t = row.querySelector(".time").getBoundingClientRect();
+		const f = row.querySelector(".from").getBoundingClientRect();
+		return JSON.stringify({
+			overlap: Math.round(t.right - f.left),
+			position: getComputedStyle(row.querySelector(".time")).position,
+		});
+	})()`);
+	const {overlap, position} = JSON.parse(clock);
+
+	page.check(
+		`the clock (${position}) does not overlap the nick (gap ${-overlap}px)`,
+		overlap <= 0
+	);
+
 	await page.hover("#msg-1");
 	page.check(
 		isTouch ? "touch: hovering a row does not band it" : "hovering a row bands it",
