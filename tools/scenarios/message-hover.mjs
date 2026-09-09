@@ -106,6 +106,14 @@ export default async function run(page) {
 	// ---- 1 & 2: own-message contrast, every theme -------------------------
 	for (const theme of THEMES) {
 		await page.goto(`${base}?theme=${theme}`, {waitForSelector: "#msg-2 .content"});
+		// The theme file is written into <head> by a script and fetched after
+		// the markup parses, so the rows exist before it applies. Measuring
+		// then reads style.css's own palette — which is `day`'s — and the two
+		// colours compared here would come from different themes.
+		await page.waitFor(
+			`[...document.styleSheets].some((s) => s.href && s.href.endsWith("/${theme}.css") && s.cssRules.length > 0)`,
+			{label: `the ${theme} stylesheet to apply`}
+		);
 		const self = await page.evaluate(
 			withHelpers(`_contrast(_fg("#msg-2 .content"), _bg()).toFixed(2)`)
 		);
@@ -138,6 +146,22 @@ export default async function run(page) {
 			`${theme}: action text reads at ${action}:1, at or above 4.5:1`,
 			Number(action) >= 4.5
 		);
+
+		// An action is `* nick waves` in italics, not a glyph: the asterisk
+		// Message.vue has always carried is shown and the star is gone.
+		const act = await page.evaluate(`(() => {
+			const row = document.querySelector("#msg-action");
+			return JSON.stringify({
+				style: getComputedStyle(row.querySelector(".content")).fontStyle,
+				marker: getComputedStyle(row.querySelector(".from .only-copy")).opacity,
+				star: getComputedStyle(row.querySelector(".from"), "::before").content,
+			});
+		})()`);
+		const {style, marker, star} = JSON.parse(act);
+
+		page.check(`${theme}: action text is italic (got ${style})`, style === "italic");
+		page.check(`${theme}: its asterisk is shown (opacity ${marker})`, marker === "1");
+		page.check(`${theme}: and the star glyph is gone (content ${star})`, star === "none");
 
 		// The reaction count sits on the pill's translucent fill, not on the
 		// row, so the pill is composited first.
