@@ -387,11 +387,12 @@ p {
 }
 
 /* classic: the delimiters around the clock and the nick are shown, not only
- * copied — but only the three kinds of row whose delimiter is text. An action
- * or a join draws a glyph in front of the nick instead, and revealing its
- * copy-only `*` as well would print both. Everywhere else `.only-copy` still
- * means what it says. */
+ * copied — on the four kinds of row whose delimiter is text. A join or a part
+ * draws a glyph in front of the nick instead, and revealing its copy-only
+ * marker as well would print both. Everywhere else `.only-copy` still means
+ * what it says. */
 #chat .time .only-copy,
+#chat .msg[data-type="action"] .from .only-copy,
 #chat .msg[data-type="message"] .from .only-copy,
 #chat .msg[data-type="notice"] .from .only-copy,
 #chat .msg[data-type="plugin"] .from .only-copy {
@@ -446,7 +447,6 @@ p {
 #chat .msg[data-type="whois"] .from::before,
 #chat .msg[data-type="nick"] .from::before,
 #chat .msg[data-type="chghost"] .from::before,
-#chat .msg[data-type="action"] .from::before,
 #chat .msg[data-type="plugin"] .from::before,
 #chat .msg[data-type="raw"] .from::before,
 #chat .msg-statusmsg span::before,
@@ -647,10 +647,6 @@ p {
 #chat .msg.self[data-type="raw"] .from::before {
 	content: "\f359"; /* https://fontawesome.com/icons/arrow-alt-circle-left?style=solid */
 	color: #2ecc40;
-}
-
-#chat .msg[data-type="action"] .from::before {
-	content: "\f005"; /* http://fontawesome.io/icon/star/ */
 }
 
 #chat .msg[data-type="plugin"] .from::before {
@@ -2121,6 +2117,15 @@ textarea.input {
 #chat .msg[data-type="action"] .content,
 #chat .msg[data-type="action"] .user {
 	color: var(--action-color);
+}
+
+/* An action reads `* nick waves`, italic, the way every terminal client has
+ * written one — the asterisk stays upright, since it is punctuation marking
+ * the line rather than part of what was said. It used to be a FontAwesome
+ * star in the nick column, which had nowhere to sit once the nick stopped
+ * being a column of its own. */
+#chat .msg[data-type="action"] .content {
+	font-style: italic;
 }
 
 #chat .msg[data-type="notice"] .time,
