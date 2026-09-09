@@ -3873,13 +3873,12 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 	font-size: 0.8125rem;
 }
 
-@media (min-width: 480px) {
-	/* Fade out for long usernames */
-	#chat .from {
-		padding-left: 10px;
-		mask-image: linear-gradient(to left, transparent, black 10px);
-	}
-}
+/* classic: a `padding-left: 10px` and a left-edge `mask-image` used to sit
+ * here, fading a long nick out where the old right-aligned column clipped it.
+ * Nothing clips a nick that is inline with its message, and the padding was
+ * pushing every message row 10px right of the reaction pills and the event
+ * lines, which have no `.from` to be padded. The mask was fading the `<` as
+ * well. */
 
 @media (max-width: 768px) {
 	/**
