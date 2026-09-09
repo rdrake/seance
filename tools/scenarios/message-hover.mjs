@@ -21,7 +21,7 @@
 //      hover on long press and that is also how a selection starts — and
 //      `.actions-open` bands instead.
 
-const THEMES = ["coffee", "cobalt", "creama", "frost", "day", "morning"];
+const THEMES = ["coffee", "cobalt", "creama", "frost", "molokai", "day", "morning"];
 
 const base = "http://127.0.0.1:8100/tools/scenarios/fixtures/message-rows.html";
 
