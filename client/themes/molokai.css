@@ -1,0 +1,153 @@
+/* Molokai — Tomas Restrepo's Vim colour scheme, as a chat theme. Colour only,
+ * like cobalt.css: every rule the app needs already reads a token in
+ * coffee.css, so this file is token values plus the nick palette.
+ *
+ * The background is Molokai's own #1B1D1E, not the #272822 of
+ * `g:molokai_original` (which is Monokai's). That is a contrast decision, not
+ * a taste one: on #272822 both the comment grey (4.36:1) and the pink
+ * (3.93:1) fall under 4.5:1, and the comment grey is what timestamps and
+ * hostmasks read at. On #1B1D1E only the pink misses, at 4.47:1, and only
+ * just.
+ *
+ * The palette is Molokai's, unchanged where it clears WCAG AA on that
+ * background: green #A6E22E (10.91:1), cyan #66D9EF (10.26:1), yellow
+ * #E6DB74 (11.88:1), orange #FD971F (7.75:1), purple #AE81FF (5.95:1),
+ * comment grey #7E8E91 (4.97:1) and the foreground #F8F8F2 (15.87:1). The one
+ * change is the pink: #F92672 is 4.47:1, so the accent is that hue lifted
+ * along oklch L until it clears 5:1 (#FF3D80). It is the scheme's signature
+ * colour and it is everywhere here — links, the focus ring, quits, keywords —
+ * so it had to clear the bar rather than sit 0.03 under it.
+ *
+ * Molokai is a syntax scheme with no sidebar and no notice boxes, so the rail
+ * and the boxes are derived: the rail is the chat surface darkened with the
+ * accent under its active row, cyan rather than pink for its own accent so it
+ * reads as a different surface (cobalt.css does the same), and the boxes keep
+ * their semantic hue — warnings yellow, errors pink, ok green — over a tinted
+ * depth of the background. Where Molokai does have an opinion, it wins over
+ * this file's conventions: coffee maps code `number` to the default nick
+ * colour, but Molokai numbers are purple, so purple they are.
+ *
+ * The nick palette is 32 slots (style.css hashes nicks into 32) swept around
+ * the hue circle from Molokai's pink at oklch L 0.78, chroma capped at 0.20
+ * and reduced per hue to whatever sRGB can hold — Molokai is more saturated
+ * than a single chroma can carry at every hue. The worst slot is 7.73:1 on
+ * --chat-bg, the best 9.13:1. */
+@import "coffee.css";
+
+:root {
+	color-scheme: dark;
+
+	/* Chat surface: Molokai's background and foreground, with the comment
+	 * grey as the faintest step rather than the first one. */
+	--chat-bg: #1b1d1e;
+	--chat-fg: #f8f8f2;
+	--chat-fg-muted: #96a3a6;
+	--chat-fg-faint: #7e8e91; /* Molokai's Comment */
+	--chat-heading: #b0bcbe;
+	--chat-rule: #313333;
+	--chat-accent: #ff3d80; /* #f92672 lifted to 5.02:1 */
+	--chat-accent-fg: #1b1d1e;
+	--chat-accent-rule: #8c3050;
+	--chat-highlight-bg: #2c2225; /* accent 8% into bg (oklab) */
+	--chat-selection: #492932; /* accent 22% into bg */
+	--composer-bg: #242627;
+	--composer-border: #373939;
+	--window-border: #313333;
+	--window-shadow: 0 0 25px rgb(0 0 0 / 70%);
+	--menu-bg: #282a2a;
+
+	/* Sidebar rail: the chat surface taken down, lit from the top by the
+	 * gradient, with cyan for its own accent so it does not read as more
+	 * chat. */
+	--rail-bg-top: #232526;
+	--rail-bg-bottom: #0d0f10;
+	--rail-fg: #b0bcbe;
+	--rail-fg-strong: #eef0e9;
+	--rail-fg-active: #f8f8f2;
+	--rail-fg-muted: #7e8e91;
+	--rail-item-active-bg: #38252a;
+	--rail-item-hover-bg: rgb(56 37 42 / 60%);
+	--rail-accent: #66d9ef;
+	--rail-accent-fg: #0d0f10;
+	--rail-badge-bg: #333535;
+	--rail-badge-fg: #cdd0c9;
+	--rail-input-bg: #0a0c0d;
+	--rail-input-border: #2a2d2e;
+
+	/* Message semantics, straight off the scheme: joins green, quits the
+	 * signature pink, nicks cyan, notices the string yellow, /me lines
+	 * purple. */
+	--event-join: #a6e22e;
+	--event-quit: #ff3d80;
+	--nick-default: #66d9ef;
+	--notice-color: #e6db74;
+	--action-color: #ae81ff;
+
+	/* Notice boxes on the connect form, settings and the version checker.
+	 * Semantic hue over a tinted depth of the background. */
+	--note-bg: #24282a;
+	--note-fg: #b0bcbe;
+	--warn-bg: #2e2a18;
+	--warn-fg: #e6db74;
+	--error-bg: #2f1c22;
+	--error-fg: #ff3d80;
+	--ok-bg: #1c2a17;
+	--ok-fg: #a6e22e;
+
+	/* Translucent tints over the chat surface, the accent at low alpha, the
+	 * focus ring, and the scrollbars. */
+	--tint-soft: rgb(255 255 255 / 4%);
+	--tint-strong: rgb(255 255 255 / 8%);
+	--accent-tint-20: rgb(255 61 128 / 20%);
+	--accent-tint-30: rgb(255 61 128 / 30%);
+	--focus-ring: rgb(255 61 128 / 55%);
+	--scrollbar-track: rgb(248 248 242 / 6%);
+	--scrollbar-thumb: rgb(248 248 242 / 25%);
+	--scrollbar-thumb-active: rgb(248 248 242 / 40%);
+
+	/* Code blocks. Molokai's own assignments, which is the point of the
+	 * theme: keywords and operators pink, strings yellow, numbers purple,
+	 * functions and attributes green, tags pink. */
+	--tok-comment: #7e8e91;
+	--tok-keyword: #ff3d80;
+	--tok-string: #e6db74;
+	--tok-number: #ae81ff;
+	--tok-function: #a6e22e;
+	--tok-operator: #ff3d80;
+	--tok-punctuation: #96a3a6;
+	--tok-tag: #ff3d80;
+	--tok-attr: #a6e22e;
+}
+
+.user.color-1 { color: #ff91a9; }
+.user.color-2 { color: #ff9498; }
+.user.color-3 { color: #ff9686; }
+.user.color-4 { color: #ff9873; }
+.user.color-5 { color: #ff9b59; }
+.user.color-6 { color: #ff9d2d; }
+.user.color-7 { color: #f4a500; }
+.user.color-8 { color: #e5ae00; }
+.user.color-9 { color: #d5b600; }
+.user.color-10 { color: #c2be00; }
+.user.color-11 { color: #aac700; }
+.user.color-12 { color: #89cf27; }
+.user.color-13 { color: #5fd655; }
+.user.color-14 { color: #00da77; }
+.user.color-15 { color: #00d89c; }
+.user.color-16 { color: #00d5b3; }
+.user.color-17 { color: #00d3c6; }
+.user.color-18 { color: #00d1d6; }
+.user.color-19 { color: #00cee6; }
+.user.color-20 { color: #00cbf7; }
+.user.color-21 { color: #46c6ff; }
+.user.color-22 { color: #6dc0ff; }
+.user.color-23 { color: #84bbff; }
+.user.color-24 { color: #96b6ff; }
+.user.color-25 { color: #a5b1ff; }
+.user.color-26 { color: #b4abff; }
+.user.color-27 { color: #c4a4ff; }
+.user.color-28 { color: #d699ff; }
+.user.color-29 { color: #ef89ff; }
+.user.color-30 { color: #ff81ec; }
+.user.color-31 { color: #ff89d0; }
+.user.color-32 { color: #ff8ebb; }
