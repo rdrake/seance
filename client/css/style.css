@@ -4007,30 +4007,22 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 		padding: 5px 0;
 	}
 
+	/* classic: the hanging indent holds at every width — a wrapped line lands
+	 * under the nick here too, not back under the clock. The clock stays out
+	 * of flow, and the row keeps the padding that reserves its column: this
+	 * rule used to drop that padding to `10px` while leaving the clock at the
+	 * column's offset, which painted it over the nick, 80px of overlap on a
+	 * 390px screen. It costs the clock's width on continuation lines, which is
+	 * the price of the alignment. */
 	#chat .msg {
 		display: block;
-		padding: 2px 10px;
+		padding: 2px 10px 2px calc(var(--time-column) + 0.625rem);
 	}
 
-	/* classic: no hanging indent on a phone — 5rem of it is an eighth of a
-	 * 390px screen — so the clock comes back into the flow and the row reads
-	 * `[12:34] <nick> message` wrapping to the left edge. Without this the
-	 * clock stays out of flow at the desktop column's offset while the row
-	 * loses the padding that reserved it, and it is painted straight over the
-	 * nick. */
-	#chat .time {
-		position: static;
-		width: auto;
-	}
-
-	/* …and the condensed summary drops the indent it takes to line up with
-	 * rows that no longer have one. */
-	#chat .condensed-summary {
-		padding: 2px 10px;
-	}
-
+	/* classic: a condensed child is a row like any other — its own clock sits
+	 * in its own column, so it keeps the indent. Only the wrapper has none. */
 	#chat .msg[data-type="condensed"] .msg {
-		padding: 2px 0;
+		padding: 2px 10px 2px calc(var(--time-column) + 0.625rem);
 	}
 
 	#chat .time,
@@ -4047,12 +4039,12 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 		white-space: pre;
 	}
 
+	/* classic: this used to give the row 5px of padding to sit beside the
+	 * mention's `border-left`. The marker is an inset shadow now and takes no
+	 * width, and dropping the indent here put the clock over the nick on
+	 * mention rows alone. */
 	#chat .chat-view[data-type="channel"] .msg.highlight {
-		padding-left: 5px;
-	}
-
-	#chat .chat-view[data-type="channel"] .msg.highlight .time {
-		padding-left: 0;
+		padding-left: calc(var(--time-column) + 0.625rem);
 	}
 
 	#chat .condensed-summary .time,

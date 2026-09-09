@@ -228,20 +228,33 @@ export default async function run(page) {
 	// it must not be painted over the nick — which is exactly what happened
 	// when the narrow rules dropped the row's padding and left the clock at the
 	// desktop column's offset.
+	// Every row, not the first one: the narrow rules re-pad mention rows and
+	// condensed children separately, so a row type left behind keeps its clock
+	// at the column's offset with no column reserved and paints it over the
+	// nick.
 	const clock = await page.evaluate(`(() => {
-		const row = document.querySelector("#msg-1");
-		const t = row.querySelector(".time").getBoundingClientRect();
-		const f = row.querySelector(".from").getBoundingClientRect();
+		const worst = [];
+		for (const row of document.querySelectorAll("#chat .msg")) {
+			const t = row.querySelector(":scope > .time");
+			const f = row.querySelector(":scope > .from") || row.querySelector(":scope > .content");
+			if (!t || !f || !t.getClientRects().length) continue;
+			const overlap = t.getBoundingClientRect().right - f.getBoundingClientRect().left;
+			worst.push({id: row.id || row.dataset.type, overlap: Math.round(overlap)});
+		}
+		worst.sort((a, b) => b.overlap - a.overlap);
 		return JSON.stringify({
-			overlap: Math.round(t.right - f.left),
-			position: getComputedStyle(row.querySelector(".time")).position,
+			rows: worst.length,
+			worst: worst[0],
+			position: getComputedStyle(document.querySelector("#msg-1 .time")).position,
 		});
 	})()`);
-	const {overlap, position} = JSON.parse(clock);
+	const {rows, worst, position} = JSON.parse(clock);
 
 	page.check(
-		`the clock (${position}) does not overlap the nick (gap ${-overlap}px)`,
-		overlap <= 0
+		`the clock (${position}) clears the nick on all ${rows} rows (worst: ${
+			worst.id
+		}, gap ${-worst.overlap}px)`,
+		worst.overlap <= 0
 	);
 
 	await page.hover("#msg-1");
