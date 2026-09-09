@@ -1,15 +1,27 @@
 <!DOCTYPE html>
 <!--
   A static harness for the message-row appearance rules in client/css/style.css:
-  the own-message colour (`--self-color`) and the hover band (`--msg-hover-bg`).
-  Neither depends on the store, the IRC layer or a running ircd, so the rows
-  below are the markup Message.vue and MessageCondensed.vue actually emit,
-  pasted flat and served against the built stylesheet.
+  the own-message weight, the hover band (`--msg-hover-bg`) and
+  the classic `[12:34] <nick> message` layout. None of them reads the store, the
+  IRC layer or a socket, so the rows below are the markup Message.vue and
+  MessageCondensed.vue emit — `.only-copy` delimiters included, since the
+  classic layout is largely those made visible — pasted flat and served against
+  the built stylesheet.
 
     corepack yarn build && python3 -m http.server 8100 &
     node tools/browser-drive.mjs tools/scenarios/message-hover.mjs
 
-  `?theme=coffee` (default) picks which theme file loads; `?theme=frost` etc.
+  `?theme=coffee` (default) picks which theme file loads; `?theme=molokai` etc.
+
+  Two things about the markup are load-bearing and easy to undo by tidying it:
+
+  1. `.content` is `white-space: pre-wrap`, so source newlines and indentation
+     inside a row render literally. Every row is therefore one long line, and
+     the block carries `prettier-ignore` so a format pass cannot wrap it. Vue
+     emits no such whitespace, which is why the app does not have this problem.
+  2. `.chat-content` is `flex-direction: row-reverse` and `.chat` is what
+     carries `flex-grow: 1`. Drop `.chat` and `.messages` sizes itself to its
+     longest line and sits against the right-hand edge.
 -->
 <html lang="en">
 	<head>
@@ -34,113 +46,28 @@
 			#chat {
 				height: 100vh;
 			}
-
-			#chat .messages {
-				padding: 1rem 0;
-			}
 		</style>
 	</head>
 	<body>
 		<div id="chat">
 			<div class="chat-view" data-type="channel">
 				<div class="chat-content">
-					<div class="messages">
-						<div id="msg-1" class="msg" data-type="message" data-from="ibutsu">
-							<span class="time">12:01 </span>
-							<span class="from"><span class="user color-3">ibutsu</span></span>
-							<span class="content"
-								>Someone else's message, at full body contrast.</span
-							>
-						</div>
-						<div id="msg-2" class="msg self" data-type="message" data-from="rdrake">
-							<span class="time">12:02 </span>
-							<span class="from"><span class="user color-7">rdrake</span></span>
-							<span class="content"
-								>My own message. This is the row the contrast complaint was
-								about.</span
-							>
-						</div>
-						<div id="msg-3" class="msg self" data-type="message" data-from="rdrake">
-							<span class="time">12:02 </span>
-							<span class="from"><span class="user color-7">rdrake</span></span>
-							<span class="content"
-								>A second own message, so the two sit next to each other.</span
-							>
-						</div>
-						<div
-							id="msg-4"
-							class="msg highlight"
-							data-type="message"
-							data-from="ibutsu"
-						>
-							<span class="time">12:03 </span>
-							<span class="from"><span class="user color-3">ibutsu</span></span>
-							<span class="content">rdrake: a highlight keeps its own band.</span>
-						</div>
-						<div id="msg-action" class="msg" data-type="action" data-from="ibutsu">
-							<span class="time">12:02 </span>
-							<span class="from"></span>
-							<span class="content"
-								><span class="user">ibutsu</span> waves at the channel</span
-							>
-						</div>
-						<div id="msg-reacted" class="msg" data-type="message" data-from="ibutsu">
-							<span class="time">12:02 </span>
-							<span class="from"><span class="user color-3">ibutsu</span></span>
-							<span class="content"
-								>A message people reacted to.
-								<span class="msg-reactions" role="group" aria-label="Reactions">
-									<span class="msg-reactions-list">
-										<button type="button" class="msg-reaction">
-											<span class="msg-reaction-text">👍</span
-											><span class="msg-reaction-count">3</span>
-										</button>
-									</span>
-								</span>
-							</span>
-						</div>
-						<div class="msg" data-type="condensed">
-							<div class="condensed-summary">
-								<span class="time"></span>
-								<span class="from"></span>
-								<span class="content"
-									>3 users joined<button
-										class="toggle-button"
-										aria-label="Toggle status messages"
-									></button
-								></span>
-							</div>
-							<div id="msg-5" class="msg" data-type="join" data-from="pouncy">
-								<span class="time">12:04 </span>
-								<span class="from"></span>
-								<span class="content"
-									><span class="user color-9">pouncy</span> has joined the
-									channel</span
-								>
-							</div>
-							<div id="msg-6" class="msg" data-type="join" data-from="quill">
-								<span class="time">12:04 </span>
-								<span class="from"></span>
-								<span class="content"
-									><span class="user color-12">quill</span> has joined the
-									channel</span
-								>
-							</div>
-						</div>
-						<div id="msg-7" class="msg" data-type="message" data-from="ibutsu">
-							<span class="time">12:05 </span>
-							<span class="from"><span class="user color-3">ibutsu</span></span>
-							<span class="content">A short one.</span>
-							<!-- The toolbar Message.vue renders on hover, so the scenario can
-							     reach the two states that keep it up after the pointer has
-							     left: an open emoji picker (`.msg-actions.active`) and
-							     keyboard focus (`:focus-within`). -->
-							<span class="msg-actions" role="toolbar" aria-label="Message actions">
-								<button type="button" class="msg-action msg-action-reply">↩</button>
-								<button type="button" class="msg-action msg-action-react">
-									😀
-								</button>
-							</span>
+					<div class="chat">
+						<!-- prettier-ignore -->
+						<div class="messages">
+<div id="msg-1" class="msg" data-type="message" data-from="ibutsu"><span class="time"><span class="only-copy">[</span>12:01<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">&lt;</span><span class="user color-3">ibutsu</span><span class="only-copy" aria-hidden="true">&gt;&nbsp;</span></span><span class="content">Someone else's message, at full body contrast. It runs on for long enough that it has to wrap on a wide window, which is what shows where a wrapped line hangs: under the nick, not under the clock.</span></div>
+<div id="msg-2" class="msg self" data-type="message" data-from="rdrake"><span class="time"><span class="only-copy">[</span>12:02<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">&lt;</span><span class="user color-7">rdrake</span><span class="only-copy" aria-hidden="true">&gt;&nbsp;</span></span><span class="content">My own message. This is the row the contrast complaint was about.</span></div>
+<div id="msg-3" class="msg self" data-type="message" data-from="rdrake"><span class="time"><span class="only-copy">[</span>12:02<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">&lt;</span><span class="user color-7">rdrake</span><span class="only-copy" aria-hidden="true">&gt;&nbsp;</span></span><span class="content">A second own message, so the two sit next to each other.</span></div>
+<div id="msg-4" class="msg highlight" data-type="message" data-from="ibutsu"><span class="time"><span class="only-copy">[</span>12:03<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">&lt;</span><span class="user color-3">ibutsu</span><span class="only-copy" aria-hidden="true">&gt;&nbsp;</span></span><span class="content">rdrake: a highlight keeps its own band.</span></div>
+<div id="msg-action" class="msg" data-type="action" data-from="ibutsu"><span class="time"><span class="only-copy">[</span>12:03<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy">*&nbsp;</span></span><span class="content"><span class="user color-3">ibutsu</span> waves at the channel</span></div>
+<div id="msg-notice" class="msg" data-type="notice" data-from="NickServ"><span class="time"><span class="only-copy">[</span>12:03<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">-</span><span class="user color-9">NickServ</span><span class="only-copy" aria-hidden="true">-&nbsp;</span></span><span class="content">A notice, delimited with dashes.</span></div>
+<div id="msg-reacted" class="msg" data-type="message" data-from="ibutsu"><span class="time"><span class="only-copy">[</span>12:04<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">&lt;</span><span class="user color-3">ibutsu</span><span class="only-copy" aria-hidden="true">&gt;&nbsp;</span></span><span class="content">A message people reacted to.<span class="msg-reactions" role="group" aria-label="Reactions"><span class="msg-reactions-list"><button type="button" class="msg-reaction"><span class="msg-reaction-text">&#128077;</span><span class="msg-reaction-count">3</span></button></span></span></span></div>
+<div class="msg" data-type="condensed">
+<div class="condensed-summary"><span class="time"></span><span class="from"></span><span class="content">3 users joined<button class="toggle-button" aria-label="Toggle status messages"></button></span></div>
+<div id="msg-5" class="msg" data-type="join" data-from="pouncy"><span class="time"><span class="only-copy">[</span>12:05<span class="only-copy">]&nbsp;</span></span><span class="from"></span><span class="content"><span class="user color-9">pouncy</span> has joined the channel</span></div>
+<div id="msg-6" class="msg" data-type="join" data-from="quill"><span class="time"><span class="only-copy">[</span>12:05<span class="only-copy">]&nbsp;</span></span><span class="from"></span><span class="content"><span class="user color-12">quill</span> has joined the channel</span></div>
+</div>
+<div id="msg-7" class="msg" data-type="message" data-from="ibutsu"><span class="time"><span class="only-copy">[</span>12:06<span class="only-copy">]&nbsp;</span></span><span class="from"><span class="only-copy" aria-hidden="true">&lt;</span><span class="user color-3">ibutsu</span><span class="only-copy" aria-hidden="true">&gt;&nbsp;</span></span><span class="content">A short one.</span><span class="msg-actions" role="toolbar" aria-label="Message actions"><button type="button" class="msg-action msg-action-reply">&#8617;</button><button type="button" class="msg-action msg-action-react">&#128512;</button></span></div>
 						</div>
 					</div>
 				</div>

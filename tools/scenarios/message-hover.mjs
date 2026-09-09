@@ -113,14 +113,18 @@ export default async function run(page) {
 			withHelpers(`_contrast(_fg("#msg-1 .content"), _bg()).toFixed(2)`)
 		);
 
+		// Own messages are marked by weight now, so their colour must be
+		// nobody's business: identical to everyone else's, on every theme.
 		page.check(
-			`${theme}: own message reads at ${self}:1 (others ${other}:1), at or above 7:1`,
-			Number(self) >= 7
+			`${theme}: own message reads at ${self}:1, the same as another user's (${other}:1)`,
+			self === other
 		);
-		page.check(
-			`${theme}: own message is still a step quieter than another user's`,
-			Number(self) < Number(other)
+
+		const weight = await page.evaluate(
+			`getComputedStyle(document.querySelector("#msg-2 .content")).fontWeight`
 		);
+
+		page.check(`${theme}: own message asks for weight 300 (got ${weight})`, weight === "300");
 
 		// An action line is a whole message in the action colour, so it has to
 		// clear normal-text AA like any other message. `day` had no
@@ -166,6 +170,31 @@ export default async function run(page) {
 
 	await page.goto(`${base}?theme=coffee`, {waitForSelector: "#msg-2 .content"});
 	await page.screenshot("rows-idle");
+
+	// Asking for weight 300 and getting it are different things: a browser
+	// synthesises a bolder face but never a lighter one, so where the stack has
+	// no Light face the text renders at 400 and the mark silently disappears.
+	// Measuring the same string at both weights is the only way to tell from
+	// here — and it only reports on the browser running the scenario, which is
+	// why this prints rather than fails.
+	const lighter = await page.evaluate(`(() => {
+		const probe = document.createElement("span");
+		probe.textContent = "The quick brown fox jumps over the lazy dog";
+		probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
+		document.body.appendChild(probe);
+		const width = (w) => { probe.style.fontWeight = w; return probe.getBoundingClientRect().width; };
+		const [w400, w300] = [width("400"), width("300")];
+		probe.remove();
+		return JSON.stringify({w400: Math.round(w400 * 100) / 100, w300: Math.round(w300 * 100) / 100});
+	})()`);
+
+	const {w400, w300} = JSON.parse(lighter);
+
+	console.log(
+		w300 === w400
+			? `  note  this browser has no Light face for the UI stack: weight 300 renders as 400 (${w400}px both). Own messages fall back to nick-only marking.`
+			: `  note  weight 300 resolves to a real Light face here: ${w300}px against ${w400}px at 400.`
+	);
 
 	const isTouch = await page.evaluate(touch);
 

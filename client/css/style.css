@@ -81,15 +81,6 @@
 	 * #a85f10 is 4.87:1 on white and still reads as the same amber. */
 	--action-color: #a85f10;
 
-	/* Own messages read a step quieter than everyone else's, but only a step:
-	 * --body-color-muted is sized for labels on a background, and using it for
-	 * a whole message put own text at roughly a third of the contrast of the
-	 * line above it (5.4:1 against 14.1:1 in coffee) — legible by the letter
-	 * of WCAG and tiring to actually read. Mixed against the body colour it
-	 * stays distinguishable at a glance without dropping out of the page. A
-	 * theme that wants a different distinction overrides this one token. */
-	--self-color: color-mix(in srgb, var(--body-color) 78%, var(--body-color-muted));
-
 	/* The row under the pointer. The message toolbar floats over the top edge
 	 * of its message and, on a wide monitor, over a lot of empty line — the
 	 * band is what says which message it belongs to.
@@ -393,6 +384,27 @@ p {
 	opacity: 0;
 	width: 0.01px;  /* Must be non-zero to be the first selected character on Firefox */
 	display: inline-block;
+}
+
+/* classic: the delimiters around the clock and the nick are shown, not only
+ * copied — but only the three kinds of row whose delimiter is text. An action
+ * or a join draws a glyph in front of the nick instead, and revealing its
+ * copy-only `*` as well would print both. Everywhere else `.only-copy` still
+ * means what it says. */
+#chat .time .only-copy,
+#chat .msg[data-type="message"] .from .only-copy,
+#chat .msg[data-type="notice"] .from .only-copy,
+#chat .msg[data-type="plugin"] .from .only-copy {
+	display: inline;
+	width: auto;
+	opacity: 1;
+	font-size: inherit;
+}
+
+/* classic: a glyph used to sit in a column with its own padding; inline in
+ * front of the nick it has to carry its own gap. */
+#chat .msg .from::before {
+	margin-right: 0.35em;
 }
 
 /* Icons */
@@ -1557,10 +1569,32 @@ textarea.input {
 	opacity: 0.6;
 }
 
+/* ---- Classic IRC message layout ------------------------------------------
+ *
+ * `[12:34] <nick> message`: the timestamp in a fixed column, the nick and the
+ * message flowing together beside it, and a wrapped line hanging under the
+ * nick rather than under the clock.
+ *
+ * The delimiters are not new. Message.vue already wrapped a nick in `<`/`>`,
+ * a notice in `-`/`-` and a plugin in `[`/`]` as `.only-copy` spans — in the
+ * DOM, sized to nothing — so that copying a conversation produced IRC log
+ * lines. Most of this layout is those spans made visible; only the
+ * timestamp's brackets are new.
+ *
+ * It is baked in rather than optional, for now. To make it a setting later:
+ * qualify the rules marked `classic:` below with `#chat[data-layout="classic"]`
+ * and restore what each comment says they replaced, add a `layout` entry to
+ * settings.ts beside `fontSize` (same shape — a default and an `apply` that
+ * writes the attribute) and a control in Appearance.vue. The rules are marked
+ * so they can be found; nothing else has to move. */
 #chat {
 	overflow: hidden;
 	flex: 1 0 auto;
 	position: relative;
+
+	/* classic: the timestamp column, brackets included. The hanging indent is
+	 * calculated from it, so the two cannot disagree. */
+	--time-column: 5rem;
 }
 
 #chat .chat-view {
@@ -1568,8 +1602,11 @@ textarea.input {
 	flex-direction: column;
 }
 
+/* classic: the wrapper is a stack of rows that each carry their own indent
+ * and their own timestamp, so it carries neither. */
 #chat .msg[data-type="condensed"] {
-	flex-wrap: wrap;
+	padding-left: 0;
+	padding-right: 0;
 }
 
 #chat .msg[data-type="condensed"] .content {
@@ -1581,6 +1618,13 @@ textarea.input {
 	flex-basis: 100%;
 }
 
+/* classic: the summary's own empty `.time`/`.from` spans would otherwise
+ * reserve the column a second time. */
+#chat .condensed-summary .time,
+#chat .condensed-summary .from {
+	display: none;
+}
+
 #chat .condensed-summary .content {
 	display: block;
 	cursor: pointer;
@@ -1589,6 +1633,10 @@ textarea.input {
 
 #chat .condensed-summary {
 	display: flex;
+
+	/* classic: the summary has no timestamp of its own, so it takes the
+	 * indent the rows under it get from their own padding. */
+	padding: 0.2em 0.375rem 0.2em calc(var(--time-column) + 0.625rem);
 }
 
 #chat .condensed-summary .content:hover {
@@ -1731,9 +1779,14 @@ textarea.input {
 #chat .msg {
 	word-wrap: break-word;
 	word-break: break-word; /* Webkit-specific */
-	display: flex;
-	align-items: flex-start;
 	position: relative;
+
+	/* classic: was `display: flex; align-items: flex-start` with the padding
+	 * on the three columns. One block with a hanging indent instead, so the
+	 * nick and the message are one run of text and a wrap lands under the
+	 * nick. */
+	display: block;
+	padding: 0.2em 0.375rem 0.2em calc(var(--time-column) + 0.625rem);
 }
 
 /* The row under the pointer is banded, because the message toolbar
@@ -1836,47 +1889,58 @@ textarea.input {
 	padding: 0 10px;
 }
 
+/* classic: was `padding: 0.2em 0; flex: 0 0 auto` — the row carries the
+ * padding now and nothing here is a flex item. */
 #chat .time,
 #chat .from,
 #chat .content {
-	padding: 0.2em 0;
-	flex: 0 0 auto;
+	padding: 0;
 }
 
 #chat .time {
 	color: var(--body-color-muted);
-	padding-left: 0.625rem;
-	width: 3.5rem;
 	font-variant-numeric: tabular-nums;
-	box-sizing: content-box; /* highlights have a border-left */
+
+	/* classic: was a 3.5rem flex column. Out of flow and pinned to the left,
+	 * so the text beside it is one column rather than two. */
+	position: absolute;
+	left: 0.625rem;
+	top: 0.2em;
+	width: var(--time-column);
 }
 
-#chat.time-12h .time,
-#chat.time-seconds .time {
-	width: 4.75rem;
+/* classic: was `.time { width }` on these; the column is a variable now. */
+#chat.time-12h,
+#chat.time-seconds {
+	--time-column: 6.25rem;
 }
 
-#chat.time-seconds.time-12h .time {
-	width: 5.75rem;
+#chat.time-seconds.time-12h {
+	--time-column: 7.25rem;
 }
 
 #chat .from {
-	padding-right: 0.625rem;
-	text-align: right;
-	width: 8.5rem;
-	overflow: hidden;
-	white-space: nowrap;
 	position: relative;
+
+	/* classic: was an 8.5rem right-aligned column that clipped a long nick.
+	 * Inline with the message now, so a long nick takes the room it needs. */
+	display: inline;
+	width: auto;
+	overflow: visible;
+	text-align: left;
+	white-space: normal;
 }
 
 #chat .content {
-	flex: 1 1 auto;
-	min-width: 0;
-	padding-left: 0.625rem;
-	padding-right: 0.375rem;
-	border-left: 1px solid #f6f6f6;
-	overflow: hidden; /* Prevents Zalgo text to expand beyond messages */
 	text-align: left; /* so RTL text will still be aligned left, not right */
+
+	/* classic: was the flexible third column, with the hairline that ruled it
+	 * off from the nick. There is no rule to draw when the nick is part of
+	 * the same run of text. `overflow: hidden` went with it — it needs a
+	 * block box, and this is inline now; the row's `word-break` is what keeps
+	 * Zalgo text inside. */
+	display: inline;
+	border-left: 0;
 }
 
 #chat .msg[data-type="unhandled"] .from {
@@ -1938,8 +2002,24 @@ textarea.input {
 .user.color-31 { color: #eb0400; }
 .user.color-32 { color: #e60082; }
 
+/* Own messages are marked by weight, not colour. Colour was the obvious lever
+ * and it is the wrong one: any dim is a contrast cut, and how much of a cut it
+ * reads as depends on the panel, the ambient white point and the platform's
+ * rasteriser — the muted token that shipped here was WCAG-legal at 4.54:1 on
+ * `day` and drove iPhone users away while Android users never mentioned it.
+ * Weight leaves the colour alone, so what a device does to contrast no longer
+ * decides whether an own message is readable.
+ *
+ * The trade is that it is not guaranteed to do anything. A browser will
+ * synthesise a *bolder* face but never a lighter one, so this renders as 300
+ * only where the stack's Light face exists — San Francisco on Apple platforms
+ * (variable, so it always does), Roboto Light on Android where the OEM ships
+ * it, Segoe UI Light on Windows. Where it does not, the text falls back to 400
+ * and is simply identical to everyone else's, with `<yournick>` left as the
+ * cue. That is the floor this was chosen against: the failure mode is losing a
+ * distinction, not losing legibility. */
 #chat .self .content {
-	color: var(--self-color);
+	font-weight: 300;
 }
 
 /* A copy of our own message the server has not echoed yet (bus-contract
@@ -2067,17 +2147,16 @@ textarea.input {
 
 #chat .chat-view[data-type="channel"] .msg.highlight {
 	background-color: var(--highlight-bg-color);
-	border-left: 5px solid var(--highlight-border-color);
+
+	/* classic: was a 5px `border-left`, which widened the row's border box and
+	 * pushed the out-of-flow timestamp 5px right on mention rows alone. An
+	 * inset rule marks the row without taking any width. */
+	box-shadow: inset 3px 0 0 var(--highlight-border-color);
 }
 
-#chat .chat-view[data-type="channel"] .msg.highlight .time {
-	padding-left: 5px;
-	color: #696969;
-}
-
-#chat .chat-view[data-type="channel"] .msg.highlight .content {
-	border-left: 1px solid var(--highlight-bg-color);
-}
+/* classic: the two rules that used to sit here nudged the timestamp back over
+ * that border and re-drew the column hairline in the highlight colour.
+ * Neither has anything to do now. */
 
 #chat .preview-size {
 	margin-left: 5px;
