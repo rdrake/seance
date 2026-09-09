@@ -26,6 +26,10 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
+		<!-- Without this, `--mobile` lays the page out at the 980px default and the
+		     narrow-screen media queries never fire, so a phone-only regression
+		     passes every check. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Message rows</title>
 		<link rel="stylesheet" href="/public/css/style.css" />
 		<script>
