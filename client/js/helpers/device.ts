@@ -16,3 +16,18 @@ export function hasVirtualKeyboard(): boolean {
 
 	return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 }
+
+/**
+ * Whether this is an iOS device (iPhone, iPad): a touch-primary device whose
+ * engine is WebKit, which every iOS browser is. The same probe as style.css's
+ * `@supports (-webkit-touch-callout: none)`, for what only iOS does — the home
+ * indicator inside the viewport, the keyboard dismissed behind the page's
+ * back on an app switch.
+ */
+export function isIOS(): boolean {
+	if (!hasVirtualKeyboard() || typeof CSS === "undefined" || typeof CSS.supports !== "function") {
+		return false;
+	}
+
+	return CSS.supports("-webkit-touch-callout", "none");
+}

@@ -29,6 +29,7 @@ import storage from "./localStorage";
 import {installNativeHooks} from "./native";
 import {installForegroundHooks} from "./foreground";
 import {installViewportHooks} from "./helpers/viewport";
+import eventbus from "./eventbus";
 import {onLaunch} from "./pwa";
 // Also registers the IRC layer's bus handlers (input, names, more, network:*).
 import {autoconnectSavedNetworks, clientForNetwork, createNetwork} from "./irc/manager";
@@ -99,7 +100,9 @@ export async function boot(): Promise<void> {
 	loadMentions();
 	installNativeHooks();
 	installForegroundHooks();
-	installViewportHooks();
+	// A height that changed without a resize event still has to re-stick
+	// the message list (MessageList.vue listens for this).
+	installViewportHooks(() => eventbus.emit("resize"));
 
 	store.commit("appLoaded");
 
