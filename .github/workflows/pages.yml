@@ -3,8 +3,12 @@
 # Upstream (evilnet/seance) publishes on a release only, so
 # https://evilnet.github.io/seance/ always serves the latest release. A fork
 # has its own, independent Pages site that upstream never touches, and for a
-# fork the useful trigger is a push to develop — so the push trigger below is
-# live everywhere except upstream. `workflow_dispatch` works anywhere.
+# fork the useful trigger is a push to one branch of its own: develop, or
+# the branch named by a PAGES_BRANCH repository variable (a preview branch,
+# say) — so the push trigger below is live everywhere except upstream. The
+# fork's Pages source has to be "GitHub Actions", and its github-pages
+# environment has to allow deployments from that branch. `workflow_dispatch`
+# works anywhere.
 #
 # Only one thing can be published: with the "GitHub Actions" Pages source a
 # deployment is the whole site, so a second target (a /dev/ subpath, a PR
@@ -21,6 +25,8 @@ on:
   push:
     branches:
       - develop
+      - preview
+      - "preview/**"
   workflow_dispatch:
 
 permissions:
@@ -34,8 +40,12 @@ concurrency:
 
 jobs:
   build:
-    # Upstream deploys releases; forks also deploy their develop.
-    if: github.event_name != 'push' || github.repository != 'evilnet/seance'
+    # Upstream deploys releases; a fork also deploys its develop, or the
+    # branch its PAGES_BRANCH variable names instead.
+    if: >-
+      github.event_name != 'push' ||
+      (github.repository != 'evilnet/seance' &&
+       github.ref == format('refs/heads/{0}', vars.PAGES_BRANCH || 'develop'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
