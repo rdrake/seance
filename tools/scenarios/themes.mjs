@@ -32,6 +32,7 @@ const THEMES = [
 	"molokai",
 	"princess",
 	"princess_",
+	"keeki",
 	"day",
 	"morning",
 	"coffee",
@@ -44,6 +45,7 @@ const OWN_COLOR = {
 	molokai: "#1b1d1e",
 	princess: "#f2f7fc",
 	princess_: "#000000",
+	keeki: "#22143a",
 };
 
 export const url =
