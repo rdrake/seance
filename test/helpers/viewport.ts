@@ -15,6 +15,15 @@ describe("visual viewport sizing (helpers/viewport.ts)", function () {
 		expect(effectiveHeight(793, 793, false)).to.equal(793);
 	});
 
+	it("ends above iOS's floating form bar while the keyboard is up", function () {
+		// iOS 26+ floats the previous/next/Done bar over the page: the visual
+		// viewport ends at the keyboard and the bar covers the band above it.
+		expect(effectiveHeight(552, 852, true, 59)).to.equal(493);
+		// The caret without the keyboard (shake-to-undo) has no bar to clear.
+		expect(effectiveHeight(852, 852, true, 59)).to.equal(852);
+		expect(effectiveHeight(400, 793, false, 59)).to.equal(793);
+	});
+
 	describe("keyboardUp", function () {
 		it("is the visual viewport shorter than the window while a text field has focus", function () {
 			expect(keyboardUp(371, 665, true)).to.equal(true);

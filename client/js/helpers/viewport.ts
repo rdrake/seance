@@ -34,14 +34,33 @@ export const SETTLE_DELAYS_MS = [50, 150, 300, 600];
 /** A visual viewport at least this much shorter than the window is the keyboard (or Safari's form bar) over the page; anything less is rounding. */
 export const KEYBOARD_MIN_PX = 8;
 
+/**
+ * iOS 26+ floats the keyboard's form bar (previous, next, Done) over the
+ * page instead of docking it to the keyboard: `visualViewport.height` ends
+ * at the keyboard and the bar covers the band above it — 48pt of pill 11pt
+ * clear of the keyboard, phone-measured 2026-09-19 in portrait, where a
+ * composer sized to the visual viewport sat entirely under it. In px, since
+ * it mirrors the device, not the UI scale.
+ */
+export const FORM_BAR_PX = 59;
+
 /** Whether the keyboard (or Safari's form bar) is up: the window is taller than what it shows, and a text field is why. */
 export function keyboardUp(visual: number, inner: number, textFieldFocused: boolean): boolean {
 	return textFieldFocused && inner - visual >= KEYBOARD_MIN_PX;
 }
 
-/** The height to size the app to. */
-export function effectiveHeight(visual: number, inner: number, textFieldFocused: boolean): number {
-	return textFieldFocused ? visual : Math.max(visual, inner);
+/** The height to size the app to; `formBar` is what the keyboard's form bar covers above the visual viewport's end. */
+export function effectiveHeight(
+	visual: number,
+	inner: number,
+	textFieldFocused: boolean,
+	formBar = 0
+): number {
+	if (!textFieldFocused) {
+		return Math.max(visual, inner);
+	}
+
+	return keyboardUp(visual, inner, textFieldFocused) ? visual - formBar : visual;
 }
 
 /** Calls `apply` now and once more at each delay. Returns a function that stops the re-reads. */
@@ -54,6 +73,18 @@ export function settle(apply: () => void, delays: number[] = SETTLE_DELAYS_MS): 
 
 function isTextField(el: Element | null): el is HTMLElement {
 	return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+}
+
+// Every iOS browser is WebKit; the same probe as style.css's @supports.
+const ios = () => CSS.supports("-webkit-touch-callout", "none");
+
+/**
+ * What the floating form bar covers: portrait only, like the home-indicator
+ * strip in style.css — a phone on its side has ~180px with the keyboard up
+ * and the bar has not been seen over the composer there.
+ */
+function floatingBar(): number {
+	return ios() && matchMedia("(orientation: portrait)").matches ? FORM_BAR_PX : 0;
 }
 
 /**
@@ -72,7 +103,8 @@ export function visibleHeight(): number {
 	return effectiveHeight(
 		viewport.height,
 		window.innerHeight,
-		isTextField(document.activeElement)
+		isTextField(document.activeElement),
+		floatingBar()
 	);
 }
 
@@ -83,12 +115,9 @@ export function installViewportHooks(): void {
 		return;
 	}
 
-	// Every iOS browser is WebKit; the same probe as style.css's @supports.
-	const ios = CSS.supports("-webkit-touch-callout", "none");
-
 	const apply = () => {
 		const focused = isTextField(document.activeElement);
-		const height = effectiveHeight(viewport.height, window.innerHeight, focused);
+		const height = effectiveHeight(viewport.height, window.innerHeight, focused, floatingBar());
 		const root = document.documentElement;
 
 		root.style.setProperty("--viewport-height", `${Math.round(height)}px`);
@@ -123,7 +152,7 @@ export function installViewportHooks(): void {
 	document.addEventListener("visibilitychange", () => {
 		const active = document.activeElement;
 
-		if (ios && document.visibilityState === "hidden" && isTextField(active)) {
+		if (ios() && document.visibilityState === "hidden" && isTextField(active)) {
 			active.blur();
 		}
 

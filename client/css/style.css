@@ -3256,7 +3256,10 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 		/* The keyboard covers the indicator while it is up. That is the
 		 * viewport measurement in helpers/viewport.ts, not the caret: iOS's
 		 * shake-to-undo alert gives the composer its focus back with the
-		 * keyboard down, and a rule on :focus left it in the indicator. */
+		 * keyboard down, and a rule on :focus left it in the indicator. The
+		 * form bar iOS 26+ floats above the keyboard is kept out of the band
+		 * by the same helper (FORM_BAR_PX), so the composer needs no strip
+		 * for it: the pill sits over the canvas below <body>. */
 		html[data-keyboard="up"] #form {
 			padding-bottom: 0.375rem;
 		}
