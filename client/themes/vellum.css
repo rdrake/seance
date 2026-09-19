@@ -223,9 +223,8 @@ textarea {
 	color: var(--chat-fg-faint);
 }
 
-/* The cover: leather with a hint of grain, a double gold rule tooled just
- * inside its edge (an outline, so it paints over the rows and moves nothing),
- * and the gilt edge where the cover meets the page. */
+/* The cover: leather with a hint of grain, a double gold rule tooled around
+ * the channel list, and the gilt edge where the cover meets the page. */
 #sidebar,
 body {
 	background:
@@ -241,9 +240,18 @@ body {
 }
 
 #sidebar {
-	outline: 3px double var(--gold);
-	outline-offset: -0.625rem;
 	box-shadow: inset -2px 0 0 var(--gold);
+}
+
+/* The frame is the list's scroll container, so it stays put while the list
+ * scrolls, the rows sit inside it (the active row's marker lands on its
+ * inner edge and nothing reaches the gilt edge), and the footer's gear and
+ * help sit below it like a colophon. */
+#sidebar .scrollable-area {
+	margin: 0.75rem 0.625rem 0.375rem;
+	padding-top: 0.625rem;
+	border: 3px double var(--gold);
+	border-radius: 0.5rem;
 }
 
 /* The active row's marker in gold, with a hedera before the name. */
