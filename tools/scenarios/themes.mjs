@@ -33,7 +33,6 @@ const THEMES = [
 	"princess",
 	"princess_",
 	"keeki",
-	"vellum",
 	"day",
 	"morning",
 	"coffee",
@@ -47,7 +46,6 @@ const OWN_COLOR = {
 	princess: "#f2f7fc",
 	princess_: "#000000",
 	keeki: "#22143a",
-	vellum: "#2e1416",
 };
 
 export const url =
