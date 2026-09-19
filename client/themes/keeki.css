@@ -102,14 +102,14 @@
 	--glitter-white: rgb(255 255 255 / 90%);
 
 	/* The flowers: a sunflower's brown heart and golden petals, a red rose's
-	 * rings. The two reds/yellows on the page are lighter than the blooms so
-	 * they clear the chat surface. */
-	--sunflower-heart: #4a2a12;
-	--sunflower-petal: #f2c94c;
-	--sunflower-tip: #f7dd7a;
-	--rose-dark: #7a0a1e;
-	--rose-red: #c8102e;
-	--rose-bright: #d0213a;
+	 * rings — at well under half strength, so they sit in the rail like a
+	 * print on the fabric rather than on top of it. The reds and yellows on
+	 * the page are lighter and solid, since they carry text. */
+	--sunflower-heart: rgb(74 42 18 / 55%);
+	--sunflower-petal: rgb(242 201 76 / 38%);
+	--rose-dark: rgb(122 10 30 / 45%);
+	--rose-red: rgb(200 16 46 / 40%);
+	--rose-bright: rgb(208 33 58 / 40%);
 	--sunflower-on-page: #f2c94c;
 	--rose-on-page: #ff5c74;
 	--date-marker-color: var(--rose-on-page);
@@ -119,8 +119,8 @@
 /* The rail: coffee's gradient, a diagonal rose-gold sheen over it, four
  * layers of glitter, and on top of those the flowers — each a tiled radial
  * gradient at its own period and offset, so nothing lines up into a grid.
- * A sunflower is a brown heart with eight round petals about it (nine
- * layers, one tile), a rose is a dark disc under a red ring, a brighter ring
+ * A sunflower is a brown heart over eight round petals (nine layers, one
+ * tile; the heart is listed first so it paints on top), a rose is a dark disc under a red ring, a brighter ring
  * and a red dot each set a little off centre so it turns like a bloom seen
  * from above (four layers). Their periods are three rows tall, so the rail
  * carries a scattering of about nine flowers, not a grid of them.
@@ -128,15 +128,15 @@
 #sidebar {
 	background-color: var(--rail-bg-bottom);
 	background-image:
-		radial-gradient(circle at 40.8px 52px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 38.8px 56.8px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 34px 58.8px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 29.2px 56.8px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 27.2px 52px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 29.2px 47.2px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 34px 45.2px, var(--sunflower-petal) 3.2px, transparent 3.9px),
-		radial-gradient(circle at 38.8px 47.2px, var(--sunflower-petal) 3.2px, transparent 3.9px),
 		radial-gradient(circle at 34px 52px, var(--sunflower-heart) 4.5px, var(--sunflower-heart) 4.5px, transparent 5.2px),
+		radial-gradient(circle at 40.8px 52px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 38.8px 56.8px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 34px 58.8px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 29.2px 56.8px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 27.2px 52px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 29.2px 47.2px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 34px 45.2px, var(--sunflower-petal) 2.6px, transparent 3.3px),
+		radial-gradient(circle at 38.8px 47.2px, var(--sunflower-petal) 2.6px, transparent 3.3px),
 		radial-gradient(circle at 121px 215px, var(--rose-red) 2px, transparent 2.7px),
 		radial-gradient(circle at 120px 213px, transparent 3.5px, var(--rose-bright) 4.2px 6px, transparent 6.7px),
 		radial-gradient(circle at 118px 214px, transparent 7.5px, var(--rose-red) 8.2px 10.5px, transparent 11.2px),
