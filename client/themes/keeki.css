@@ -3,9 +3,9 @@
  * mockup's (client/keeki-demo.html on the preview branch, 2026-09-19) moved
  * onto coffee's tokens; the flourishes are this file's own: a rail of purple
  * with four layers of 1–2px glitter in rose gold, pink, lavender and white
- * (drifting, unless the OS asks for no motion), the active row filled rose
- * gold, a hot-pink mention badge, a ♡ before the open conversation and a 🐾
- * after every network's name.
+ * (drifting where a pointer hovers and motion is allowed), the active row filled rose
+ * gold, own messages on a lighter band, a hot-pink mention badge, a ♡ before
+ * the open conversation and a 🐾 after every network's name.
  *
  * Every text colour clears 4.5:1 on the surface it sits on — lavender-dim
  * #9f90bf, the faintest, is 6.3:1 on --chat-bg and 4.8:1 on the rail's top —
@@ -34,6 +34,7 @@
 	--window-border: #2c1d3a;
 	--window-shadow: 0 0 25px rgb(0 0 0 / 60%);
 	--menu-bg: #241530;
+	--own-bg: #241530;
 
 	/* Sidebar rail: the purple gradient under the glitter; the active row is
 	 * solid rose gold with dark text (the overrides below carry that through
@@ -133,7 +134,11 @@
 		0 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+/* The drift repaints the rail every frame for as long as the tab is open —
+ * fine for a desktop's 250×900px, battery on a phone whose rail is off-screen
+ * most of the time — so it needs a pointer that hovers as well as no
+ * reduced-motion preference. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
 	#sidebar {
 		animation: keeki-twinkle 40s linear infinite;
 	}
@@ -185,6 +190,15 @@
 
 .channel-list-item[data-type="lobby"] .name::after {
 	content: " 🐾";
+}
+
+/* Own messages on a shade lighter than the chat, as in the mockup, so the
+ * scrollback bands — what we said, not our own join or mode lines, which
+ * carry .self as well. A highlighted row's tint still wins (higher
+ * specificity in style.css). */
+#chat .msg.self[data-type="message"],
+#chat .msg.self[data-type="action"] {
+	background-color: var(--own-bg);
 }
 
 /* The composer's caret and the focus edge: rose gold with a pink glow. */
