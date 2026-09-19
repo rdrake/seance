@@ -101,15 +101,16 @@
 	--glitter-lavender: rgb(201 184 255 / 90%);
 	--glitter-white: rgb(255 255 255 / 90%);
 
-	/* The flowers: a sunflower's brown heart and golden petals, a red rose's
-	 * rings — at well under half strength, so they sit in the rail like a
-	 * print on the fabric rather than on top of it. The reds and yellows on
-	 * the page are lighter and solid, since they carry text. */
-	--sunflower-heart: rgb(74 42 18 / 55%);
-	--sunflower-petal: rgb(242 201 76 / 38%);
-	--rose-dark: rgb(122 10 30 / 45%);
-	--rose-red: rgb(200 16 46 / 40%);
-	--rose-bright: rgb(208 33 58 / 40%);
+	/* The flowers, drawn: a sunflower (two rings of pointed petals in two
+	 * yellows over a seeded head) and a rose bud on its stem with one leaf,
+	 * each an inline SVG at 60% so they sit in the fabric; a second, smaller
+	 * sunflower gives the scatter depth. Each drawing sits in a viewBox the
+	 * shape of its tile, since background-size is the period as well as the
+	 * size. Still one file, no fetch. The reds and yellows on the page are for
+	 * the dividers' text. */
+	--sunflower: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 468 521'%3E%3Cg opacity='0.6' transform='translate(30 90)'%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(0.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(25.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(51.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(77.1 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(102.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(128.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(154.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(180.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(205.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(231.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(257.1 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(282.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(308.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(334.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(12.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(38.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(64.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(90.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(115.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(141.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(167.1 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(192.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(218.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(244.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(270.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(295.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(321.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(347.1 32 32)'/%3E%3Ccircle cx='32' cy='32' r='11.5' fill='%235a3416'/%3E%3Ccircle cx='32' cy='32' r='9.5' fill='%233d2210'/%3E%3Ccircle cx='34.9' cy='32.6' r='1' fill='%232a1608'/%3E%3Ccircle cx='33.4' cy='34.7' r='1' fill='%232a1608'/%3E%3Ccircle cx='30.8' cy='34.7' r='1' fill='%232a1608'/%3E%3Ccircle cx='29.1' cy='32.8' r='1' fill='%232a1608'/%3E%3Ccircle cx='29.6' cy='30.2' r='1' fill='%232a1608'/%3E%3Ccircle cx='31.9' cy='29.0' r='1' fill='%232a1608'/%3E%3Ccircle cx='34.3' cy='30.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='37.6' cy='34.2' r='1' fill='%232a1608'/%3E%3Ccircle cx='36.0' cy='36.4' r='1' fill='%232a1608'/%3E%3Ccircle cx='33.7' cy='37.8' r='1' fill='%232a1608'/%3E%3Ccircle cx='31.0' cy='37.9' r='1' fill='%232a1608'/%3E%3Ccircle cx='28.6' cy='36.9' r='1' fill='%232a1608'/%3E%3Ccircle cx='26.8' cy='34.9' r='1' fill='%232a1608'/%3E%3Ccircle cx='26.0' cy='32.4' r='1' fill='%232a1608'/%3E%3Ccircle cx='26.4' cy='29.8' r='1' fill='%232a1608'/%3E%3Ccircle cx='28.0' cy='27.6' r='1' fill='%232a1608'/%3E%3Ccircle cx='30.3' cy='26.2' r='1' fill='%232a1608'/%3E%3Ccircle cx='33.0' cy='26.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='35.4' cy='27.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='37.2' cy='29.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='38.0' cy='31.6' r='1' fill='%232a1608'/%3E%3C/g%3E%3C/svg%3E");
+	--rose: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 277 555'%3E%3Cg opacity='0.6' transform='translate(170 300) rotate(-12 32 32)'%3E%3Cpath d='M33 62 C33 52 32 44 32 40' stroke='%233f7a3a' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M33 52 C40 52 46 46 47 40 C40 40 34 44 33 52 Z' fill='%234f8f3a'/%3E%3Cpath d='M34 51 C38 47 42 43 46 41' stroke='%232f6b2a' stroke-width='0.8' fill='none'/%3E%3Cpath d='M20 34 C22 40 27 43 32 44 C37 43 42 40 44 34 Z' fill='%233f7a3a'/%3E%3Cpath d='M32 8 C41 9 47 18 45 28 C44 36 38 42 32 42 C26 42 20 36 19 28 C17 18 23 9 32 8 Z' fill='%23c8102e'/%3E%3Cpath d='M32 42 C31 34 31 26 36 17 C39 22 41 30 38 40' fill='%23a80c24'/%3E%3Cpath d='M32 42 C33 34 30 24 25 17 C22 24 22 32 27 40' fill='%238b0a1e'/%3E%3Cpath d='M24 20 C27 14 30 11 34 10' stroke='%23f05a70' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3Cpath d='M29 12 C33 14 36 18 37 24' stroke='%23e63950' stroke-width='1' fill='none' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E");
+	--sunflower-small: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 485 618'%3E%3Cg opacity='0.6' transform='translate(380 60) rotate(20 32 32)'%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(0.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(25.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(51.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(77.1 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(102.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(128.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(154.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(180.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(205.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(231.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(257.1 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(282.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23d99a10' transform='rotate(308.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.2' ry='15' fill='%23c98a08' transform='rotate(334.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(12.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(38.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(64.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(90.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(115.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(141.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(167.1 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(192.9 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(218.6 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(244.3 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(270.0 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(295.7 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23f4c430' transform='rotate(321.4 32 32)'/%3E%3Cellipse cx='32' cy='15' rx='4.6' ry='17' fill='%23e8b21c' transform='rotate(347.1 32 32)'/%3E%3Ccircle cx='32' cy='32' r='11.5' fill='%235a3416'/%3E%3Ccircle cx='32' cy='32' r='9.5' fill='%233d2210'/%3E%3Ccircle cx='34.9' cy='32.6' r='1' fill='%232a1608'/%3E%3Ccircle cx='33.4' cy='34.7' r='1' fill='%232a1608'/%3E%3Ccircle cx='30.8' cy='34.7' r='1' fill='%232a1608'/%3E%3Ccircle cx='29.1' cy='32.8' r='1' fill='%232a1608'/%3E%3Ccircle cx='29.6' cy='30.2' r='1' fill='%232a1608'/%3E%3Ccircle cx='31.9' cy='29.0' r='1' fill='%232a1608'/%3E%3Ccircle cx='34.3' cy='30.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='37.6' cy='34.2' r='1' fill='%232a1608'/%3E%3Ccircle cx='36.0' cy='36.4' r='1' fill='%232a1608'/%3E%3Ccircle cx='33.7' cy='37.8' r='1' fill='%232a1608'/%3E%3Ccircle cx='31.0' cy='37.9' r='1' fill='%232a1608'/%3E%3Ccircle cx='28.6' cy='36.9' r='1' fill='%232a1608'/%3E%3Ccircle cx='26.8' cy='34.9' r='1' fill='%232a1608'/%3E%3Ccircle cx='26.0' cy='32.4' r='1' fill='%232a1608'/%3E%3Ccircle cx='26.4' cy='29.8' r='1' fill='%232a1608'/%3E%3Ccircle cx='28.0' cy='27.6' r='1' fill='%232a1608'/%3E%3Ccircle cx='30.3' cy='26.2' r='1' fill='%232a1608'/%3E%3Ccircle cx='33.0' cy='26.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='35.4' cy='27.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='37.2' cy='29.1' r='1' fill='%232a1608'/%3E%3Ccircle cx='38.0' cy='31.6' r='1' fill='%232a1608'/%3E%3C/g%3E%3C/svg%3E");
 	--sunflower-on-page: #f2c94c;
 	--rose-on-page: #ff5c74;
 	--date-marker-color: var(--rose-on-page);
@@ -128,19 +129,9 @@
 #sidebar {
 	background-color: var(--rail-bg-bottom);
 	background-image:
-		radial-gradient(circle at 34px 52px, var(--sunflower-heart) 4.5px, var(--sunflower-heart) 4.5px, transparent 5.2px),
-		radial-gradient(circle at 40.8px 52px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 38.8px 56.8px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 34px 58.8px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 29.2px 56.8px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 27.2px 52px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 29.2px 47.2px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 34px 45.2px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 38.8px 47.2px, var(--sunflower-petal) 2.6px, transparent 3.3px),
-		radial-gradient(circle at 121px 215px, var(--rose-red) 2px, transparent 2.7px),
-		radial-gradient(circle at 120px 213px, transparent 3.5px, var(--rose-bright) 4.2px 6px, transparent 6.7px),
-		radial-gradient(circle at 118px 214px, transparent 7.5px, var(--rose-red) 8.2px 10.5px, transparent 11.2px),
-		radial-gradient(circle at 118px 214px, var(--rose-dark) 11px, transparent 12px),
+		var(--sunflower),
+		var(--rose),
+		var(--sunflower-small),
 		radial-gradient(circle, var(--glitter-rose) 0 1px, transparent 1.6px),
 		radial-gradient(circle, var(--glitter-pink) 0 1px, transparent 1.6px),
 		radial-gradient(circle, var(--glitter-lavender) 0 0.8px, transparent 1.4px),
@@ -154,19 +145,9 @@
 		),
 		linear-gradient(180deg, var(--rail-bg-top) 0%, var(--rail-bg-bottom) 100%);
 	background-size:
-		151px 293px,
-		151px 293px,
-		151px 293px,
-		151px 293px,
-		151px 293px,
-		151px 293px,
-		151px 293px,
-		151px 293px,
-		151px 293px,
+		263px 293px,
 		173px 347px,
-		173px 347px,
-		173px 347px,
-		173px 347px,
+		197px 251px,
 		97px 113px,
 		131px 79px,
 		173px 151px,
@@ -174,19 +155,9 @@
 		100% 100%,
 		100% 100%;
 	background-position:
-		0 0,
-		0 0,
-		0 0,
-		0 0,
-		0 0,
-		0 0,
-		0 0,
-		0 0,
-		0 0,
-		29px 71px,
-		29px 71px,
-		29px 71px,
-		29px 71px,
+		31px 89px,
+		167px 211px,
+		191px 23px,
 		13px 7px,
 		41px 53px,
 		5px 91px,
@@ -207,19 +178,9 @@
 	@keyframes keeki-twinkle {
 		to {
 			background-position:
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				67px 89px,
-				102px 132px,
-				102px 132px,
-				102px 132px,
-				102px 132px,
+				101px 179px,
+				247px 291px,
+				281px 103px,
 				110px 120px,
 				172px 132px,
 				178px 242px,
