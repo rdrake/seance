@@ -77,6 +77,7 @@ describe("public folder", function () {
 			"princess",
 			"princess_",
 			"keeki",
+			"vellum",
 			"sandrof",
 			"oikarinen",
 			"bourbaki",

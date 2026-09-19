@@ -1,0 +1,331 @@
+/* Vellum — a scriptorium page. The chat is a leaf of parchment written in
+ * iron-gall ink, the rail is the book's oxblood cover with gold tooling, and
+ * the page is rubricated: the first letter of every message is a versal in
+ * chancery script and rubric red, the day and new-message dividers are gold
+ * fleurons, and a mention is ruled in red down its margin.
+ *
+ * coffee.css's rules with the manuscript's tokens, plus what colour alone
+ * cannot say: a book face for the text with discretionary ligatures and
+ * old-style figures switched on (Hoefler Text's ct and st, timestamps that
+ * sit in the x-height), a chancery script for nicks, channel names and
+ * headings — never for running text, which script at chat size would make
+ * unreadable — and the parchment's mottling and vignette as gradients, no
+ * image. Every face is a system one; a theme is one CSS file and a fetch to
+ * a font service would leak every install. Where none of the named faces
+ * exist (Linux, mostly) the generic `serif` and `cursive` stand in.
+ *
+ * Inks: nine scribe's inks cycled for nicks (style.css hashes into 32 slots),
+ * each ≥ 5:1 on the parchment and on a mention's rose wash. The rubric
+ * (#8b1a1a) is 7.7:1, the lapis for links 6.6:1, the sepia muted text
+ * 5.4:1, placeholders (#8a7660) 3.6:1 as the handoff allows. */
+@import "coffee.css";
+
+:root {
+	color-scheme: light;
+
+	/* The page: parchment, iron-gall ink, sepia for what is quieter, lapis
+	 * for links and the caret, rubric red for what the scribe marks. */
+	--chat-bg: #f3e9d2;
+	--chat-fg: #2b2118;
+	--chat-fg-muted: #6e5a43;
+	--chat-fg-faint: #8a7660;
+	--chat-heading: #5a3a2a;
+	--chat-rule: #dfd0b2;
+	--chat-accent: #2f4f8f;
+	--chat-accent-fg: #f3e9d2;
+	--chat-accent-rule: rgb(47 79 143 / 50%);
+	--chat-highlight-bg: #f6dcd0;
+	--chat-selection: #e2cfa5;
+	--composer-bg: #ede1c6;
+	--composer-border: #cdbb96;
+	--window-border: #cdbb96;
+	--window-shadow: 0 0 25px rgb(40 20 0 / 35%);
+	--menu-bg: #f7efdd;
+	--rubric: #8b1a1a;
+	--gold: #c9a45c;
+	--gold-on-page: #7a5c14;
+
+	/* The cover: oxblood leather, gold tooling, parchment-toned text. */
+	--rail-bg-top: #4a2226;
+	--rail-bg-bottom: #2e1416;
+	--rail-fg: #d9c39a;
+	--rail-fg-strong: #ecd9b0;
+	--rail-fg-active: #f7ecd2;
+	--rail-fg-muted: #a88e64;
+	--rail-item-active-bg: #5e2c30;
+	--rail-item-hover-bg: rgb(201 164 92 / 12%);
+	--rail-accent: #c9a45c;
+	--rail-accent-fg: #2e1416;
+	--rail-badge-bg: #5e2c30;
+	--rail-badge-fg: #ecd9b0;
+	--rail-input-bg: #24100f;
+	--rail-input-border: #6a3a3a;
+
+	/* Message semantics: joins in verdigris, quits in oxblood, notices in
+	 * walnut, /me lines in lapis. */
+	--event-join: #2f6b4f;
+	--event-quit: #8b2a2a;
+	--nick-default: #3b2a1a;
+	--notice-color: #6b4a1e;
+	--action-color: #2f4f8f;
+
+	/* Notice boxes */
+	--note-bg: #ead9b8;
+	--note-fg: #4a3a28;
+	--warn-bg: #f2dfb0;
+	--warn-fg: #6b4a10;
+	--error-bg: #efd3c8;
+	--error-fg: #7a1f1f;
+	--ok-bg: #dfe5c8;
+	--ok-fg: #3f5a2a;
+
+	/* Tints (ink at low alpha), the focus ring in lapis, sepia scrollbars. */
+	--tint-soft: rgb(60 30 0 / 5%);
+	--tint-strong: rgb(60 30 0 / 10%);
+	--accent-tint-20: rgb(47 79 143 / 16%);
+	--accent-tint-30: rgb(47 79 143 / 26%);
+	--focus-ring: rgb(47 79 143 / 40%);
+	--scrollbar-track: rgb(43 33 24 / 8%);
+	--scrollbar-thumb: rgb(43 33 24 / 35%);
+	--scrollbar-thumb-active: rgb(43 33 24 / 50%);
+
+	/* Code blocks, in the inks. */
+	--tok-comment: #8a7660;
+	--tok-keyword: #7a1f1f;
+	--tok-string: #2f6b4f;
+	--tok-number: #2f4f8f;
+	--tok-function: #6b4a1e;
+	--tok-operator: #2b2118;
+	--tok-punctuation: #6e5a43;
+	--tok-tag: #2f4f8f;
+	--tok-attr: #6b4a1e;
+
+	/* A mention is ruled in red, not in the link colour. */
+	--highlight-border-color: var(--rubric);
+	--unread-marker-color: var(--rubric);
+	--date-marker-color: var(--gold-on-page);
+
+	/* The faces. */
+	--book-face: "Hoefler Text", "Iowan Old Style", "Book Antiqua", "Georgia", serif;
+	--script-face: "Apple Chancery", "Segoe Script", "URW Chancery L", cursive;
+}
+
+/* The book face everywhere, with its ligatures and old-style figures. A
+ * book face runs small at a given size, so the text is set a step up. */
+#chat,
+#sidebar,
+#form #input,
+.window,
+button,
+input,
+select,
+textarea {
+	font-family: var(--book-face);
+	font-variant-ligatures: common-ligatures discretionary-ligatures;
+	font-variant-numeric: oldstyle-nums proportional-nums;
+	text-rendering: optimizelegibility;
+}
+
+#chat .messages,
+#form #input {
+	font-size: 1.0625rem;
+}
+
+/* The script: nicks, the user list, channel and network names, the channel
+ * header, markdown headings, the user's own nick on the composer. Set a
+ * little larger, since a chancery's x-height is low. */
+#chat .from .user,
+#chat .userlist .user,
+#chat .header .title,
+#sidebar .channel-list-item .name,
+#chat .msg[data-type="action"] .from,
+.md-header,
+#form #nick {
+	font-family: var(--script-face);
+	font-size: 1.15em;
+	font-weight: normal;
+	font-variant-ligatures: normal;
+}
+
+/* Rubrication: the first letter of every message is a versal in the script,
+ * rubric red, a size up. The first-letter of a reply-quoting row would be the
+ * quote's, so those rows keep their initial. */
+#chat .msg[data-type="message"] .content::first-letter {
+	font-family: var(--script-face);
+	font-size: 1.35em;
+	font-weight: normal;
+	color: var(--rubric);
+	line-height: 1;
+	text-transform: uppercase;
+}
+
+/* Own lines: style.css greys their text to the muted tone, which on
+ * parchment reads as faded ink; here they stay in the ink and sit on a faint
+ * wash instead. */
+#chat .msg.self .content {
+	color: var(--chat-fg);
+}
+
+#chat .msg.self[data-type="message"],
+#chat .msg.self[data-type="action"] {
+	background-color: var(--tint-soft);
+}
+
+/* The parchment: the page's tone under low-alpha mottling in warmer and
+ * paler browns at different periods, and a vignette that darkens the leaf
+ * toward its edges. Painted on the window so the header and the user list
+ * share it. */
+.window {
+	background-color: var(--chat-bg);
+	background-image:
+		radial-gradient(ellipse 120% 100% at 50% 50%, rgb(0 0 0 / 0%) 60%, rgb(80 45 10 / 14%) 100%),
+		radial-gradient(circle at 23% 31%, rgb(120 80 30 / 7%) 0, rgb(120 80 30 / 0%) 27%),
+		radial-gradient(circle at 71% 63%, rgb(140 100 40 / 6%) 0, rgb(140 100 40 / 0%) 31%),
+		radial-gradient(circle at 47% 87%, rgb(255 250 230 / 35%) 0, rgb(255 250 230 / 0%) 29%),
+		radial-gradient(circle at 87% 13%, rgb(255 250 230 / 30%) 0, rgb(255 250 230 / 0%) 23%),
+		radial-gradient(circle at 9% 79%, rgb(120 80 30 / 6%) 0, rgb(120 80 30 / 0%) 21%);
+	background-attachment: fixed;
+}
+
+/* The dividers: no rule across the page, a fleuron either side of the words —
+ * gold for the day, rubric for the new-messages mark. */
+#chat .date-marker::before,
+#chat .unread-marker::before {
+	display: none;
+}
+
+#chat .date-marker-text::before,
+#chat .unread-marker-text::before {
+	background: transparent;
+	font-family: var(--script-face);
+	font-size: 1.15rem;
+	font-weight: normal;
+}
+
+#chat .date-marker-text::before {
+	content: "❦ " attr(aria-label) " ❦";
+}
+
+#chat .unread-marker-text::before {
+	content: "❦ New messages ❦";
+}
+
+/* A mention: a rubric rule down the margin (style.css's 5px border) over a
+ * rose wash; the composer's focus edge and caret in lapis, as links are. */
+#form:focus-within {
+	border-top-color: var(--chat-accent);
+	box-shadow: inset 0 2px 0 var(--focus-ring);
+}
+
+#form #input::placeholder {
+	font-family: var(--script-face);
+	font-style: italic;
+	color: var(--chat-fg-faint);
+}
+
+/* The cover: leather with a hint of grain, a double gold rule tooled just
+ * inside its edge (an outline, so it paints over the rows and moves nothing),
+ * and the gilt edge where the cover meets the page. */
+#sidebar,
+body {
+	background:
+		repeating-linear-gradient(
+			115deg,
+			rgb(255 255 255 / 0%) 0,
+			rgb(255 255 255 / 0%) 3px,
+			rgb(255 235 200 / 2.5%) 3px,
+			rgb(255 235 200 / 2.5%) 4px
+		),
+		radial-gradient(ellipse 110% 80% at 50% 40%, rgb(0 0 0 / 0%) 50%, rgb(0 0 0 / 35%) 100%),
+		linear-gradient(180deg, var(--rail-bg-top) 0%, var(--rail-bg-bottom) 100%);
+}
+
+#sidebar {
+	outline: 3px double var(--gold);
+	outline-offset: -0.625rem;
+	box-shadow: inset -2px 0 0 var(--gold);
+}
+
+/* The active row's marker in gold, with a hedera before the name. */
+.channel-list-item.active {
+	box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.channel-list-item.active .name::before {
+	content: "❧ ";
+}
+
+.channel-list-item[data-type="lobby"] .name {
+	letter-spacing: 0.02em;
+}
+
+/* The header rule and the composer's edge as thin gold, like the tooling. */
+#chat .header,
+#form {
+	border-color: var(--gold);
+}
+
+/* Nick inks: nine scribe's inks cycled over the 32 slots. */
+.user.color-1,
+.user.color-10,
+.user.color-19,
+.user.color-28 {
+	color: #6b4423; /* sepia */
+}
+
+.user.color-2,
+.user.color-11,
+.user.color-20,
+.user.color-29 {
+	color: #7a1f1f; /* oxblood */
+}
+
+.user.color-3,
+.user.color-12,
+.user.color-21,
+.user.color-30 {
+	color: #2f6b4f; /* verdigris */
+}
+
+.user.color-4,
+.user.color-13,
+.user.color-22,
+.user.color-31 {
+	color: #2f4f8f; /* lapis */
+}
+
+.user.color-5,
+.user.color-14,
+.user.color-23,
+.user.color-32 {
+	color: #7a5a14; /* ochre */
+}
+
+.user.color-6,
+.user.color-15,
+.user.color-24 {
+	color: #3b2a1a; /* iron gall */
+}
+
+.user.color-7,
+.user.color-16,
+.user.color-25 {
+	color: #8f2a45; /* madder */
+}
+
+.user.color-8,
+.user.color-17,
+.user.color-26 {
+	color: #5a3b1e; /* walnut */
+}
+
+.user.color-9,
+.user.color-18,
+.user.color-27 {
+	color: #5e2a6e; /* tyrian */
+}
+
+/* mIRC colours coffee brightened for a dark surface, back to the table's. */
+.irc-fg2 { color: #00007f; }
+.irc-fg5 { color: #7f0000; }
+.irc-fg12 { color: #0000fc; }
