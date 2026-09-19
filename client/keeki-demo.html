@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#22143a">
+<title>Keeki — theme preview</title>
+<style>
+/* A static mockup of the proposed Keeki theme: pink, purple, rose gold,
+ * lavender on a deep purple-black. Nothing here is the real client; it is
+ * one page so the colours can be looked at before the theme is built. */
+:root {
+	--chat-bg: #1a1022;
+	--chat-fg: #f6ecf4;
+	--lavender: #b9a8d6;
+	--lavender-dim: #9f90bf;
+	--lavender-light: #e6dcf7;
+	--lavender-quit: #d3c2ff;
+	--rose-gold: #e9b6a6;
+	--rose-gold-fg: #2a1030;
+	--pink: #ff7bc8;
+	--mention-bg: #33193d;
+	--own-bg: #241530;
+	--rail-top: #34205a;
+	--rail-bottom: #22143a;
+	--rail-hover: rgba(233, 182, 166, 0.10);
+	--join: #f2a7b8;
+	--notice: #f0c98a;
+	--rule: #2c1d3a;
+	font-size: 16px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+	font: 1rem/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	color: var(--chat-fg);
+	background: var(--rail-bottom);
+	display: grid;
+	grid-template-columns: 15rem 1fr;
+	height: 100vh;
+}
+
+/* The rail: a purple gradient, a diagonal rose-gold sheen, and four layers
+ * of 1–2px glitter in rose gold, pink, lavender and white. */
+#rail {
+	position: relative;
+	padding: 1rem 0;
+	color: var(--lavender-light);
+	background-color: var(--rail-bottom);
+	background-image:
+		radial-gradient(circle, rgba(233,182,166,.95) 0 1px, transparent 1.6px),
+		radial-gradient(circle, rgba(255,123,200,.85) 0 1px, transparent 1.6px),
+		radial-gradient(circle, rgba(201,184,255,.9) 0 .8px, transparent 1.4px),
+		radial-gradient(circle, rgba(255,255,255,.9) 0 .7px, transparent 1.3px),
+		linear-gradient(135deg, rgba(233,182,166,.14) 0%, transparent 35%, transparent 65%, rgba(255,123,200,.10) 100%),
+		linear-gradient(var(--rail-top), var(--rail-bottom));
+	background-size: 97px 113px, 131px 79px, 173px 151px, 61px 89px, 100% 100%, 100% 100%;
+	background-position: 13px 7px, 41px 53px, 5px 91px, 29px 17px, 0 0, 0 0;
+	overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+	#rail { animation: twinkle 40s linear infinite; }
+	@keyframes twinkle {
+		to { background-position: 110px 120px, 172px 132px, 178px 242px, 90px 106px, 0 0, 0 0; }
+	}
+}
+#rail h1 {
+	margin: 0 1rem .75rem;
+	font-size: 1.1rem;
+	font-weight: 600;
+	color: var(--rose-gold);
+	letter-spacing: .02em;
+}
+#rail .net {
+	display: flex; justify-content: space-between; align-items: baseline;
+	margin: .5rem 1rem .25rem;
+	color: var(--lavender);
+	font-size: .8rem; text-transform: uppercase; letter-spacing: .06em;
+}
+#rail .net .nick { text-transform: none; letter-spacing: 0; font-size: .85rem; }
+#rail .row {
+	display: flex; align-items: center; gap: .5rem;
+	margin: 0 .5rem; padding: .35rem .5rem;
+	border-radius: .375rem;
+	color: var(--lavender-light);
+}
+#rail .row:hover { background: var(--rail-hover); }
+#rail .row.active { background: var(--rose-gold); color: var(--rose-gold-fg); font-weight: 600; }
+#rail .row .badge {
+	margin-left: auto;
+	padding: 0 .45rem; border-radius: 1rem;
+	background: var(--rose-gold); color: var(--rose-gold-fg);
+	font-size: .75rem; font-weight: 700;
+}
+#rail .row.active .badge { background: var(--rose-gold-fg); color: var(--rose-gold); }
+#rail .row.muted { color: var(--lavender-dim); }
+#rail .row.mention .badge { background: var(--pink); }
+
+/* The chat surface. */
+#chat {
+	display: grid; grid-template-rows: auto 1fr auto;
+	background: var(--chat-bg);
+	min-width: 0;
+}
+#chat header {
+	display: flex; align-items: baseline; gap: 1rem;
+	padding: .6rem 1rem;
+	border-bottom: 1px solid var(--rule);
+}
+#chat header .name { font-weight: 600; }
+#chat header .topic { color: var(--lavender); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#chat header .topic a, .msg a { color: var(--rose-gold); }
+#log { overflow: auto; padding: .5rem 0; }
+.msg {
+	display: grid; grid-template-columns: 5ch 10ch 1fr; gap: 0 .75rem;
+	padding: .15rem 1rem;
+	align-items: baseline;
+}
+.msg:hover { background-image: linear-gradient(var(--rail-hover), var(--rail-hover)); }
+.msg .t { color: var(--lavender-dim); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.msg .n { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg.self { background-color: var(--own-bg); }
+.msg.mention { background-color: var(--mention-bg); }
+.msg.mention .txt .me { color: var(--pink); font-weight: 600; }
+.msg.event .n { color: transparent; }
+.msg.join .txt { color: var(--join); }
+.msg.quit .txt { color: var(--lavender-quit); }
+.msg.notice .txt { color: var(--notice); }
+.msg.action .txt { color: var(--pink); font-style: italic; }
+.msg.action .n { color: transparent; }
+.msg .txt .react {
+	display: inline-block; margin: .2rem .25rem 0 0; padding: 0 .4rem;
+	border: 1px solid var(--rule); border-radius: 1rem;
+	font-size: .8rem; color: var(--lavender);
+}
+.msg .txt .react.mine { border-color: var(--rose-gold); color: var(--rose-gold); }
+code { background: var(--own-bg); color: var(--lavender-light); padding: 0 .3em; border-radius: .25rem; font-size: .9em; }
+
+/* Nick colours: a warm-weighted sweep at oklch L 0.80 C 0.13. */
+.c1 { color: oklch(0.80 0.13 350); }
+.c2 { color: oklch(0.80 0.13 20); }
+.c3 { color: oklch(0.80 0.13 55); }
+.c4 { color: oklch(0.80 0.13 85); }
+.c5 { color: oklch(0.80 0.13 300); }
+.c6 { color: oklch(0.80 0.13 275); }
+.c7 { color: oklch(0.80 0.13 330); }
+.c8 { color: oklch(0.80 0.13 200); }
+
+/* The composer: rose-gold caret and focus edge, pink glow on focus. */
+#form {
+	display: flex; gap: .5rem; align-items: center;
+	padding: .6rem 1rem;
+	border-top: 2px solid var(--rule);
+	background: var(--rail-bottom);
+}
+#form:focus-within { border-top-color: var(--rose-gold); box-shadow: inset 0 2px 0 rgba(255,123,200,.35); }
+#form input {
+	flex: 1; padding: .45rem .6rem;
+	border: 1px solid var(--rule); border-radius: .375rem;
+	background: var(--chat-bg); color: var(--chat-fg);
+	font: inherit; caret-color: var(--rose-gold);
+}
+#form input::placeholder { color: var(--lavender-dim); }
+#form input:focus { outline: none; border-color: var(--rose-gold); }
+#form button {
+	padding: .45rem .9rem; border: 0; border-radius: .375rem;
+	background: var(--rose-gold); color: var(--rose-gold-fg);
+	font: inherit; font-weight: 600;
+}
+
+/* Swatches, so the hex values are on the page too. */
+#swatches {
+	display: flex; flex-wrap: wrap; gap: .5rem;
+	padding: .75rem 1rem; border-top: 1px solid var(--rule);
+	font-size: .75rem; color: var(--lavender);
+}
+#swatches span { display: inline-flex; align-items: center; gap: .35rem; }
+#swatches i { width: 1rem; height: 1rem; border-radius: .25rem; display: inline-block; }
+
+@media (max-width: 640px) {
+	body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; min-height: 100vh; }
+	#rail { padding-bottom: .5rem; }
+	.msg { grid-template-columns: 5ch 1fr; }
+	.msg .n { grid-column: 2; text-align: left; }
+	.msg .txt { grid-column: 2; }
+}
+</style>
+</head>
+<body>
+<aside id="rail">
+	<h1>✦ Keeki</h1>
+	<div class="net"><span>AfterNET</span><span class="nick">rdrake</span></div>
+	<div class="row">#lobby</div>
+	<div class="row active">#textual <span class="badge">3</span></div>
+	<div class="row mention">#glitter <span class="badge">12</span></div>
+	<div class="row">#help</div>
+	<div class="row muted">#idle</div>
+	<div class="net"><span>Direct</span></div>
+	<div class="row">keeki</div>
+</aside>
+<main id="chat">
+	<header>
+		<span class="name">#textual</span>
+		<span class="topic">A theme for Keeki — pink, purple, rose gold, lavender · <a href="#">docs/resources/themes.md</a></span>
+	</header>
+	<div id="log">
+		<div class="msg event join"><span class="t">21:02</span><span class="n">*</span><span class="txt">keeki has joined the channel</span></div>
+		<div class="msg"><span class="t">21:02</span><span class="n c1">keeki</span><span class="txt">hi!! is the sparkly theme done yet</span></div>
+		<div class="msg self"><span class="t">21:03</span><span class="n c5">rdrake</span><span class="txt">not yet — here's the palette, tell me what you think</span></div>
+		<div class="msg"><span class="t">21:03</span><span class="n c1">keeki</span><span class="txt">pink, purple, and somehow rose gold. lavender even</span></div>
+		<div class="msg notice"><span class="t">21:04</span><span class="n c3">ChanServ</span><span class="txt">[#textual] Welcome. Be kind, use /topic for the rules.</span></div>
+		<div class="msg"><span class="t">21:04</span><span class="n c2">mara</span><span class="txt">the rail glitter is 4 layers of <code>radial-gradient</code>, no image</span></div>
+		<div class="msg action"><span class="t">21:05</span><span class="n c1">keeki</span><span class="txt">* keeki sparkles</span></div>
+		<div class="msg mention"><span class="t">21:05</span><span class="n c4">theo</span><span class="txt"><span class="me">rdrake</span>: links go rose gold? like <a href="#">https://example.org/keeki.css</a></span></div>
+		<div class="msg self"><span class="t">21:06</span><span class="n c5">rdrake</span><span class="txt">yep — links, the caret, the unread badge, the selected channel. pink is for highlights and own messages.<br><span class="react mine">💖 2</span><span class="react">✨ 1</span></span></div>
+		<div class="msg"><span class="t">21:06</span><span class="n c6">ines</span><span class="txt">lavender for the timestamps and the quiet stuff is a nice call</span></div>
+		<div class="msg"><span class="t">21:07</span><span class="n c7">bo</span><span class="txt">nick colours are a warm sweep so the member list stays in the same family</span></div>
+		<div class="msg"><span class="t">21:07</span><span class="n c8">juno</span><span class="txt">(a cool one slips in now and then so people are still telling apart)</span></div>
+		<div class="msg event quit"><span class="t">21:08</span><span class="n">*</span><span class="txt">mara has quit (Quit: bedtime)</span></div>
+		<div class="msg"><span class="t">21:08</span><span class="n c1">keeki</span><span class="txt">ok i love it. ship it 💅</span></div>
+	</div>
+	<form id="form" onsubmit="return false">
+		<input type="text" placeholder="Write to #textual" autofocus>
+		<button type="submit">Send</button>
+	</form>
+	<div id="swatches">
+		<span><i style="background:#1a1022"></i>chat #1a1022</span>
+		<span><i style="background:#34205a"></i>rail #34205a→#22143a</span>
+		<span><i style="background:#e9b6a6"></i>rose gold #e9b6a6</span>
+		<span><i style="background:#ff7bc8"></i>pink #ff7bc8</span>
+		<span><i style="background:#b9a8d6"></i>lavender #b9a8d6</span>
+		<span><i style="background:#d3c2ff"></i>quit #d3c2ff</span>
+		<span><i style="background:#f2a7b8"></i>join #f2a7b8</span>
+		<span><i style="background:#f0c98a"></i>notice #f0c98a</span>
+		<span><i style="background:#33193d"></i>mention row #33193d</span>
+	</div>
+</main>
+</body>
+</html>
