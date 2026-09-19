@@ -201,6 +201,12 @@
 	background-color: var(--own-bg);
 }
 
+/* style.css greys own text to the muted tone, which here is lavender and
+ * reads as disabled; the band is what marks the row, the text stays cream. */
+#chat .msg.self .content {
+	color: var(--chat-fg);
+}
+
 /* The composer's caret and the focus edge: rose gold with a pink glow. */
 #form:focus-within {
 	border-top-color: var(--chat-accent);
