@@ -90,7 +90,9 @@
 	 * their browser gets a bigger client too. "medium" is 100%, the browser
 	 * default (16px unless changed); "large", the default, is a real step up
 	 * from it, and the scale runs from too small to read to too large to be
-	 * sensible on purpose: the ends exist for eyes that need them. */
+	 * sensible on purpose: the ends exist for eyes that need them. In the
+	 * native shells the system's text size can stand in for the steps
+	 * (html[data-system-text] below). */
 	font-size: 100%;
 
 	/* The sidebar scales at half rate — 220px at medium, 248px at large; a
@@ -106,7 +108,8 @@
 	--status-bar-tint-height: 8px;
 }
 
-/* The font-size setting's scale (client/js/helpers/fontSize.ts). */
+/* The font-size setting's scale (client/js/helpers/fontSize.ts); "medium" is
+ * :root's own. */
 html[data-font-size="tiny"] {
 	font-size: 62.5%;
 }
@@ -125,6 +128,18 @@ html[data-font-size="xlarge"] {
 
 html[data-font-size="huge"] {
 	font-size: 212.5%;
+}
+
+/* "Match system text size" (the matchSystemTextSize setting, native shells
+ * only, helpers/systemTextSize.ts): the system's body text size takes the
+ * place of the step, so 1rem is what the system's own apps set their text in
+ * — 17px at iOS's default Text Size, 16px at Android's default font size —
+ * and follows it. --system-text-scale is that size over the browser's 16px.
+ * Never past "huge": the chrome is rem too, and past that the header loses
+ * its buttons off the edge of a phone. After the steps, so it wins at the
+ * same specificity. */
+html[data-system-text] {
+	font-size: min(calc(100% * var(--system-text-scale, 1)), 212.5%);
 }
 
 ::placeholder {
@@ -853,13 +868,35 @@ p {
 #chat button.search,
 #chat button.menu,
 #chat button.close {
+	--header-button-size: 2.5rem;
+
 	color: #607992;
 	display: flex;
 	font-size: 1.0625rem;
 	line-height: 1;
-	height: 2.5rem;
-	width: 2.5rem;
+	height: var(--header-button-size);
+	width: var(--header-button-size);
 	flex-shrink: 0;
+}
+
+/* Five of these share the pane with the channel name. In a narrow pane (a
+ * phone) at the largest steps, or iOS's accessibility text sizes, 2.5rem
+ * each ran the last ones off the edge, so there they are capped in px, above
+ * the default step's 50px and 21px; the title keeps growing as text. A pane
+ * with room for them (24rem, in the root's size, so it moves with the step)
+ * leaves them growing with everything else. */
+/* stylelint-disable-next-line at-rule-no-unknown */
+@container chat (max-width: 24rem) {
+	#viewport .lt,
+	#viewport .rt,
+	#chat button.mentions,
+	#chat button.search,
+	#chat button.menu,
+	#chat button.close {
+		--header-button-size: min(2.5rem, 56px);
+
+		font-size: min(1.0625rem, 24px);
+	}
 }
 
 #viewport .lt::before,
@@ -868,8 +905,8 @@ p {
 #chat button.search::before,
 #chat button.menu::before,
 #chat button.close::before {
-	width: 2.5rem;
-	line-height: 2.5rem; /* Fix alignment in Microsoft Edge */
+	width: var(--header-button-size);
+	line-height: var(--header-button-size); /* Fix alignment in Microsoft Edge */
 }
 
 /* Channel list button stays fixed when scrolling... */

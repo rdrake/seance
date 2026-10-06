@@ -204,7 +204,25 @@
 		</div>
 
 		<h2 id="label-font-size">Font size</h2>
-		<div role="group" aria-labelledby="label-font-size" class="font-size-setting">
+		<div v-if="systemTextSize">
+			<label class="opt">
+				<input
+					:checked="store.state.settings.matchSystemTextSize"
+					type="checkbox"
+					name="matchSystemTextSize"
+				/>
+				Match the system text size
+			</label>
+			<p v-if="store.state.settings.matchSystemTextSize" class="theme-pair-hint">
+				{{ systemTextSizeHint }}
+			</p>
+		</div>
+		<div
+			v-if="!matchingSystemTextSize"
+			role="group"
+			aria-labelledby="label-font-size"
+			class="font-size-setting"
+		>
 			<!-- No `name`: the window's generic @change handler would store the
 			     raw slider index. While the slider moves only the sample below
 			     follows it; the setting is applied when it is let go. -->
@@ -232,7 +250,12 @@
 			</datalist>
 			<span class="font-size-value" aria-hidden="true">{{ shownLabel }}</span>
 		</div>
-		<div class="font-size-sample" :style="{fontSize: sampleFontSize}" aria-hidden="true">
+		<div
+			v-if="!matchingSystemTextSize"
+			class="font-size-sample"
+			:style="{fontSize: sampleFontSize}"
+			aria-hidden="true"
+		>
 			<div v-for="line in sampleLines" :key="line.from" class="line">
 				<span class="time">{{ line.time }}</span>
 				<span class="from user" :class="line.color">{{ line.from }}</span>
@@ -325,6 +348,7 @@ textarea#user-specified-css-input {
 
 .font-size-setting input[type="range"] {
 	display: block;
+	accent-color: var(--button-color);
 	width: 100%;
 	height: 100%;
 	margin: 0;
@@ -378,6 +402,8 @@ textarea#user-specified-css-input {
 import {computed, defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
 import {themePartner} from "../../js/helpers/themeAppearance";
+import {isIOSShell} from "../../js/helpers/capacitor";
+import {systemTextSizeAvailable} from "../../js/helpers/systemTextSize";
 import {
 	fontSizeLabels,
 	fontSizeScale,
@@ -515,6 +541,17 @@ export default defineComponent({
 				: `${label(chosen)} has no light/dark pair; Coffee, Cobalt, Princess and Day do.`;
 		});
 
+		// In the native shells the system's text size can stand in for the
+		// slider (helpers/systemTextSize.ts); while it does, the slider and
+		// its sample are hidden and the hint says where the size is set.
+		const systemTextSize = systemTextSizeAvailable();
+		const matchingSystemTextSize = computed(
+			() => systemTextSize && store.state.settings.matchSystemTextSize
+		);
+		const systemTextSizeHint = isIOSShell()
+			? "Set it in iOS Settings → Display & Brightness → Text Size, or Accessibility → Display & Text Size for larger sizes."
+			: "Set it in Android Settings → Display → Display size and text.";
+
 		// A theme that follows the system's mode says so in the list while the
 		// toggle is on; any theme can still be picked.
 		const themeOptionLabel = (name: string, displayName: string) =>
@@ -524,6 +561,9 @@ export default defineComponent({
 
 		return {
 			store,
+			systemTextSize,
+			matchingSystemTextSize,
+			systemTextSizeHint,
 			themeOptionLabel,
 			themePairHint,
 			trustedGroups,

@@ -3,6 +3,7 @@ package chat.seance.app;
 import android.app.UiModeManager;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Build;
@@ -16,9 +17,11 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * `SystemAccessibility`: Android's contrast and animation settings, raw, for
- * client/js/helpers/systemAccessibility.ts, which turns them into the page's
- * Increase Contrast and Reduce Motion with Chromium's own rule.
+ * `SystemAccessibility`: Android's contrast, animation and font-size settings,
+ * raw, for client/js/helpers/systemAccessibility.ts, which turns the first two
+ * into the page's Increase Contrast and Reduce Motion with Chromium's own rule,
+ * and helpers/systemTextSize.ts, which scales the interface by the font size
+ * (MainActivity pins the WebView's own text zoom at 100%).
  *
  * The WebView would answer `prefers-contrast` and `prefers-reduced-motion`
  * itself, but only with the values its process started with: Chromium
@@ -27,7 +30,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * keeps the process for as long as the user stays connected. So the shell
  * watches them and tells the page.
  *
- * - `status()`: `{highTextContrast, contrast, animatorDurationScale}`.
+ * - `status()`: `{highTextContrast, contrast, animatorDurationScale, fontScale}`.
  * - event `changed`: the same, whenever one of them changes.
  */
 @CapacitorPlugin(name = "SystemAccessibility")
@@ -38,9 +41,11 @@ public class SystemAccessibilityPlugin extends Plugin {
 
     private ContentObserver settingsObserver;
     private UiModeManager.ContrastChangeListener contrastListener;
+    private float fontScale;
 
     @Override
     public void load() {
+        fontScale = getContext().getResources().getConfiguration().fontScale;
         ContentResolver resolver = getContext().getContentResolver();
         settingsObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
             @Override
@@ -61,6 +66,15 @@ public class SystemAccessibilityPlugin extends Plugin {
         }
     }
 
+    /** The activity declares fontScale, so it is not relaunched: it hears the change here. */
+    @Override
+    protected void handleOnConfigurationChanged(Configuration newConfig) {
+        if (newConfig.fontScale != fontScale) {
+            fontScale = newConfig.fontScale;
+            notifyListeners("changed", status());
+        }
+    }
+
     @PluginMethod
     public void status(PluginCall call) {
         call.resolve(status());
@@ -78,6 +92,7 @@ public class SystemAccessibilityPlugin extends Plugin {
             "animatorDurationScale",
             Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
         );
+        result.put("fontScale", fontScale);
         return result;
     }
 

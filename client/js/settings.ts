@@ -7,6 +7,7 @@ import {setQueryLogEnabled} from "./irc/querylog";
 import {setKeepAlive} from "./helpers/keepAlive";
 import {effectiveTheme} from "./helpers/themeAppearance";
 import {isNativeShell} from "./helpers/capacitor";
+import {setMatchSystemTextSize} from "./helpers/systemTextSize";
 
 const defaultSettingConfig = {
 	apply() {},
@@ -170,6 +171,16 @@ const defaultConfig = {
 		default: "large",
 		apply(store: TypedStore, value: string) {
 			document.documentElement.dataset.fontSize = normalizeFontSize(value);
+		},
+	},
+	// In the native shells the system's text size (iOS Text Size, Android's
+	// Font size) stands in for the step above, live; off, the step applies as
+	// on the web (helpers/systemTextSize.ts). On by default there: Apple's and
+	// Google's guidelines both ask an app to follow the system's size.
+	matchSystemTextSize: {
+		default: isNativeShell(),
+		apply(store: TypedStore, value: boolean) {
+			setMatchSystemTextSize(value);
 		},
 	},
 	// How own messages stand out: greyed text (TheLounge's look), a band, or
