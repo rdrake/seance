@@ -1,5 +1,6 @@
 import storage from "./localStorage";
 import {config, createState} from "./settings";
+import {migrateStoredSettings} from "./helpers/settingsMigration";
 import {Store} from "vuex";
 import {State} from "./store";
 
@@ -9,7 +10,7 @@ import {State} from "./store";
 export function createSettingsStore(store: Store<State>) {
 	return {
 		namespaced: true,
-		state: assignStoredSettings(createState(), loadFromLocalStorage()),
+		state: loadSettings(),
 		mutations: {
 			set(state, {name, value}) {
 				state[name] = value;
@@ -39,6 +40,11 @@ export function createSettingsStore(store: Store<State>) {
 			},
 		},
 	};
+}
+
+function loadSettings() {
+	const defaults = createState();
+	return assignStoredSettings(defaults, migrateStoredSettings(loadFromLocalStorage(), defaults));
 }
 
 function loadFromLocalStorage() {

@@ -1,0 +1,54 @@
+import {expect} from "chai";
+import {migrateStoredSettings} from "../../client/js/helpers/settingsMigration";
+
+describe("settingsMigration", function () {
+	const shell = {
+		fontSize: "large",
+		theme: "coffee",
+		matchSystemTextSize: true,
+		matchSystemAppearance: true,
+	};
+	const web = {...shell, matchSystemTextSize: false, matchSystemAppearance: false};
+
+	it("leaves a fresh install on the new defaults", function () {
+		expect(migrateStoredSettings({}, shell)).to.deep.equal({});
+	});
+
+	it("keeps a step and a theme the user picked before the settings existed", function () {
+		const stored = {fontSize: "huge", theme: "creama"};
+		expect(migrateStoredSettings(stored, shell)).to.deep.equal({
+			fontSize: "huge",
+			theme: "creama",
+			matchSystemTextSize: false,
+			matchSystemAppearance: false,
+		});
+	});
+
+	it("turns each setting off only for its own choice", function () {
+		expect(migrateStoredSettings({fontSize: "large", theme: "creama"}, shell)).to.deep.equal({
+			fontSize: "large",
+			theme: "creama",
+			matchSystemAppearance: false,
+		});
+		expect(migrateStoredSettings({fontSize: "small", theme: "coffee"}, shell)).to.deep.equal({
+			fontSize: "small",
+			theme: "coffee",
+			matchSystemTextSize: false,
+		});
+	});
+
+	it("gives the new default to a user who never changed what it overrides", function () {
+		const stored = {fontSize: "large", theme: "coffee", media: false};
+		expect(migrateStoredSettings(stored, shell)).to.deep.equal(stored);
+	});
+
+	it("never overrides a stored value for the new setting", function () {
+		const stored = {fontSize: "huge", matchSystemTextSize: true};
+		expect(migrateStoredSettings(stored, shell)).to.deep.equal(stored);
+	});
+
+	it("does nothing where the new setting defaults to off", function () {
+		const stored = {fontSize: "huge", theme: "creama"};
+		expect(migrateStoredSettings(stored, web)).to.deep.equal(stored);
+	});
+});
