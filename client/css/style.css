@@ -1506,7 +1506,8 @@ so the toolbar has one weight; green is what marks a subscribed bell. */
  * cannot see. */
 
 /* Native checkboxes and radios do not follow the font; size them off it so
- * the big scales get a target that matches their label. */
+ * the big scales get a target that matches their label. They take the
+ * theme's button colour, not the browser's blue. */
 input[type="checkbox"],
 input[type="radio"] {
 	width: 1em;
@@ -1514,6 +1515,68 @@ input[type="radio"] {
 	margin: 0 0.4em 0 0;
 	vertical-align: -0.1em;
 	flex: 0 0 auto;
+	accent-color: var(--button-color);
+}
+
+/* In the iOS shell every checkbox is a switch (helpers/nativeSwitches.ts), in
+ * UISwitch's proportions (51×31) and a little larger than the text. */
+input[type="checkbox"][switch] {
+	width: 2em;
+	height: 1.22em;
+	vertical-align: -0.25em;
+}
+
+/* In the Android shell every checkbox is drawn as a Material switch, the
+ * counterpart of iOS's native one above: an outlined track with a small thumb
+ * when off, the theme's button colour with a larger thumb when on. Still an
+ * <input type="checkbox"> — checked state, change events and labels as
+ * before. Sized off the font, like the checkbox it replaces. */
+html[data-platform="android"] input[type="checkbox"] {
+	appearance: none;
+	position: relative;
+	width: 2.1em;
+	height: 1.3em;
+	vertical-align: -0.3em;
+	border: 0.125em solid var(--body-color-muted);
+	border-radius: 0.65em;
+	background: transparent;
+	cursor: pointer;
+	transition: background-color 0.15s, border-color 0.15s;
+}
+
+html[data-platform="android"] input[type="checkbox"]::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 0.2em;
+	width: 0.6em;
+	height: 0.6em;
+	border-radius: 50%;
+	background: var(--body-color-muted);
+	transform: translateY(-50%);
+	transition: left 0.15s, width 0.15s, height 0.15s;
+}
+
+html[data-platform="android"] input[type="checkbox"]:checked {
+	border-color: var(--button-color);
+	background: var(--button-color);
+}
+
+html[data-platform="android"] input[type="checkbox"]:checked::before {
+	left: calc(100% - 0.95em);
+	width: 0.85em;
+	height: 0.85em;
+	background: var(--button-text-color-hover);
+}
+
+html[data-platform="android"] input[type="checkbox"]:focus-visible {
+	outline: 2px solid var(--button-color);
+	outline-offset: 2px;
+}
+
+html[data-platform="android"] input[type="checkbox"]:disabled {
+	opacity: 0.5;
+	cursor: default;
 }
 
 .input {
