@@ -1960,6 +1960,15 @@ html[data-reduce-motion] #chat .connecting-indicator {
 	pointer-events: auto;
 }
 
+/* A finger needs Apple's 44pt (a CSS px on iOS), and the button grows with
+   the text past that: 2.2rem is 44px at the default step. A mouse keeps the
+   36px it always had. */
+@media (pointer: coarse) {
+	#chat {
+		--scroll-down-size: max(2.2rem, 44px);
+	}
+}
+
 .scroll-down-arrow {
 	width: var(--scroll-down-size);
 	height: var(--scroll-down-size);
