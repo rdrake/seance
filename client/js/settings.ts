@@ -5,6 +5,8 @@ import {normalizeOwnMessageStyle} from "./helpers/ownMessages";
 import {prefersTwelveHourClock} from "./helpers/hourCycle";
 import {setQueryLogEnabled} from "./irc/querylog";
 import {setKeepAlive} from "./helpers/keepAlive";
+import {effectiveTheme} from "./helpers/themeAppearance";
+import {isNativeShell} from "./helpers/capacitor";
 
 const defaultSettingConfig = {
 	apply() {},
@@ -14,6 +16,74 @@ const defaultSettingConfig = {
 
 const buildThemeColor =
 	document.querySelector('meta[name="theme-color"]')?.getAttribute("content") || "";
+
+const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+
+/** Load the theme the settings ask for: the chosen one, or its light/dark
+ * partner when following the system (helpers/themeAppearance.ts). */
+function loadTheme(store: TypedStore): void {
+	const chosen = store.state.settings.theme;
+
+	if (!chosen) {
+		return;
+	}
+
+	const value = effectiveTheme(
+		chosen,
+		store.state.settings.matchSystemAppearance,
+		darkScheme.matches
+	);
+	const themeEl = document.getElementById("theme");
+	const themeUrl = `themes/${value}.css`;
+
+	if (!(themeEl instanceof HTMLLinkElement)) {
+		throw new Error("theme element is not a link");
+	}
+
+	const hrefAttr = themeEl.attributes.getNamedItem("href");
+
+	if (!hrefAttr) {
+		throw new Error("theme is missing href attribute");
+	}
+
+	if (hrefAttr.value === themeUrl) {
+		return;
+	}
+
+	hrefAttr.value = themeUrl;
+
+	if (!store.state.serverConfiguration) {
+		return;
+	}
+
+	const newTheme = store.state.serverConfiguration?.themes.filter(
+		(theme) => theme.name === value
+	)[0];
+
+	const metaSelector = document.querySelector('meta[name="theme-color"]');
+
+	if (!(metaSelector instanceof HTMLMetaElement)) {
+		throw new Error("theme meta element is not a meta element");
+	}
+
+	// A theme without a colour of its own (day, morning) hands the
+	// browser chrome back to the deploy: config.json's themeColor, else
+	// the colour the build put in the tag.
+	metaSelector.content =
+		newTheme?.themeColor || store.state.branding.themeColor || buildThemeColor;
+}
+
+let followingScheme = false;
+
+/** Swap the theme live when the system's light/dark mode changes. */
+function followScheme(store: TypedStore): void {
+	if (followingScheme) {
+		return;
+	}
+
+	followingScheme = true;
+	darkScheme.addEventListener("change", () => loadTheme(store));
+}
 
 const defaultConfig = {
 	advanced: {
@@ -113,47 +183,20 @@ const defaultConfig = {
 	},
 	theme: {
 		default: document.getElementById("theme")?.dataset.serverTheme,
-		// One-time note of the tag's build-time colour, before boot applies
-		// anything: the fallback for themes that carry no colour of their own.
-		apply(store: TypedStore, value: string) {
-			const themeEl = document.getElementById("theme");
-			const themeUrl = `themes/${value}.css`;
-
-			if (!(themeEl instanceof HTMLLinkElement)) {
-				throw new Error("theme element is not a link");
-			}
-
-			const hrefAttr = themeEl.attributes.getNamedItem("href");
-
-			if (!hrefAttr) {
-				throw new Error("theme is missing href attribute");
-			}
-
-			if (hrefAttr.value === themeUrl) {
-				return;
-			}
-
-			hrefAttr.value = themeUrl;
-
-			if (!store.state.serverConfiguration) {
-				return;
-			}
-
-			const newTheme = store.state.serverConfiguration?.themes.filter(
-				(theme) => theme.name === value
-			)[0];
-
-			const metaSelector = document.querySelector('meta[name="theme-color"]');
-
-			if (!(metaSelector instanceof HTMLMetaElement)) {
-				throw new Error("theme meta element is not a meta element");
-			}
-
-			// A theme without a colour of its own (day, morning) hands the
-			// browser chrome back to the deploy: config.json's themeColor, else
-			// the colour the build put in the tag.
-			metaSelector.content =
-				newTheme?.themeColor || store.state.branding.themeColor || buildThemeColor;
+		apply(store: TypedStore) {
+			loadTheme(store);
+			followScheme(store);
+		},
+	},
+	// A theme that comes as a light/dark pair follows the system's mode:
+	// coffee becomes creama in light mode and back (helpers/themeAppearance.ts).
+	// On by default in the native shell, where Apple's guidelines ask an app
+	// to honour the system setting; off on the web, where a browser's theme
+	// stays the one picked.
+	matchSystemAppearance: {
+		default: isNativeShell(),
+		apply(store: TypedStore) {
+			loadTheme(store);
 		},
 	},
 	media: {

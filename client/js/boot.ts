@@ -25,6 +25,7 @@ import {parseJoinList} from "./irc/client";
 import {ChanState} from "../../shared/types/chan";
 import socket from "./socket";
 import {loadMentions} from "./mentions";
+import {effectiveTheme} from "./helpers/themeAppearance";
 import {cancelLanding} from "./helpers/lastChannel";
 import storage from "./localStorage";
 import {installNativeHooks, nativeAppReady, nativeLaunchUrl, onNativeUrl} from "./native";
@@ -95,8 +96,18 @@ export async function boot(): Promise<void> {
 			name: "theme",
 			value: configuration.defaultTheme,
 		});
-	} else if (currentTheme.themeColor) {
-		setThemeColor(currentTheme.themeColor);
+	} else {
+		// The theme on screen, which may be the chosen one's light/dark partner.
+		const shown = effectiveTheme(
+			currentTheme.name,
+			store.state.settings.matchSystemAppearance,
+			window.matchMedia("(prefers-color-scheme: dark)").matches
+		);
+		const color = configuration.themes.find((t) => t.name === shown)?.themeColor;
+
+		if (color) {
+			setThemeColor(color);
+		}
 	}
 
 	loadMentions();

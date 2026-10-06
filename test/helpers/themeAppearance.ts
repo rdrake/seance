@@ -1,0 +1,37 @@
+import {expect} from "chai";
+import {effectiveTheme, themePartner} from "../../client/js/helpers/themeAppearance";
+
+describe("themeAppearance", function () {
+	it("pairs each light theme with its dark one, both ways", function () {
+		for (const [a, b] of [
+			["coffee", "creama"],
+			["cobalt", "frost"],
+			["princess_", "princess"],
+			["morning", "day"],
+		]) {
+			expect(themePartner(a)).to.equal(b);
+			expect(themePartner(b)).to.equal(a);
+		}
+
+		expect(themePartner("keeki")).to.equal(null);
+	});
+
+	it("shows the chosen theme when not following the system", function () {
+		expect(effectiveTheme("coffee", false, false)).to.equal("coffee");
+		expect(effectiveTheme("creama", false, true)).to.equal("creama");
+	});
+
+	it("swaps to the partner whose mode matches the system", function () {
+		expect(effectiveTheme("coffee", true, true)).to.equal("coffee");
+		expect(effectiveTheme("coffee", true, false)).to.equal("creama");
+		expect(effectiveTheme("creama", true, true)).to.equal("coffee");
+		expect(effectiveTheme("frost", true, true)).to.equal("cobalt");
+		expect(effectiveTheme("princess_", true, false)).to.equal("princess");
+		expect(effectiveTheme("day", true, true)).to.equal("morning");
+	});
+
+	it("leaves a theme without a partner alone", function () {
+		expect(effectiveTheme("keeki", true, false)).to.equal("keeki");
+		expect(effectiveTheme("gates", true, true)).to.equal("gates");
+	});
+});

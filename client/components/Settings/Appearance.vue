@@ -254,9 +254,20 @@
 					:key="theme.name"
 					:value="theme.name"
 				>
-					{{ theme.displayName }}
+					{{ themeOptionLabel(theme.name, theme.displayName) }}
 				</option>
 			</select>
+		</div>
+		<div>
+			<label class="opt">
+				<input
+					:checked="store.state.settings.matchSystemAppearance"
+					type="checkbox"
+					name="matchSystemAppearance"
+				/>
+				Match the system's light or dark mode
+			</label>
+			<p class="theme-pair-hint">{{ themePairHint }}</p>
 		</div>
 
 		<div>
@@ -282,6 +293,11 @@ textarea#user-specified-css-input {
 
 .own-messages-options .own-messages-hint {
 	color: var(--body-color-muted);
+}
+
+.theme-pair-hint {
+	color: var(--body-color-muted);
+	margin: 0.25rem 0 0;
 }
 
 .own-messages-options .own-messages-hint::before {
@@ -361,6 +377,7 @@ textarea#user-specified-css-input {
 <script lang="ts">
 import {computed, defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
+import {themePartner} from "../../js/helpers/themeAppearance";
 import {
 	fontSizeLabels,
 	fontSizeScale,
@@ -484,8 +501,31 @@ export default defineComponent({
 			}
 		};
 
+		// What the toggle does for the theme picked: names its pair, or says it
+		// has none (helpers/themeAppearance.ts).
+		const themePairHint = computed(() => {
+			const themes = store.state.serverConfiguration?.themes ?? [];
+			const label = (name: string) =>
+				themes.find((t) => t.name === name)?.displayName ?? name;
+			const chosen = store.state.settings.theme;
+			const partner = chosen ? themePartner(chosen) : null;
+
+			return partner
+				? `${label(chosen)} and ${label(partner)} swap with the system's mode.`
+				: `${label(chosen)} has no light/dark pair; Coffee, Cobalt, Princess and Day do.`;
+		});
+
+		// A theme that follows the system's mode says so in the list while the
+		// toggle is on; any theme can still be picked.
+		const themeOptionLabel = (name: string, displayName: string) =>
+			store.state.settings.matchSystemAppearance && themePartner(name)
+				? `${displayName} (light/dark)`
+				: displayName;
+
 		return {
 			store,
+			themeOptionLabel,
+			themePairHint,
 			trustedGroups,
 			trustedCount,
 			untrust,
