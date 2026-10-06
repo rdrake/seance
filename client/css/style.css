@@ -1166,16 +1166,14 @@ of one that has already passed — and only one `animation` can hold the icon. *
 }
 
 /* Keep the cue, drop the motion */
-@media (prefers-reduced-motion: reduce) {
-	.channel-list-item.is-typing::before {
-		animation: none;
-		color: var(--channel-typing-color);
-	}
+html[data-reduce-motion] .channel-list-item.is-typing::before {
+	animation: none;
+	color: var(--channel-typing-color);
+}
 
-	.channel-list-item.has-activity:not(.is-typing)::before {
-		animation: none;
-		color: var(--channel-activity-color);
-	}
+html[data-reduce-motion] .channel-list-item.has-activity:not(.is-typing)::before {
+	animation: none;
+	color: var(--channel-activity-color);
 }
 
 .channel-list-item .name {
@@ -1625,10 +1623,8 @@ textarea.input {
 }
 
 /* Keep the cue, drop the motion */
-@media (prefers-reduced-motion: reduce) {
-	#chat .connecting-indicator {
-		animation: none;
-	}
+html[data-reduce-motion] #chat .connecting-indicator {
+	animation: none;
 }
 
 .header .title {
@@ -2669,18 +2665,16 @@ part/quit messages where we don't load previews (adds a blank line otherwise) */
 	}
 }
 
-@media (prefers-reduced-motion: reduce) {
-	#chat .toggle-content.media-revealed .media-frame {
-		animation: none;
-	}
+html[data-reduce-motion] #chat .toggle-content.media-revealed .media-frame {
+	animation: none;
+}
 
-	#chat .media-veil.loading .media-veil-icon::before {
-		animation: none;
-	}
+html[data-reduce-motion] #chat .media-veil.loading .media-veil-icon::before {
+	animation: none;
+}
 
-	#chat .media-veil-main:hover .media-veil-icon {
-		transform: none;
-	}
+html[data-reduce-motion] #chat .media-veil-main:hover .media-veil-icon {
+	transform: none;
 }
 
 #chat .userlist .count {
@@ -4798,10 +4792,8 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	}
 }
 
-@media (prefers-reduced-motion: reduce) {
-	#chat .reaction-enter-active {
-		animation: none;
-	}
+html[data-reduce-motion] #chat .reaction-enter-active {
+	animation: none;
 }
 
 #chat .msg-reaction-count {
@@ -5053,10 +5045,8 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	}
 }
 
-@media (prefers-reduced-motion: reduce) {
-	#chat .msg-copied {
-		animation: none;
-	}
+html[data-reduce-motion] #chat .msg-copied {
+	animation: none;
 }
 
 /* The one-tap reactions (the newest used, helpers/reactionRecents.ts
@@ -5235,11 +5225,9 @@ html[data-shell="native"] .reaction-picker.sheet {
 	}
 }
 
-@media (prefers-reduced-motion: reduce) {
-	.reaction-picker,
-	#chat .msg.actions-open .msg-actions {
-		animation: none;
-	}
+html[data-reduce-motion] .reaction-picker,
+html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
+	animation: none;
 }
 
 .reaction-picker-search {
@@ -5705,10 +5693,8 @@ html[data-shell="native"] .reaction-picker.sheet {
 }
 
 /* Keep the cue, drop the motion */
-@media (prefers-reduced-motion: reduce) {
-	#form .connection-bar-icon.spinning::before {
-		animation: none;
-	}
+html[data-reduce-motion] #form .connection-bar-icon.spinning::before {
+	animation: none;
 }
 
 #form .connection-bar-connect {
@@ -5731,13 +5717,11 @@ html[data-shell="native"] .reaction-picker.sheet {
 	outline: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-	#form .upload-bar-track.indeterminate .upload-bar-fill {
-		animation: none;
-		left: 0;
-		width: 100%;
-		opacity: 0.5;
-	}
+html[data-reduce-motion] #form .upload-bar-track.indeterminate .upload-bar-fill {
+	animation: none;
+	left: 0;
+	width: 100%;
+	opacity: 0.5;
 }
 
 #form .upload-bar-percent {
@@ -5850,4 +5834,34 @@ html[data-shell="native"] .reaction-picker.sheet {
 	color: var(--body-color-muted);
 	font-size: 0.8125rem;
 	margin-top: 2px;
+}
+
+/* Increase Contrast (iOS, macOS), Windows' contrast themes and Android's High
+ * contrast text ask for more: every muted and faint text tone becomes the full
+ * text colour, own messages and timestamps included. The attribute, like
+ * `data-reduce-motion` below and in the rules above, is set from the system
+ * by helpers/systemAccessibility.ts, live — not a media query, which Android's
+ * WebView answers with the settings its process started with. It outranks a
+ * theme's `:root`, so this holds whichever theme is loaded; a theme without
+ * the handoff tokens only has --body-color-muted, and the others resolve to
+ * nothing it reads. */
+html[data-contrast="more"]:root {
+	--body-color-muted: var(--body-color);
+	--chat-fg-muted: var(--chat-fg);
+	--chat-fg-faint: var(--chat-fg);
+	--rail-fg-muted: var(--rail-fg);
+}
+
+/* Reduce Motion: no slides, fades or spins anywhere — the sidebar, the
+ * settings pane, the toolbar's pop-in, the reaction picker. 0.01ms rather
+ * than none so transitionend and animationend still fire, which Vue's
+ * <Transition> waits for. The rules above that stop single animations stay:
+ * they also swap in a still look where a frozen frame would read wrong. */
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after {
+	animation-duration: 0.01ms !important;
+	animation-iteration-count: 1 !important;
+	transition-duration: 0.01ms !important;
+	scroll-behavior: auto !important;
 }

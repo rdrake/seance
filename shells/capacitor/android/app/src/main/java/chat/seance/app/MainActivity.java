@@ -14,6 +14,8 @@ public class MainActivity extends BridgeActivity {
         // The "stay connected" service's handle for the page (before the
         // bridge builds its plugin list).
         registerPlugin(KeepAlivePlugin.class);
+        // Contrast and animation settings, live (the WebView's own go stale).
+        registerPlugin(SystemAccessibilityPlugin.class);
         super.onCreate(savedInstanceState);
 
         Bridge bridge = getBridge();

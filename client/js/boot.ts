@@ -33,6 +33,7 @@ import {installForegroundHooks} from "./foreground";
 import {installViewportHooks} from "./helpers/viewport";
 import {installInputModality} from "./helpers/inputModality";
 import {hasVirtualKeyboard} from "./helpers/device";
+import {followSystemAccessibility} from "./helpers/systemAccessibility";
 import {onLaunch, openInstallGuideAtStart} from "./pwa";
 // Also registers the IRC layer's bus handlers (input, names, more, network:*).
 import {autoconnectSavedNetworks, clientForNetwork, createNetwork} from "./irc/manager";
@@ -49,6 +50,10 @@ declare global {
 const initialHref = document.location.href;
 
 export async function boot(): Promise<void> {
+	// Reduce Motion and Increase Contrast before anything renders: the
+	// stylesheet reads them as attributes on <html>.
+	followSystemAccessibility();
+
 	// Branding first: it decides the default theme and the document title,
 	// and the connect form reads its defaults from it.
 	const branding = await loadBranding();
