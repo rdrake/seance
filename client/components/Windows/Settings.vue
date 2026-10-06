@@ -52,7 +52,12 @@
 	align-items: center;
 	justify-content: center;
 	padding: 1.5rem;
-	overflow: hidden;
+	/* clip, not hidden: a hidden box still scrolls when something inside it
+	 * is scrolled into view — focus moving to a field as the keyboard opens,
+	 * VoiceOver or TalkBack stepping through, scrollIntoView — and the pane
+	 * slid up off a strip of empty backdrop it could not scroll back from.
+	 * Only .settings-modal-body scrolls. */
+	overflow: clip;
 }
 
 /* A fixed height, not content-driven: the footer holds still when tabs of
@@ -67,7 +72,7 @@
 	background: var(--window-bg-color);
 	border-radius: 8px;
 	box-shadow: 0 8px 40px rgb(0 0 0 / 45%);
-	overflow: hidden;
+	overflow: clip;
 	/* stylelint-disable-next-line property-no-unknown */
 	container-type: inline-size;
 	/* stylelint-disable-next-line property-no-unknown */
