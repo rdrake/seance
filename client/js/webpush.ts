@@ -20,6 +20,17 @@ import {
 	type PushKeys,
 } from "./helpers/pushStore";
 import {pushScopePath} from "./push/scope";
+import {
+	loadNativePush,
+	nativeClearNotifications,
+	nativePushAvailable,
+	nativePushPermission,
+	nativeSubscribe,
+	nativeSubscription,
+	nativeUnsubscribe,
+	onNativeEndpointChange,
+} from "./helpers/nativePush";
+import {isAndroidShell} from "./helpers/capacitor";
 import {ChanType} from "../../shared/types/chan";
 
 /**
@@ -161,9 +172,16 @@ function setState(state: string): void {
 	store.commit("pushNotificationState", state);
 }
 
-/** The browser half of Web Push: Push API + service worker + secure context. */
+/** The browser half of Web Push: Push API + service worker + secure context
+ * — or the Android shell's stand-in for them (helpers/nativePush.ts). */
 function browserSupported(): boolean {
+	return nativePushAvailable() || workerPush();
+}
+
+/** Push through the Push API and service workers, as in a browser. */
+function workerPush(): boolean {
 	return (
+		!nativePushAvailable() &&
 		typeof window !== "undefined" &&
 		"PushManager" in window &&
 		"serviceWorker" in navigator &&
@@ -185,10 +203,18 @@ function needsInstall(): boolean {
 }
 
 function permissionDenied(): boolean {
+	if (nativePushAvailable()) {
+		return nativePushPermission() === "denied";
+	}
+
 	return typeof Notification !== "undefined" && Notification.permission === "denied";
 }
 
 function permissionGranted(): boolean {
+	if (nativePushAvailable()) {
+		return nativePushPermission() === "granted";
+	}
+
 	return typeof Notification !== "undefined" && Notification.permission === "granted";
 }
 
@@ -286,7 +312,7 @@ async function pushRegistration(uuid: string): Promise<ServiceWorkerRegistration
  * its worker is not active.
  */
 async function pushWorkerFor(uuid: string): Promise<ServiceWorker | undefined> {
-	if (!subs[uuid] || !("serviceWorker" in navigator)) {
+	if (!subs[uuid] || !workerPush()) {
 		return undefined;
 	}
 
@@ -379,6 +405,11 @@ function materialOf(sub: PushSubscription): PushMaterial {
  * a VAPID rotation is dropped first. The caller unregisters its endpoint
  * from the server. */
 async function pushSubscription(uuid: string, vapid: string): Promise<PushMaterial> {
+	if (nativePushAvailable()) {
+		// Bound to the key like a browser's: FCM checks the VAPID signature.
+		return nativeSubscribe(uuid, saved.get(uuid)?.name ?? "", vapid);
+	}
+
 	const registration = await ensureRegistration(uuid);
 	const applicationServerKey = decodeApplicationServerKey(vapid);
 	const existing = await registration.pushManager.getSubscription();
@@ -401,7 +432,7 @@ async function pushSubscription(uuid: string, vapid: string): Promise<PushMateri
 /** The pre-per-network subscription lived on the root registration; once
  * its endpoints are queued for unregistering it has no use. */
 async function dropRootSubscription(): Promise<void> {
-	if (!browserSupported()) {
+	if (!workerPush()) {
 		return;
 	}
 
@@ -427,7 +458,11 @@ async function dropRootSubscription(): Promise<void> {
  * ({@link checkForNewWorker}): this is the one moment a deploy reaches the
  * push-only workers already installed on a device. */
 async function syncStoredWithBrowser(): Promise<void> {
-	if (!browserSupported()) {
+	if (nativePushAvailable()) {
+		return syncStoredWithShell();
+	}
+
+	if (!workerPush()) {
 		return;
 	}
 
@@ -471,6 +506,47 @@ async function syncStoredWithBrowser(): Promise<void> {
 	}
 }
 
+/** {@link syncStoredWithBrowser} for the Android shell: an entry follows the
+ * endpoint the distributor renewed — or a renewal that outlived its
+ * subscribe() call, under the key it was made for — and goes when the app no
+ * longer holds the network (data cleared, reinstalled, the distributor
+ * dropped it). The endpoint it replaces is queued for unregistering on its
+ * network, as subscribe() does with a replaced one: left registered, the
+ * server would keep pushing to it while it still works. */
+async function syncStoredWithShell(): Promise<void> {
+	let changed = false;
+	let replaced = false;
+
+	for (const uuid of Object.keys(subs)) {
+		const live = await nativeSubscription(uuid);
+		const entry = subs[uuid];
+
+		if (!live) {
+			delete subs[uuid];
+			changed = true;
+		} else if (live.endpoint !== entry.endpoint) {
+			legacy.push({vapid: entry.vapid, endpoint: entry.endpoint, network: uuid});
+			subs[uuid] = {
+				vapid: live.vapid ?? entry.vapid,
+				endpoint: live.endpoint,
+				keys: live.keys,
+			};
+			changed = true;
+			replaced = true;
+		}
+	}
+
+	if (changed) {
+		saveSubs();
+	}
+
+	if (replaced) {
+		saveLegacy();
+	}
+
+	refreshState();
+}
+
 /** {@link syncStoredWithBrowser}, started at boot once the stored entries
  * are loaded (below) — started any earlier it would sweep an empty map. */
 let synced: Promise<void> = Promise.resolve();
@@ -501,14 +577,17 @@ function autoRegister(uuid: string, vapid: string | undefined): void {
 	})();
 }
 
-/** Tell a connecting network to forget the endpoints of the old shared
- * subscription that were registered under its key. */
+/** Tell a connecting network to forget the endpoints queued for it: those
+ * of the old shared subscription registered under its key, and those the
+ * Android distributor replaced on it. */
 function unregisterLegacy(uuid: string, vapid: string | undefined): void {
 	if (vapid === undefined || legacy.length === 0) {
 		return;
 	}
 
-	const mine = legacy.filter((item) => item.vapid === vapid);
+	const isMine = (item: LegacyEntry) =>
+		item.network !== undefined ? item.network === uuid : item.vapid === vapid;
+	const mine = legacy.filter(isMine);
 
 	if (mine.length === 0) {
 		return;
@@ -518,16 +597,23 @@ function unregisterLegacy(uuid: string, vapid: string | undefined): void {
 		socket.emit("webpush:unregister", {network: uuid, endpoint: item.endpoint});
 	}
 
-	legacy = legacy.filter((item) => item.vapid !== vapid);
+	legacy = legacy.filter((item) => !isMine(item));
 	saveLegacy();
 }
 
 socket.on("webpush:available", ({network, vapid, sasl}) => {
 	servers.set(network, {vapid, sasl});
-	unregisterLegacy(network, vapid);
+
 	autoRegister(network, vapid);
 	refreshState();
-	maybePrompt(network);
+	// After the boot reconciliation: in the Android shell whether push is
+	// available at all is the shell's answer to a bridge call, which an
+	// autoconnect's registration can beat, and the reconciliation is what
+	// queues an endpoint the distributor replaced for unregistering.
+	void synced.then(() => {
+		unregisterLegacy(network, vapid);
+		maybePrompt(network);
+	});
 });
 
 /** Networks with a subscribe() run in flight (a burst of connects). */
@@ -700,7 +786,10 @@ async function subscribe(uuid: string): Promise<void> {
 	subscribing.add(uuid);
 
 	try {
-		const permission = await Notification.requestPermission();
+		// The shell asks for Android's permission inside its subscribe.
+		const permission = nativePushAvailable()
+			? "granted"
+			: await Notification.requestPermission();
 
 		if (permission !== "granted") {
 			setState("denied");
@@ -727,6 +816,13 @@ async function subscribe(uuid: string): Promise<void> {
 
 		const previous = subs[uuid]?.endpoint;
 		const material = await pushSubscription(uuid, vapid);
+
+		// Push switched off for this network while the subscription was being
+		// made (the shell can take its time): undo it rather than register it.
+		if (!pushOn(uuid)) {
+			await unsubscribe(uuid);
+			return;
+		}
 
 		subs[uuid] = {vapid, ...material};
 		saveSubs();
@@ -755,7 +851,7 @@ async function subscribe(uuid: string): Promise<void> {
 
 		refreshState();
 	} catch (error) {
-		setState("blocked");
+		setState(permissionDenied() ? "denied" : "blocked");
 		// eslint-disable-next-line no-console
 		console.warn("[webpush] subscription failed", error);
 	} finally {
@@ -809,11 +905,17 @@ async function writeStash(): Promise<void> {
  * and registration, tell the network, forget the entry. */
 async function unsubscribe(uuid: string): Promise<void> {
 	try {
-		const registration = browserSupported() ? await pushRegistration(uuid) : undefined;
+		const registration = workerPush() ? await pushRegistration(uuid) : undefined;
 		const live = registration ? await registration.pushManager.getSubscription() : null;
 
 		if (live) {
 			await live.unsubscribe();
+		}
+
+		// Whether a distributor is still there or not (Play services or ntfy
+		// removed since): the registration and the shell's record of it go.
+		if (isAndroidShell()) {
+			await nativeUnsubscribe(uuid);
 		}
 
 		const entry = subs[uuid];
@@ -939,14 +1041,31 @@ function networkPushInfo(uuid: string): {
 // do. Servers announce themselves (and re-register stored entries) via
 // `webpush:available` as they connect; they wait for the reconciliation.
 loadStored();
-synced = syncStoredWithBrowser();
+synced = loadNativePush()
+	.then(syncStoredWithBrowser)
+	.catch(() => undefined);
 refreshState();
+
+// The Android shell's distributor renewed or dropped an endpoint by itself:
+// follow it, and tell the network the new one if it is connected.
+onNativeEndpointChange((uuid) => {
+	synced = synced.then(syncStoredWithShell).then(() => {
+		const server = servers.get(uuid);
+		unregisterLegacy(uuid, server?.vapid);
+		autoRegister(uuid, server?.vapid);
+	});
+});
 
 // Opening the app means the user is catching up in-app: drop any push
 // notifications the workers are still showing (badge included). Each
 // network's worker keeps its own, so every registration is swept.
 socket.on("init", async () => {
-	if (!browserSupported()) {
+	if (isAndroidShell()) {
+		nativeClearNotifications();
+		return;
+	}
+
+	if (!workerPush()) {
 		return;
 	}
 
@@ -975,6 +1094,11 @@ socket.on("init", async () => {
 // page put on the worker while the account was attended has nobody else to
 // close it, and would otherwise come back counted in the next push.
 function readOnWorker(uuid: string, target: string): void {
+	if (isAndroidShell()) {
+		nativeClearNotifications(uuid, target);
+		return;
+	}
+
 	void pushWorkerFor(uuid).then((worker) => worker?.postMessage({type: "read", target}));
 }
 
