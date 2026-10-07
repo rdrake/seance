@@ -8,5 +8,6 @@
 *.jpg binary
 *.jpeg binary
 *.gif binary
+*.apk binary
 *.webp binary
 *.wav binary
