@@ -533,6 +533,9 @@ socket.on("webpush:available", ({network, vapid, sasl}) => {
 /** Networks with a subscribe() run in flight (a burst of connects). */
 const subscribing = new Set<string>();
 
+/** Networks that wanted the prompt while it was open for another one. */
+const heldBack = new Set<string>();
+
 /** Prompts answered "not now" in this page, by `declineKey`: a reconnect
  * (every registration announces `webpush:available`) must not ask again.
  * Page-lived on purpose — a reload asks once more, "never" is the lasting
@@ -567,7 +570,22 @@ function maybePrompt(uuid: string): void {
 		return;
 	}
 
-	if (pushPrompt.visible || !browserSupported() || needsInstall() || permissionDenied()) {
+	// A subscribe already running for it answers the question; asking again
+	// meanwhile would reopen a renew prompt for a key it is replacing.
+	if (subscribing.has(uuid)) {
+		return;
+	}
+
+	if (pushPrompt.visible) {
+		// One prompt at a time: this network's turn comes when it is answered.
+		if (pushPrompt.network !== uuid) {
+			heldBack.add(uuid);
+		}
+
+		return;
+	}
+
+	if (!browserSupported() || needsInstall() || permissionDenied()) {
 		return;
 	}
 
@@ -598,6 +616,11 @@ function maybePrompt(uuid: string): void {
 	// again. "default" (never asked) needs a user gesture, which the
 	// prompt's buttons provide; "never ask again" suppresses that prompt on
 	// this device.
+	// "Not now" lasts for the page, a permission granted since included.
+	if (declined.has(declineKey("subscribe", uuid, vapid))) {
+		return;
+	}
+
 	if (permissionGranted()) {
 		void subscribe(uuid);
 		return;
@@ -629,9 +652,33 @@ function openPrompt(kind: PromptKind, network: string, vapid: string): void {
  * asked (the click is the permission user gesture). */
 function acceptPrompt(): void {
 	pushPrompt.visible = false;
+	const network = pushPrompt.network;
 
-	if (pushPrompt.network !== undefined) {
-		void subscribe(pushPrompt.network);
+	if (network !== undefined) {
+		// Once it has settled: permission granted now, the others subscribe
+		// without asking.
+		void subscribe(network).then(() => promptOthers(network));
+	}
+}
+
+/**
+ * The prompt is one at a time ({@link maybePrompt} skips a network while it
+ * is open), so a second network connecting with the first — every
+ * autoconnect — was not asked, and nothing looked at it again until it
+ * reconnected. Once the open prompt is answered, the networks it held back
+ * while it was open get their turn — those only, and only while still
+ * connected: a network answered before (accepted, declined, failed) is
+ * never swept back in, so two failed accepts cannot hand the prompt back
+ * and forth.
+ */
+function promptOthers(answered: string | undefined): void {
+	const waiting = [...heldBack];
+	heldBack.clear();
+
+	for (const uuid of waiting) {
+		if (uuid !== answered && networkUp(uuid)) {
+			maybePrompt(uuid);
+		}
 	}
 }
 
@@ -643,6 +690,8 @@ function declinePrompt(): void {
 	if (pushPrompt.network !== undefined && pushPrompt.vapid !== undefined) {
 		declined.add(declineKey(pushPrompt.kind, pushPrompt.network, pushPrompt.vapid));
 	}
+
+	promptOthers(pushPrompt.network);
 }
 
 /** Prompt answer: never ask this question again on this device. For the
@@ -661,6 +710,7 @@ function neverPrompt(): void {
 	}
 
 	pushPrompt.visible = false;
+	promptOthers(pushPrompt.network);
 }
 
 socket.on("webpush:state", ({network, action, endpoint, ok, code, reason}) => {
