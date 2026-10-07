@@ -205,8 +205,9 @@ import {MessageType} from "../../shared/types/msg";
 
 import type {ClientChan, ClientMessage, ClientNetwork} from "../js/types";
 import {useStore} from "../js/store";
-import {hasVirtualKeyboard} from "../js/helpers/device";
+import {isTouchInput} from "../js/helpers/inputModality";
 import {selectionActive} from "../js/helpers/touchSelection";
+import {nudge} from "../js/helpers/haptics";
 
 MessageTypes.ParsedMessage = ParsedMessage;
 MessageTypes.LinkPreview = LinkPreview;
@@ -309,7 +310,9 @@ export default defineComponent({
 		};
 
 		const onTouchStart = (e: TouchEvent) => {
-			if (!hasVirtualKeyboard() || e.touches.length !== 1 || !canAct.value) {
+			// A finger, on any device: a touchscreen laptop's trackpad has
+			// the hover toolbar (helpers/inputModality.ts), its screen this.
+			if (e.touches.length !== 1 || !canAct.value) {
 				return;
 			}
 
@@ -341,10 +344,8 @@ export default defineComponent({
 				swallowClick = true;
 				openActions.value = props.message.id;
 
-				// A nudge says the press was taken; nothing where the API is missing (iOS).
-				if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-					navigator.vibrate(15);
-				}
+				// A nudge says the press was taken (helpers/haptics.ts).
+				nudge();
 			}, LONG_PRESS_MS);
 		};
 
@@ -379,7 +380,7 @@ export default defineComponent({
 		// open. `swallowClick` still set means this very press is the one
 		// that opened the toolbar, and that race stays prevented.
 		const onContextMenu = (e: MouseEvent) => {
-			if (!hasVirtualKeyboard() || !canAct.value) {
+			if (!isTouchInput() || !canAct.value) {
 				return;
 			}
 
@@ -393,7 +394,7 @@ export default defineComponent({
 		// A tap on the row while a toolbar is open (this row's or another's)
 		// closes it; the tap that ends the long press itself is not that tap.
 		const onClick = (e: MouseEvent) => {
-			if (!hasVirtualKeyboard()) {
+			if (!isTouchInput()) {
 				return;
 			}
 

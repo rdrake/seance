@@ -46,6 +46,9 @@
 //   --width=<px>      viewport width (default 1280); --height=<px> (default 900)
 //   --mobile          emulate a touch device (mobile viewport, no hover); without it
 //                     the run answers (hover: hover) and (pointer: fine) like a desktop
+//   --touch-laptop    a desktop whose browser calls its touchscreen the primary input:
+//                     (hover: none) and (pointer: coarse), with a mouse there too
+//                     (any-hover: hover, any-pointer: fine)
 //
 // A throwaway profile is the default on purpose: localStorage (saved
 // networks, settings, `thelounge.media.trusted`) survives inside one profile,
@@ -102,8 +105,14 @@ const chrome = spawn(
 		// mode, say) would apply to a run that hovers with a mouse. Without
 		// --mobile, say what a desktop says: hover type 2 = hover, pointer
 		// type 4 = fine (the touch emulation of --mobile overrides these).
+		// --touch-laptop: hover types none (1) and hover (2), pointer types
+		// coarse (2) and fine (4), the primary being the touchscreen's.
 		...(flags.has("--mobile")
 			? []
+			: flags.has("--touch-laptop")
+			? [
+					"--blink-settings=primaryHoverType=1,availableHoverTypes=3,primaryPointerType=2,availablePointerTypes=6",
+			  ]
 			: [
 					"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
 			  ]),
