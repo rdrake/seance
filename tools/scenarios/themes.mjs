@@ -33,6 +33,7 @@ const THEMES = [
 	"princess",
 	"princess_",
 	"keeki",
+	"keekiblush",
 	"day",
 	"morning",
 	"coffee",
@@ -46,6 +47,7 @@ const OWN_COLOR = {
 	princess: "#f2f7fc",
 	princess_: "#000000",
 	keeki: "#22143a",
+	keekiblush: "#f8ecf2",
 };
 
 export const url =
