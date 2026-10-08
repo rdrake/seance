@@ -1,4 +1,4 @@
-| `keekiblush` | "Keeki", light: the same glittering, flowered purple rail, the chat surface on blush paper in plum ink, Keeki's pastels darkened into deep rose, violet and dark gold. | `@import "keeki.css"`, then the light token values, a 32-slot oklch nick palette on the same warm-weighted sweep, and the three mIRC colours coffee brightens. |
+| `keekiblush` | "Keeki", light: the chat on pink paper in plum ink and the glittering, flowered rail lifted to orchid, so the two meet halfway; Keeki's pastels darkened into deep rose, violet and dark gold. | `@import "keeki.css"`, then the light chat and orchid rail token values, a 32-slot oklch nick palette on the same warm-weighted sweep, and the three mIRC colours coffee brightens. |
 
 # Themes
 
