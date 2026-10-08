@@ -89,7 +89,14 @@ export default defineComponent({
 		const debouncedResize = ref<DebouncedFunc<() => void>>();
 		const dayChangeTimeout = ref<any>();
 
-		const escapeKey = () => {
+		const escapeKey = (e: ExtendedKeyboardEvent) => {
+			// One press closes one thing. A held key repeats, and each repeat
+			// would close the overlay that came up under the last one — a
+			// question (the push prompt's next network) the user never saw.
+			if (e.repeat) {
+				return;
+			}
+
 			emitEscape();
 		};
 

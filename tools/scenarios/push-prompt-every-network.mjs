@@ -1,5 +1,5 @@
 // Two push networks connecting together each get their turn at the push
-// prompt (webpush.ts `heldBack` / `promptOthers`): the prompt is one at a
+// prompt (webpush.ts `waiting` / `scheduleHandoff`): the prompt is one at a
 // time, and the second network used to be skipped until it reconnected.
 //
 //   npx webpack && python3 -m http.server -d public 8001 &
@@ -14,8 +14,9 @@
 //   SEANCE_PUSH_ACCOUNT=… SEANCE_PUSH_PASSWORD=… node tools/browser-drive.mjs …
 //
 // The Push API is faked (lib/fake-push.mjs); SASL and WEBPUSH on the wire are
-// real, and the run unsubscribes both networks at the end, so the account is
-// left with nothing registered.
+// real, and the run unsubscribes both networks at the end of each part, so
+// the account is left with nothing registered. Notification permission is
+// reset to "default" (Browser.resetPermissions) before each part.
 //
 // Claims under test:
 //   1. with notification permission not yet asked, two networks connecting
@@ -23,9 +24,17 @@
 //   2. accepting it subscribes that network, then the other one silently
 //      under the permission just granted — a REGISTER on each socket, two
 //      entries — with no second prompt;
-//   3. both unsubscribe again (cleanup).
+//   3. both unsubscribe again (cleanup);
+//   4. permission granted only AFTER the Yes: while the browser's permission
+//      request is pending (held open by a stand-in requestPermission), a
+//      second network connecting and announcing push opens no prompt of its
+//      own; once permission is granted, both subscribe, still no prompt;
+//   5. one network's prompt answered with a double-click on No declines that
+//      network only: the second click, landing once the next network's
+//      prompt is up, answers nothing; a held Escape (auto-repeat keydowns)
+//      does not answer it either; a plain Escape does.
 
-import {FAKE_PUSH_API, storedSubs} from "./lib/fake-push.mjs";
+import {FAKE_PUSH_API, storedSubs, webpushOut} from "./lib/fake-push.mjs";
 
 const ORIGIN = "http://127.0.0.1:8001";
 const env = process.env;
@@ -228,5 +237,215 @@ export default async function run(page) {
 	await pushOff(page, NET2, ep2, sock2);
 	page.check("3. cleanup: nothing stored", Object.keys(await storedSubs(page)).length === 0);
 
+	await permissionLate(page);
+	await doubleClickAndHeldEscape(page);
+
 	page.check("no console errors", page.consoleErrors.length === 0);
+}
+
+/** Saved networks as given, push storage empty, permission back to "default". */
+async function freshStart(page, networks) {
+	await page.send("Browser.resetPermissions", {});
+	await page.evaluate(`(() => {
+		localStorage.setItem("thelounge.networks", ${JSON.stringify(JSON.stringify(networks))});
+		localStorage.removeItem("thelounge.push");
+		localStorage.removeItem("thelounge.push.neverAsk");
+	})()`);
+	const since = page.wsFrames.length;
+	await page.evaluate(`location.reload()`);
+	await page.waitFor(`document.readyState === "complete"`, {label: "the reloaded page"});
+	return since;
+}
+
+/** Count every time the prompt overlay opens from here on. */
+const COUNT_OPENS = `(() => {
+	const overlay = document.querySelector("#push-prompt-overlay");
+	window.__promptOpens = 0;
+	let open = overlay.classList.contains("opened");
+	new MutationObserver(() => {
+		const now = overlay.classList.contains("opened");
+		if (now && !open) window.__promptOpens++;
+		open = now;
+	}).observe(overlay, {attributes: true, attributeFilter: ["class"]});
+})()`;
+
+/** Notification.requestPermission held open until the scenario lets go,
+ * then answering with the real permission (set meanwhile by
+ * grantPermissions): the window in which the browser's own dialog is up. */
+const HOLD_PERMISSION = `(() => {
+	window.__permissionAsk = {asked: false, release: null};
+	Notification.requestPermission = () => new Promise((resolve) => {
+		window.__permissionAsk.asked = true;
+		window.__permissionAsk.release = () => resolve(Notification.permission);
+	});
+})()`;
+
+const promptNames = (page) =>
+	page
+		.evaluate(`document.querySelector("#push-prompt .push-prompt-target")?.textContent || ""`)
+		.then(String);
+
+// --- 4. permission granted after the Yes, a network announcing meanwhile ----
+async function permissionLate(page) {
+	const since = await freshStart(page, [saved(NET1), {...saved(NET2), autoconnect: false}]);
+	page.check(
+		"4. setup: notification permission not yet asked",
+		(await page.evaluate(`Notification.permission`)) === "default"
+	);
+
+	await page.waitFor(promptOpened, {label: "the first network's prompt", timeout: 60000});
+	const sock1 = socketOfNick(page, since, NET1.nick);
+	page.check(
+		"4. the prompt names the first network",
+		(await promptNames(page)).includes(NET1.name)
+	);
+	await page.evaluate(HOLD_PERMISSION);
+	await page.evaluate(COUNT_OPENS);
+
+	const mark = page.wsFrames.length;
+	await page.click("#pushPromptYes");
+	await page.waitFor(`window.__permissionAsk.asked`, {label: "the permission request"});
+	page.check("4. Yes closed the prompt", (await page.evaluate(promptGone)) === true);
+
+	// The second network connects and announces push while permission is
+	// still being asked.
+	await page.evaluate(`location.hash = "#/settings/networks"`);
+	await page.waitFor(`document.querySelectorAll(".network-settings-item").length === 2`, {
+		label: "the saved networks",
+	});
+	await page.evaluate(`[...document.querySelectorAll(".network-settings-item")]
+		.find((li) => li.textContent.includes(${JSON.stringify(NET2.name)}))
+		.querySelector(".network-settings-actions button").click()`);
+	const deadline = Date.now() + 30000;
+	let sock2;
+
+	while (!(sock2 = socketOfNick(page, mark, NET2.nick)) && Date.now() < deadline) {
+		await page.sleep(100);
+	}
+
+	page.check(
+		"4. the second network dialled on its own socket",
+		Boolean(sock2 && sock2 !== sock1)
+	);
+	await waitOn(page, mark, sock2, "in", / (376|422) /, `${NET2.name}'s registration`);
+	await page.sleep(1500); // well past the 300 ms hand-off
+	page.check(
+		"4. no prompt for the second network while permission is pending",
+		(await page.evaluate(`window.__promptOpens`)) === 0 &&
+			(await page.evaluate(promptGone)) === true
+	);
+	page.check(
+		"4. nothing registered before permission is answered",
+		webpushOut(page, mark).length === 0
+	);
+	await page.screenshot("4-permission-pending");
+
+	await page.grantPermissions(["notifications"], ORIGIN);
+	await page.evaluate(`window.__permissionAsk.release()`);
+	const ep1 = await waitRegisterOn(page, mark, sock1, "network 1's REGISTER");
+	const ep2 = await waitRegisterOn(page, mark, sock2, "network 2's REGISTER");
+	page.check("4. each network registered its own endpoint", Boolean(ep1 && ep2) && ep1 !== ep2);
+	await page.sleep(1500);
+	page.check(
+		"4. no prompt at any point after the Yes",
+		(await page.evaluate(`window.__promptOpens`)) === 0
+	);
+	const subs = await storedSubs(page);
+	page.check(
+		"4. two entries, one per network",
+		Object.keys(subs).sort().join() === [NET1.uuid, NET2.uuid].sort().join()
+	);
+
+	await pushOff(page, NET1, ep1, sock1);
+	await pushOff(page, NET2, ep2, sock2);
+	page.check("4. cleanup: nothing stored", Object.keys(await storedSubs(page)).length === 0);
+}
+
+/** A real double-click: the first press-release, then — once `between`
+ * holds — the second with clickCount 2, as the OS reports it. */
+async function doubleClick(page, selector, between) {
+	const r = await page.rect(selector);
+	const x = r.x + r.width / 2;
+	const y = r.y + r.height / 2;
+	const press = async (clickCount) => {
+		for (const type of ["mousePressed", "mouseReleased"]) {
+			await page.send("Input.dispatchMouseEvent", {
+				type,
+				x,
+				y,
+				button: "left",
+				buttons: type === "mousePressed" ? 1 : 0,
+				clickCount,
+			});
+		}
+	};
+
+	await page.send("Input.dispatchMouseEvent", {type: "mouseMoved", x, y});
+	await press(1);
+	await between();
+	await press(2);
+}
+
+const escapeKey = (page, autoRepeat) =>
+	page.send("Input.dispatchKeyEvent", {
+		type: "keyDown",
+		key: "Escape",
+		code: "Escape",
+		windowsVirtualKeyCode: 27,
+		nativeVirtualKeyCode: 27,
+		autoRepeat,
+	});
+
+// --- 5. a double-click and a held Escape answer only what was on screen -----
+async function doubleClickAndHeldEscape(page) {
+	const since = await freshStart(page, [saved(NET1), saved(NET2)]);
+	await page.waitFor(promptOpened, {label: "the first prompt", timeout: 60000});
+
+	for (const net of [NET1, NET2]) {
+		const sock = socketOfNick(page, since, net.nick);
+		await waitOn(page, since, sock, "in", / (376|422) /, `${net.name}'s registration`);
+	}
+
+	await page.sleep(1500);
+	const firstLabel = await promptNames(page);
+	const first = firstLabel.includes(NET1.name) ? NET1 : NET2;
+	const second = first === NET1 ? NET2 : NET1;
+	page.check(`5. one prompt, for ${first.name}`, firstLabel.includes(first.name));
+
+	const mark = page.wsFrames.length;
+	await doubleClick(page, "#pushPromptNo", () =>
+		page.waitFor(
+			`${promptOpened} && (document.querySelector("#push-prompt .push-prompt-target")?.textContent || "").includes(${JSON.stringify(
+				second.name
+			)})`,
+			{label: `${second.name}'s prompt after the first click`}
+		)
+	);
+	await page.sleep(500);
+	page.check(
+		`5. the double-click's second click left ${second.name}'s prompt open`,
+		(await page.evaluate(promptOpened)) === true &&
+			(await promptNames(page)).includes(second.name)
+	);
+	await page.screenshot("5-after-double-click");
+
+	for (let i = 0; i < 5; i++) {
+		await escapeKey(page, true);
+		await page.sleep(40);
+	}
+
+	await page.sleep(300);
+	page.check(
+		"5. auto-repeated Escape keydowns did not answer it",
+		(await page.evaluate(promptOpened)) === true
+	);
+
+	await escapeKey(page, false);
+	await page.waitFor(promptGone, {label: "the prompt to close on a plain Escape"});
+	await page.sleep(1000);
+	page.check(
+		"5. a plain Escape declined it, nothing follows",
+		(await page.evaluate(promptGone)) === true
+	);
+	page.check("5. nothing was subscribed", webpushOut(page, mark).length === 0);
 }
