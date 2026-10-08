@@ -604,6 +604,12 @@ function unregisterLegacy(uuid: string, vapid: string | undefined): void {
 socket.on("webpush:available", ({network, vapid, sasl}) => {
 	servers.set(network, {vapid, sasl});
 
+	// The Android shell's stand-in for the `init` sweep below: this network
+	// registered in front of the user, who catches up on it in-app.
+	if (isAndroidShell() && document.visibilityState === "visible" && document.hasFocus()) {
+		nativeClearNotifications(network);
+	}
+
 	autoRegister(network, vapid);
 	refreshState();
 	// After the boot reconciliation: in the Android shell whether push is
@@ -1058,13 +1064,12 @@ onNativeEndpointChange((uuid) => {
 
 // Opening the app means the user is catching up in-app: drop any push
 // notifications the workers are still showing (badge included). Each
-// network's worker keeps its own, so every registration is swept.
+// network's worker keeps its own, so every registration is swept. The
+// Android shell sees no `init` when it is opened (the "stay connected"
+// service keeps its networks registered); there a network registering in
+// front of the user is the catching up, and only that network's go — a
+// reconnect behind the user's back closes nothing (`webpush:available`).
 socket.on("init", async () => {
-	if (isAndroidShell()) {
-		nativeClearNotifications();
-		return;
-	}
-
 	if (!workerPush()) {
 		return;
 	}
