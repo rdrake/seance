@@ -70,21 +70,6 @@ final class PushSubscriptions {
         return prefs(context).contains(VAPID_PREFIX + network);
     }
 
-    /**
-     * A notification tap's PendingIntent request code for a conversation,
-     * allocated once and kept, so two conversations never share one (their
-     * intents differ only in extras, which PendingIntent identity ignores).
-     */
-    static synchronized int requestCode(Context context, String conversation) {
-        SharedPreferences codes = context.getSharedPreferences(PREFS + ".codes", Context.MODE_PRIVATE);
-        int code = codes.getInt(conversation, -1);
-        if (code == -1) {
-            code = codes.getInt("\nnext", 1);
-            codes.edit().putInt(conversation, code).putInt("\nnext", code + 1).apply();
-        }
-        return code;
-    }
-
     /** The VAPID key the network's (re)registration is being made with. */
     static void setVapid(Context context, String network, String vapid) {
         prefs(context).edit().putString(VAPID_PREFIX + network, vapid).apply();

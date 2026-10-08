@@ -53,6 +53,7 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
 
     private static final String TAG = "SeancePush";
     static final String CHANNEL_ID = "messages";
+    /** A tap's action starts with this; the rest is its conversation key (see {@link #base}). */
     static final String ACTION_TAP = "chat.seance.app.PUSH_TAP";
     /** Every push notification's tag starts with this; the rest is its conversation key. */
     static final String TAG_PREFIX = "push\n";
@@ -266,17 +267,18 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
     private static NotificationCompat.Builder base(Context context, String network, String target) {
         ensureChannel(context);
 
+        // One PendingIntent per conversation. Extras do not count in a
+        // PendingIntent's identity, so the conversation rides in the action,
+        // which does (no data URI: Capacitor reads any intent's data as a
+        // launch link).
         Intent tap = new Intent(context, MainActivity.class)
-            .setAction(ACTION_TAP)
+            .setAction(ACTION_TAP + "\n" + key(network, target))
             .putExtra("network", network)
             .putExtra("target", target)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        // One PendingIntent per conversation: they differ only in extras, so
-        // the request code is what keeps them apart (no data URI: Capacitor
-        // reads any intent's data as a launch link).
         PendingIntent content = PendingIntent.getActivity(
             context,
-            PushSubscriptions.requestCode(context, key(network, target)),
+            0,
             tap,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );

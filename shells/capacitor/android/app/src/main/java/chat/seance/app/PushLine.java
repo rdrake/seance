@@ -215,6 +215,8 @@ final class PushLine {
         return parseTime(tags.get("time"));
     }
 
+    private static final Pattern LINE_INDEX = Pattern.compile("^(\\d{1,6})/(\\d{1,6})/(\\d{1,6})$");
+
     /**
      * The `evilnet.github.io/line=<i>/<sent>/<total>` ordering tag as
      * {index, sent, total}, or null when absent or inconsistent (line.ts
@@ -225,7 +227,7 @@ final class PushLine {
         if (value == null) {
             return null;
         }
-        Matcher m = Pattern.compile("^(\\d{1,6})/(\\d{1,6})/(\\d{1,6})$").matcher(value);
+        Matcher m = LINE_INDEX.matcher(value);
         if (!m.matches()) {
             return null;
         }

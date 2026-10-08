@@ -107,7 +107,7 @@ public class NativePushPlugin extends Plugin {
 
     /** From MainActivity: an intent that may be a notification tap. */
     static void onIntent(Intent intent) {
-        if (intent == null || !PushService.ACTION_TAP.equals(intent.getAction())) {
+        if (intent == null || intent.getAction() == null || !intent.getAction().startsWith(PushService.ACTION_TAP + "\n")) {
             return;
         }
 
