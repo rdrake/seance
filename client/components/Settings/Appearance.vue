@@ -401,7 +401,7 @@ textarea#user-specified-css-input {
 <script lang="ts">
 import {computed, defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
-import {themePartner} from "../../js/helpers/themeAppearance";
+import {describeThemePairs, themePartner} from "../../js/helpers/themeAppearance";
 import {isIOSShell} from "../../js/helpers/capacitor";
 import {systemTextSizeAvailable} from "../../js/helpers/systemTextSize";
 import {
@@ -538,7 +538,7 @@ export default defineComponent({
 
 			return partner
 				? `${label(chosen)} and ${label(partner)} swap with the system's mode.`
-				: `${label(chosen)} has no light/dark pair; Coffee, Cobalt, Princess and Day do.`;
+				: `${label(chosen)} has no light/dark pair; ${describeThemePairs(label)} do.`;
 		});
 
 		// In the native shells the system's text size can stand in for the

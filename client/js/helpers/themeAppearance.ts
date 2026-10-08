@@ -43,3 +43,12 @@ export function effectiveTheme(chosen: string, matchSystem: boolean, systemDark:
 	const wanted: Appearance = systemDark ? "dark" : "light";
 	return pair.appearance === wanted ? chosen : pair.partner;
 }
+
+/** The pairs as a sentence's list, "Coffee/Creama, …and Morning/Day", each
+ * dark first and named by `label` (Settings → Appearance's hint). */
+export function describeThemePairs(label: (theme: string) => string): string {
+	const names = THEME_PAIRS.map(([dark, light]) => `${label(dark)}/${label(light)}`);
+	return names.length > 1
+		? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`
+		: names.join("");
+}

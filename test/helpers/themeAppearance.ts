@@ -1,5 +1,10 @@
 import {expect} from "chai";
-import {effectiveTheme, themePartner} from "../../client/js/helpers/themeAppearance";
+import {
+	describeThemePairs,
+	effectiveTheme,
+	themePartner,
+	THEME_PAIRS,
+} from "../../client/js/helpers/themeAppearance";
 
 describe("themeAppearance", function () {
 	it("pairs each light theme with its dark one, both ways", function () {
@@ -28,6 +33,14 @@ describe("themeAppearance", function () {
 		expect(effectiveTheme("frost", true, true)).to.equal("cobalt");
 		expect(effectiveTheme("princess_", true, false)).to.equal("princess");
 		expect(effectiveTheme("day", true, true)).to.equal("morning");
+	});
+
+	it("names every pair in the settings hint, dark first", function () {
+		const label = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+		expect(describeThemePairs(label)).to.equal(
+			"Coffee/Creama, Cobalt/Frost, Princess_/Princess and Morning/Day"
+		);
+		expect(THEME_PAIRS).to.have.length(4);
 	});
 
 	it("leaves a theme without a partner alone", function () {
