@@ -72,6 +72,26 @@
 		document.getElementById("loading")?.remove();
 	};
 
+	// The light/dark theme pairs, `[dark, light]` each: webpack.config.ts
+	// writes client/js/helpers/themePairs.json over the marker (this file is
+	// copied, not bundled, so it cannot import themeAppearance.ts).
+	/** @type {unknown} */
+	const themePairs = "__THEME_PAIRS__";
+
+	/** The half of `theme`'s pair that matches the system's mode, or `theme`
+	 * itself when it has no partner (effectiveTheme in themeAppearance.ts). */
+	const pairedTheme = (/** @type {string | undefined} */ theme) => {
+		const pair = Array.isArray(themePairs)
+			? themePairs.find((p) => Array.isArray(p) && p.includes(theme))
+			: undefined;
+
+		if (!pair) {
+			return theme;
+		}
+
+		return window.matchMedia("(prefers-color-scheme: dark)").matches ? pair[0] : pair[1];
+	};
+
 	// Apply user theme as soon as possible, before any other code loads
 	// This prevents flash of white while other code loads and socket connects
 	try {
@@ -82,11 +102,24 @@
 			return;
 		}
 
-		if (
-			typeof userSettings.theme === "string" &&
-			themeEl?.dataset.serverTheme !== userSettings.theme
-		) {
-			themeEl.setAttribute("href", `themes/${userSettings.theme}.css`);
+		// The theme loadTheme (settings.ts) will load, so the page does not
+		// open on the chosen theme and swap to its partner a moment later:
+		// with matchSystemAppearance on, a paired theme is shown as whichever
+		// half matches the system's light or dark mode. The setting defaults
+		// to on in the native shell (Capacitor's bridge is injected before any
+		// script runs) and off on the web, as in settings.ts.
+		const chosen =
+			typeof userSettings.theme === "string"
+				? userSettings.theme
+				: themeEl.dataset.serverTheme;
+		const matchSystem =
+			typeof userSettings.matchSystemAppearance === "boolean"
+				? userSettings.matchSystemAppearance
+				: window.Capacitor?.isNativePlatform?.() === true;
+		const theme = matchSystem ? pairedTheme(chosen) : chosen;
+
+		if (theme && themeEl.getAttribute("href") !== `themes/${theme}.css`) {
+			themeEl.setAttribute("href", `themes/${theme}.css`);
 		}
 
 		if (
