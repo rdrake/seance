@@ -24,11 +24,13 @@ import {
 	loadNativePush,
 	nativeClearNotifications,
 	nativePushAvailable,
+	nativePushCancelled,
 	nativePushPermission,
 	nativeSubscribe,
 	nativeSubscription,
 	nativeUnsubscribe,
 	onNativeEndpointChange,
+	refreshNativePush,
 } from "./helpers/nativePush";
 import {isAndroidShell} from "./helpers/capacitor";
 import {ChanType} from "../../shared/types/chan";
@@ -857,11 +859,29 @@ async function subscribe(uuid: string): Promise<void> {
 
 		refreshState();
 	} catch (error) {
+		// Push switched off for this network while the shell was subscribing:
+		// it withdrew the registration, and that is all that happened.
+		if (!pushOn(uuid) || nativePushCancelled(error)) {
+			refreshState();
+			return;
+		}
+
 		setState(permissionDenied() ? "denied" : "blocked");
 		// eslint-disable-next-line no-console
 		console.warn("[webpush] subscription failed", error);
 	} finally {
 		subscribing.delete(uuid);
+	}
+}
+
+/** Settings opened: say where push stands now. In the Android shell the
+ * permission is read again first — it may have been granted in Android's
+ * settings since the page last asked, and nothing else re-reads it. */
+function refresh(): void {
+	refreshState();
+
+	if (nativePushAvailable()) {
+		void refreshNativePush().then(refreshState);
 	}
 }
 
@@ -1294,7 +1314,7 @@ export default {
 	renew,
 	unsubscribe,
 	setSnooze,
-	refresh: refreshState,
+	refresh,
 	onNetworkSaved,
 	networkPushInfo,
 	notifyOn,

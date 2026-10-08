@@ -30,10 +30,15 @@ import org.unifiedpush.android.connector.UnifiedPush;
  *
  * - `status()`: `{available, permission}` — available = a distributor is
  *   there (the embedded FCM one needs Google Play services); permission =
- *   "granted" | "denied" | "prompt".
+ *   "granted" | "denied" | "prompt". Refused once is "denied": the page
+ *   stops asking on connect as it does after a browser's denial, although
+ *   Android would show its dialog once more (Settings can still grant it).
  * - `subscribe({network, name, vapid})`: asks for POST_NOTIFICATIONS on 13+,
  *   picks the distributor (Android may ask which, when the phone has more
  *   than one), registers, and resolves `{endpoint, keys: {p256dh, auth}}`.
+ *   A rejection's code says why: `denied` (the permission was refused),
+ *   `cancelled` (unsubscribed, or a later subscribe took over, meanwhile),
+ *   `unavailable` (no distributor), `failed` (anything else).
  * - `subscription({network})`: the stored one (with the `vapid` it was made
  *   for), or `{endpoint: null}`.
  * - `unsubscribe({network})`, `clear({network?, target?})`.
@@ -82,8 +87,9 @@ public class NativePushPlugin extends Plugin {
             call.release(bridge);
         }
 
-        void reject(String message) {
-            call.reject(message);
+        /** `code` is what the page tells apart (nativePush.ts): see the class comment. */
+        void reject(String message, String code) {
+            call.reject(message, code);
             call.release(bridge);
         }
 
@@ -143,7 +149,7 @@ public class NativePushPlugin extends Plugin {
                 return;
             }
             if (subscription == null) {
-                call.reject(failure != null ? failure : "registration failed");
+                call.reject(failure != null ? failure : "registration failed", "failed");
                 return;
             }
             try {
@@ -188,7 +194,7 @@ public class NativePushPlugin extends Plugin {
     @PluginMethod
     public void subscribe(PluginCall call) {
         if (!available()) {
-            call.reject("no UnifiedPush distributor on this device");
+            call.reject("no UnifiedPush distributor on this device", "unavailable");
             return;
         }
         if (!"granted".equals(permission())) {
@@ -201,7 +207,7 @@ public class NativePushPlugin extends Plugin {
     @PermissionCallback
     private void permissionAnswered(PluginCall call) {
         if (!"granted".equals(permission())) {
-            new Waiting(call, getBridge()).reject("denied");
+            new Waiting(call, getBridge()).reject("notification permission refused", "denied");
             return;
         }
         register(call);
@@ -213,7 +219,7 @@ public class NativePushPlugin extends Plugin {
         String vapid = call.getString("vapid");
 
         if (network == null || vapid == null) {
-            answer.reject("network and vapid are required");
+            answer.reject("network and vapid are required", "failed");
             return;
         }
 
@@ -225,7 +231,7 @@ public class NativePushPlugin extends Plugin {
     private void start(String network, String vapid, Waiting answer) {
         Waiting previous = waiting.put(network, answer);
         if (previous != null) {
-            previous.reject("superseded");
+            previous.reject("superseded", "cancelled");
         }
 
         boolean renewing = PushSubscriptions.has(getContext(), network);
@@ -239,7 +245,7 @@ public class NativePushPlugin extends Plugin {
                 return; // answered, superseded or withdrawn
             }
             waiting.remove(network);
-            answer.reject("timed out waiting for the push endpoint");
+            answer.reject("timed out waiting for the push endpoint", "failed");
             // A first registration the page has given up on would be owned
             // by nothing if it completed later: drop it. A renewal is left
             // to finish; its endpoint reaches the page as a renewal
@@ -263,7 +269,7 @@ public class NativePushPlugin extends Plugin {
         }
         if (!ok) {
             waiting.remove(network);
-            answer.reject("no UnifiedPush distributor chosen");
+            answer.reject("no UnifiedPush distributor chosen", "unavailable");
             return;
         }
 
@@ -304,7 +310,7 @@ public class NativePushPlugin extends Plugin {
             main.post(() -> {
                 Waiting pending = waiting.remove(network);
                 if (pending != null) {
-                    pending.reject("unsubscribed");
+                    pending.reject("unsubscribed", "cancelled");
                 }
             });
         }
@@ -341,6 +347,11 @@ public class NativePushPlugin extends Plugin {
             return androidx.core.app.NotificationManagerCompat.from(getContext()).areNotificationsEnabled() ? "granted" : "denied";
         }
         PermissionState state = getPermissionState("notifications");
-        return state == PermissionState.GRANTED ? "granted" : state == PermissionState.DENIED ? "denied" : "prompt";
+        if (state == PermissionState.GRANTED) {
+            return "granted";
+        }
+        // PROMPT_WITH_RATIONALE is a refusal Android would still ask about
+        // once more; to the page a refusal is a refusal (see the class comment).
+        return state == PermissionState.DENIED || state == PermissionState.PROMPT_WITH_RATIONALE ? "denied" : "prompt";
     }
 }

@@ -8,7 +8,7 @@
 // (helpers/capacitor.ts imports nothing); everywhere else every call is a
 // no-op.
 
-import {isAndroidShell, nativeCall, nativeListen} from "./capacitor";
+import {NativeCallError, isAndroidShell, nativeCall, nativeInvoke, nativeListen} from "./capacitor";
 
 export interface NativePushMaterial {
 	endpoint: string;
@@ -52,27 +52,41 @@ export function nativePushPermission(): NativePushPermission {
 }
 
 /** Subscribe this device on a network: asks for the notification permission
- * first where Android needs one. Throws when there is no subscription — a
- * refused permission included, which {@link nativePushPermission} then says. */
+ * first where Android needs one. Throws when there is no subscription, with
+ * the shell's reason as the {@link NativeCallError} code — `denied` (which
+ * {@link nativePushPermission} then says too), `cancelled` (see
+ * {@link nativePushCancelled}), `unavailable` or `failed`. */
 export async function nativeSubscribe(
 	network: string,
 	name: string,
 	vapid: string
 ): Promise<NativePushMaterial> {
-	const material = await nativeCall<NativePushMaterial>("NativePush", "subscribe", {
-		network,
-		name,
-		vapid,
-	});
+	try {
+		const material = await nativeInvoke<NativePushMaterial>("NativePush", "subscribe", {
+			network,
+			name,
+			vapid,
+		});
 
-	// The answer to the permission ask, whichever it was.
-	status = (await nativeCall<NativePushStatus>("NativePush", "status")) ?? status;
-
-	if (!material) {
-		throw new Error(`no push subscription (permission ${nativePushPermission()})`);
+		return {endpoint: material.endpoint, keys: material.keys};
+	} finally {
+		// The answer to the permission ask, whichever it was.
+		status = (await nativeCall<NativePushStatus>("NativePush", "status")) ?? status;
 	}
+}
 
-	return {endpoint: material.endpoint, keys: material.keys};
+/** The subscribe was withdrawn while it ran (unsubscribed, or a later one
+ * took over): nothing failed. */
+export function nativePushCancelled(error: unknown): boolean {
+	return error instanceof NativeCallError && error.code === "cancelled";
+}
+
+/** Read again what the shell can do: the user may have granted or revoked
+ * the permission in Android's settings since. */
+export async function refreshNativePush(): Promise<void> {
+	if (isAndroidShell()) {
+		status = (await nativeCall<NativePushStatus>("NativePush", "status")) ?? status;
+	}
 }
 
 /** The network's current subscription — the distributor may renew its
