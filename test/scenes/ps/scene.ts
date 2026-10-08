@@ -411,9 +411,10 @@ describe("ps scene: the layers it builds (sceneMarkup)", function () {
 		}
 
 		expect(svgDepth).to.equal(0);
-		// The sun's fire (1), the skeins' 38 birds (3 each), the buzzard (2) and three larks (2 each).
-		expect(smil).to.equal(1 + 38 * 3 + 2 + 3 * 2);
-		expect(inside(markup, "ps-skeins").match(/<svg viewBox="0 0 32 20"/g)).to.have.length(38);
+		// The sun's fire (1), the buzzard (2) and three larks (2 each); the
+		// skeins' wings are strips the stepper moves (birds.ts createWings).
+		expect(smil).to.equal(1 + 2 + 3 * 2);
+		expect(inside(markup, "ps-skeins").match(/class="ps-wings /g)).to.have.length(38);
 	});
 
 	it("drifts plains.ts's five clouds in the cloud field, behind the weather's own, left empty: the first tick builds the day's", function () {

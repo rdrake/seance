@@ -669,6 +669,12 @@ Two rules stay whatever the settings say: a hidden page draws nothing (a hidden 
 
 Measured by `tools/scenarios/ps-scene-settings.mjs` (headless, no GPU, a clear noon, the composer blurred, since a focused text field restyles about twice a second under every theme): restyles a second at off 0.2, once a second 1.0, 24 at 24.6, 60 at 65.7; sparse 0.0 between its steps, and coming back after a rest moved the SVG clocks on by 130 s at once; with Pause off, a window without the focus kept 24.2.
 
+### 10.6 The skeins' wings off the repaint path (2026-10-08)
+
+On the Android emulator at night (the release APK, 24 frames a second) the app process ran at 71–114 % CPU and the frame p95 at 34 ms. A Chrome trace of the WebView put it in raster: the GPU thread rasterising about 36 % of the time, the RenderThread waiting on it, the renderer's main thread only 12 %. Every frame painted 38 SVGs, the skeins' birds: each was its own `<svg>` whose wings were an SMIL morph of a path's `d`, and a changed path is a repaint and a raster of that bird's layer, 38 of them 24 times a second. With the skeins hidden the app process fell to 26 %.
+
+Each bird is now a window (`.ps-bird`, `overflow: hidden`) on a strip of its kind's poses (`birds.ts` `wingSprite`: 30 cells — 16 through a beat, 8 from the last flex into a glide, the glide, 5 back up — drawn from the mockup's own bodies, poses, lift and spline, in the hour's colours, as one image per kind the scene sets as `--ps-wings-goose` and `--ps-wings-crane` whenever those colours change). `createWings` is one of the stepper's clocks: each step it works out every bird's frame from the old SMIL timing (its period, flaps, glide and phase, the same rounded `dur` and `begin`) and moves only the strips whose frame changed, by a transform, which the compositor applies without painting. Against Chrome's rendering of the old SMIL birds, each frame at its own moment differs by 0.0–0.3/255 (all 38 birds); what remains is time: 16 frames a beat put a pose up to half a frame (about 14 ms of a 0.46 s beat) from where the morph had it.
+
 ## 11. Legibility floors
 
 Held at **every sampled minute of every season and every weather** (what is sampled, below), and checked in mocha from the palette module:

@@ -29,10 +29,18 @@
  */
 import {isPhoneLayout} from "../../helpers/device";
 import type {SceneHandle, SceneHostState} from "../../themeScene";
-import {birdsAt, dayBirdsMarkup, skeinsMarkup} from "./birds";
+import {
+	birdsAt,
+	createWings,
+	dayBirdsMarkup,
+	skeinsMarkup,
+	WING_FRAMES,
+	wingSprite,
+	type WingBird,
+} from "./birds";
 import {momentAt, rng, type Moment, type MoonPhase, type Weather} from "./engine";
 import {composerAboveGrass, GLASS_TINT_VARS, glassVars} from "./glass";
-import {createStepper, keepPhase, stepModeFor} from "./stepper";
+import {createStepper, keepPhase, stepModeFor, type StepSvg} from "./stepper";
 import {bodyOpacity, publishedFor, type Published} from "./grounds";
 import {FADE_MARGIN_MS, GATES, layerGates, liveLayers} from "./layers";
 import {levelsAt, paletteAt, WEATHER, type Palette} from "./palette";
@@ -544,6 +552,25 @@ function watchComposer(root: HTMLElement, html: HTMLElement): {refind(): void; d
 	};
 }
 
+/** The skeins' wings: every bird's strip, moved to its frame by the stepper's clock. */
+function skeinWings(root: HTMLElement) {
+	const birds: WingBird[] = [...root.querySelectorAll<HTMLElement>(".ps-wings")].map((el) => {
+		const [period, flaps, glide, phase] = (el.dataset.beat ?? "").split(" ").map(Number);
+		return {
+			beat: {period, flaps, glide, phase},
+			show(frame) {
+				el.style.transform = `translateX(${(-100 * frame) / WING_FRAMES}%)`;
+			},
+		};
+	});
+	return createWings(birds, {
+		frame(fn) {
+			const id = window.requestAnimationFrame(fn);
+			return () => window.cancelAnimationFrame(id);
+		},
+	});
+}
+
 export function mount(root: HTMLElement, initial: SceneHostState): SceneHandle {
 	const html = document.documentElement;
 	const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -552,6 +579,10 @@ export function mount(root: HTMLElement, initial: SceneHostState): SceneHandle {
 	const shape = root.querySelector(".ps-m-shape") as SVGGElement;
 	const weatherLayer = root.querySelector(".ps-weather") as HTMLElement;
 	const overcast = root.querySelector(".ps-overcast") as HTMLElement;
+	const skeins = root.querySelector(".ps-skeins");
+	const wings = skeinWings(root);
+	wings.setCurrentTime(0); // every bird at its own place in its stroke, as the SMIL began
+	let wingColours = "";
 	// The weather the layer holds: none until the first tick builds the day's.
 	let built: Weather | null = null;
 	// A fade of the weather's own clouds under way: ends it now (the outgoing out of the page).
@@ -580,9 +611,16 @@ export function mount(root: HTMLElement, initial: SceneHostState): SceneHandle {
 				.filter((a): a is CSSAnimation => "animationName" in a),
 		svgs() {
 			const hot = root.classList.contains("ps-hot");
-			return [...root.querySelectorAll("svg")].filter(
+			const svgs: StepSvg[] = [...root.querySelectorAll("svg")].filter(
 				(svg) => !svg.closest(".ps-off") && (hot || !svg.classList.contains("ps-heat-haze"))
 			);
+
+			// The layers gate sets ps-off on .ps-skeins itself (layers.ts GATES).
+			if (skeins && !skeins.classList.contains("ps-off")) {
+				svgs.push(wings);
+			}
+
+			return svgs;
 		},
 		now: () => performance.now(),
 		after(ms, fn) {
@@ -672,6 +710,20 @@ export function mount(root: HTMLElement, initial: SceneHostState): SceneHandle {
 		const m = momentAt(now);
 		const p = paletteAt(m);
 		const vars = sceneVars(m, p);
+		const colours = [vars["--ps-bird-ink"], vars["--ps-bird-wing"], vars["--ps-bird-belly"]];
+
+		// The skeins' strips in the hour's colours, redrawn only when those change.
+		if (colours.join() !== wingColours) {
+			wingColours = colours.join();
+
+			for (const kind of ["goose", "crane"] as const) {
+				const svg = wingSprite(kind, colours[0], colours[1], colours[2]);
+				root.style.setProperty(
+					`--ps-wings-${kind}`,
+					`url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+				);
+			}
+		}
 
 		// Only the day's weather exists in the page (spec §10): a new day's
 		// replaces yesterday's, built for the layout as it is now, and so do
@@ -845,6 +897,7 @@ export function mount(root: HTMLElement, initial: SceneHostState): SceneHandle {
 		update,
 		destroy() {
 			stepper.stop();
+			wings.pauseAnimations();
 			window.clearTimeout(timer);
 			timer = undefined;
 			gates.stop();

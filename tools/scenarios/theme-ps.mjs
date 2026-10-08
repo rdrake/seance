@@ -913,11 +913,11 @@ async function atHour(page, hour) {
 
 /**
  * The scene's SVGs (scene.ts sceneMarkup): the moon, the sun, the land, the
- * near grass and the yurt; the skeins' 38 birds (geese and cranes) and the
- * one holding their belly gradient; the buzzard and the three larks. A hot day's weather layer
- * adds the heat haze.
+ * near grass and the yurt; the buzzard and the three larks. (The skeins'
+ * birds are wing strips, birds.ts createWings, not SVGs.) A hot day's weather
+ * layer adds the heat haze.
  */
-const SVGS = 48;
+const SVGS = 9;
 const svgsOn = (s) => SVGS + (s.weather === "heat" ? 1 : 0);
 
 /** The scene's layers, back to front (scene.ts sceneMarkup, docs/projects/ps-theme.md §5.1). */
