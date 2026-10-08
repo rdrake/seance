@@ -3,19 +3,25 @@
 		<h2>Messages</h2>
 		<div>
 			<label class="opt">
-				<input :checked="store.state.settings.motd" type="checkbox" name="motd" />
+				<input v-switch :checked="store.state.settings.motd" type="checkbox" name="motd" />
 				Show <abbr title="Message Of The Day">MOTD</abbr>
 			</label>
 		</div>
 		<div>
 			<label class="opt">
-				<input :checked="store.state.settings.markdown" type="checkbox" name="markdown" />
+				<input
+					v-switch
+					:checked="store.state.settings.markdown"
+					type="checkbox"
+					name="markdown"
+				/>
 				Render Markdown formatting (bold, code, spoilers…)
 			</label>
 		</div>
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.showSeconds"
 					type="checkbox"
 					name="showSeconds"
@@ -26,6 +32,7 @@
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.use12hClock"
 					type="checkbox"
 					name="use12hClock"
@@ -49,7 +56,12 @@
 		<h2 id="label-media-previews">Media previews</h2>
 		<div role="group" aria-labelledby="label-media-previews">
 			<label class="opt">
-				<input :checked="store.state.settings.media" type="checkbox" name="media" />
+				<input
+					v-switch
+					:checked="store.state.settings.media"
+					type="checkbox"
+					name="media"
+				/>
 				Preview images, video and audio links inline
 			</label>
 			<div
@@ -166,6 +178,7 @@
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.coloredNicks"
 					type="checkbox"
 					name="coloredNicks"
@@ -174,6 +187,7 @@
 			</label>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.autocomplete"
 					type="checkbox"
 					name="autocomplete"
@@ -207,6 +221,7 @@
 		<div v-if="systemTextSize">
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.matchSystemTextSize"
 					type="checkbox"
 					name="matchSystemTextSize"
@@ -284,6 +299,7 @@
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.matchSystemAppearance"
 					type="checkbox"
 					name="matchSystemAppearance"

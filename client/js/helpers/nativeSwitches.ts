@@ -1,8 +1,9 @@
 // In the native shells an on/off setting is a switch, not a checkbox — every
 // settings screen on iOS and Android looks that way. Still an
 // <input type="checkbox"> to the page — checked, change events, labels and
-// forms all as before — so every checkbox is marked, those Vue renders later
-// included:
+// forms all as before. Every checkbox carries the `v-switch` directive
+// (registered in vue.ts; test/tests/nativeSwitches.ts fails a checkbox
+// without it), which marks it as it mounts:
 //
 // - iOS: WebKit draws a checkbox carrying the `switch` attribute (iOS 17.4+)
 //   as the native control and VoiceOver calls it a switch. Older iOS ignores
@@ -10,48 +11,32 @@
 // - Android: Chromium has no such control, so style.css draws a Material
 //   switch (html[data-platform="android"]), and `role="switch"` makes
 //   TalkBack say "switch, on" rather than "checkbox, checked".
+//
+// In a browser it does nothing.
 
+import type {Directive} from "vue";
 import {isAndroidShell, isIOSShell} from "./capacitor";
 
-const SELECTOR = 'input[type="checkbox"]';
+let platform: "ios" | "android" | "web" | null = null;
 
-function markOne(box: Element, android: boolean): void {
-	if (android) {
-		box.setAttribute("role", "switch");
-	} else {
-		box.setAttribute("switch", "");
-	}
-}
-
-let watching = false;
-
-export function useNativeSwitches(): void {
-	const ios = isIOSShell();
-	const android = isAndroidShell();
-
-	if (watching || (!ios && !android)) {
-		return;
+function shellPlatform(): "ios" | "android" | "web" {
+	if (platform === null) {
+		platform = isIOSShell() ? "ios" : isAndroidShell() ? "android" : "web";
 	}
 
-	watching = true;
-
-	const mark = (root: ParentNode) => {
-		for (const box of root.querySelectorAll(SELECTOR)) {
-			markOne(box, android);
-		}
-	};
-
-	mark(document);
-
-	new MutationObserver((records) => {
-		for (const record of records) {
-			for (const node of record.addedNodes) {
-				if (node instanceof HTMLInputElement && node.type === "checkbox") {
-					markOne(node, android);
-				} else if (node instanceof Element) {
-					mark(node);
-				}
-			}
-		}
-	}).observe(document.body, {childList: true, subtree: true});
+	return platform;
 }
+
+/** `v-switch`: marks a checkbox as an on/off switch in the native shells. */
+export const switchDirective: Directive<HTMLInputElement> = {
+	mounted(box) {
+		switch (shellPlatform()) {
+			case "ios":
+				box.setAttribute("switch", "");
+				break;
+			case "android":
+				box.setAttribute("role", "switch");
+				break;
+		}
+	},
+};

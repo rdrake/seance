@@ -7,7 +7,6 @@
 import {leavePage, onStandalonePage} from "./router";
 import {closeOpenImage} from "./helpers/imageViewer";
 import {followSystemTextSize} from "./helpers/systemTextSize";
-import {useNativeSwitches} from "./helpers/nativeSwitches";
 import {reconnectAll} from "./irc/manager";
 import {isPhoneLayout} from "./helpers/device";
 import {
@@ -107,9 +106,6 @@ export function installNativeHooks(): void {
 
 	// iOS/Android drop the WebSocket while backgrounded: retry on foreground.
 	// (No build check: a new build of the shell is a new app from the store.)
-	// On/off options are switches (helpers/nativeSwitches.ts).
-	useNativeSwitches();
-
 	nativeListen("App", "appStateChange", ({isActive}: {isActive?: boolean}) => {
 		if (isActive) {
 			reconnectAll();

@@ -33,6 +33,7 @@
 			<div>
 				<label class="opt">
 					<input
+						v-switch
 						:checked="store.state.settings.keepConnected"
 						type="checkbox"
 						name="keepConnected"
@@ -62,6 +63,7 @@
 			<div>
 				<label class="opt">
 					<input
+						v-switch
 						:checked="store.state.settings.uploadCanvas"
 						type="checkbox"
 						name="uploadCanvas"
@@ -82,6 +84,7 @@
 			<div>
 				<label class="opt">
 					<input
+						v-switch
 						:checked="store.state.settings.sendTypingNotifications"
 						type="checkbox"
 						name="sendTypingNotifications"
@@ -101,6 +104,7 @@
 			<div>
 				<label class="opt">
 					<input
+						v-switch
 						:checked="store.state.settings.keepPrivateConversations"
 						type="checkbox"
 						name="keepPrivateConversations"
@@ -134,7 +138,7 @@
 			<h2>Backup and restore</h2>
 			<p>Save your settings to a file. You can restore here or on another device.</p>
 			<label class="opt">
-				<input v-model="includePasswords" type="checkbox" />
+				<input v-model="includePasswords" v-switch type="checkbox" />
 				Include network passwords
 				<span
 					class="tooltipped tooltipped-n tooltipped-no-delay"
