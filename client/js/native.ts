@@ -112,7 +112,8 @@ export function installNativeHooks(): void {
 		}
 	});
 
-	// iOS's text size (Dynamic Type) scales the whole interface.
+	// The system's text size (iOS's Dynamic Type, Android's Font size)
+	// scales the whole interface (helpers/systemTextSize.ts).
 	followSystemTextSize();
 
 	// Android: the "stay connected" notification's Turn off button stops the
