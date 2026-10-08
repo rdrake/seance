@@ -90,13 +90,14 @@ export async function refreshNativePush(): Promise<void> {
 }
 
 /** The network's current subscription — the distributor may renew its
- * endpoint — or null when this device is not subscribed there. */
+ * endpoint — or null when this device is not subscribed there. Throws when
+ * the shell could not be asked: that says nothing about the subscription. */
 export async function nativeSubscription(network: string): Promise<NativePushMaterial | null> {
-	const material = await nativeCall<{
+	const material = await nativeInvoke<{
 		endpoint: string | null;
 		keys?: NativePushMaterial["keys"];
 		vapid?: string;
-	}>("NativePush", "subscription", {network});
+	} | null>("NativePush", "subscription", {network});
 
 	return material?.endpoint && material.keys
 		? {endpoint: material.endpoint, keys: material.keys, vapid: material.vapid}

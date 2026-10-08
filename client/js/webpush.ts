@@ -509,23 +509,35 @@ async function syncStoredWithBrowser(): Promise<void> {
 }
 
 /** {@link syncStoredWithBrowser} for the Android shell: an entry follows the
- * endpoint the distributor renewed — or a renewal that outlived its
+ * endpoint and keys the distributor renewed — or a renewal that outlived its
  * subscribe() call, under the key it was made for — and goes when the app no
  * longer holds the network (data cleared, reinstalled, the distributor
- * dropped it). The endpoint it replaces is queued for unregistering on its
- * network, as subscribe() does with a replaced one: left registered, the
- * server would keep pushing to it while it still works. */
+ * dropped it). An endpoint replaced or dropped is queued for unregistering
+ * on its network, as subscribe() does with a replaced one: left registered,
+ * the server would keep pushing to it while it still works. A shell that
+ * cannot be asked leaves the entry as it is. */
 async function syncStoredWithShell(): Promise<void> {
 	let changed = false;
-	let replaced = false;
+	let queued = false;
 
 	for (const uuid of Object.keys(subs)) {
-		const live = await nativeSubscription(uuid);
+		let live: Awaited<ReturnType<typeof nativeSubscription>>;
+
+		try {
+			live = await nativeSubscription(uuid);
+		} catch (error) {
+			// eslint-disable-next-line no-console
+			console.warn("[webpush] could not read the shell's subscription", error);
+			continue;
+		}
+
 		const entry = subs[uuid];
 
 		if (!live) {
+			legacy.push({vapid: entry.vapid, endpoint: entry.endpoint, network: uuid});
 			delete subs[uuid];
 			changed = true;
+			queued = true;
 		} else if (live.endpoint !== entry.endpoint) {
 			legacy.push({vapid: entry.vapid, endpoint: entry.endpoint, network: uuid});
 			subs[uuid] = {
@@ -534,7 +546,16 @@ async function syncStoredWithShell(): Promise<void> {
 				keys: live.keys,
 			};
 			changed = true;
-			replaced = true;
+			queued = true;
+		} else if (live.keys.p256dh !== entry.keys.p256dh || live.keys.auth !== entry.keys.auth) {
+			// Same endpoint, new keys: the next REGISTER (autoRegister) carries
+			// them; the server would otherwise encrypt to keys nobody holds.
+			subs[uuid] = {
+				vapid: live.vapid ?? entry.vapid,
+				endpoint: live.endpoint,
+				keys: live.keys,
+			};
+			changed = true;
 		}
 	}
 
@@ -542,7 +563,7 @@ async function syncStoredWithShell(): Promise<void> {
 		saveSubs();
 	}
 
-	if (replaced) {
+	if (queued) {
 		saveLegacy();
 	}
 
@@ -835,6 +856,13 @@ async function subscribe(uuid: string): Promise<void> {
 		subs[uuid] = {vapid, ...material};
 		saveSubs();
 
+		// An endpoint queued for unregistering that the shell handed out
+		// again (the distributor kept it) is live: it must not be unregistered.
+		if (legacy.some((item) => item.endpoint === material.endpoint)) {
+			legacy = legacy.filter((item) => item.endpoint !== material.endpoint);
+			saveLegacy();
+		}
+
 		// The browser mints a fresh endpoint whenever the subscription is
 		// recreated; without this the old one stays registered on the account
 		// and the server keeps pushing to it — every notification twice.
@@ -1075,11 +1103,19 @@ refreshState();
 // The Android shell's distributor renewed or dropped an endpoint by itself:
 // follow it, and tell the network the new one if it is connected.
 onNativeEndpointChange((uuid) => {
-	synced = synced.then(syncStoredWithShell).then(() => {
-		const server = servers.get(uuid);
-		unregisterLegacy(uuid, server?.vapid);
-		autoRegister(uuid, server?.vapid);
-	});
+	// Never rejects: every later `synced.then` (autoRegister, the prompt)
+	// waits on it.
+	synced = synced
+		.then(syncStoredWithShell)
+		.then(() => {
+			const server = servers.get(uuid);
+			unregisterLegacy(uuid, server?.vapid);
+			autoRegister(uuid, server?.vapid);
+		})
+		.catch((error) => {
+			// eslint-disable-next-line no-console
+			console.warn("[webpush] could not follow the shell's endpoint change", error);
+		});
 });
 
 // Opening the app means the user is catching up in-app: drop any push
