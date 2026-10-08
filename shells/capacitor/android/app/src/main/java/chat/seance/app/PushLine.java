@@ -40,6 +40,18 @@ final class PushLine {
         this.timestamp = timestamp;
     }
 
+    /**
+     * A decrypted push payload, either tier (handlePushNow in the service
+     * worker): trailing control bytes off — an unstripped aes128gcm padding
+     * delimiter must not spoil the parse — then the JSON tier, then the IRC
+     * line. Null when it is neither: the push then says only "new activity".
+     */
+    static PushLine ofPayload(String payload) {
+        String clean = payload.replaceFirst("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f]+$", "");
+        PushLine line = fromJson(clean);
+        return line != null ? line : parse(clean);
+    }
+
     /** `[@tags] :prefix COMMAND target [...] [:trailing]`; null when it is not that. */
     static PushLine parse(String line) {
         String rest = line;

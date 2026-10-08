@@ -123,22 +123,42 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
             return;
         }
 
-        String payload = new String(message.getContent(), StandardCharsets.UTF_8).replaceFirst("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f]+$", "");
-        PushLine line = PushLine.fromJson(payload);
-        if (line == null) {
-            line = PushLine.parse(payload);
-        }
-        if (line == null) {
-            return;
-        }
+        PushLine line = PushLine.ofPayload(new String(message.getContent(), StandardCharsets.UTF_8));
 
-        if (line.command.equals("MARKREAD")) {
+        if (line != null && line.command.equals("MARKREAD")) {
             markRead(this, network, line.target, line.timestamp);
+        } else if (line != null && (line.command.equals("PRIVMSG") || line.command.equals("NOTICE"))) {
+            show(network, line);
+        } else {
+            // Something the ircd pushed that is not a message this build
+            // can read: say so rather than drop it, as the service worker does.
+            showActivity(this, network);
+        }
+    }
+
+    /**
+     * The service worker's "push-activity" notification: names no
+     * conversation, so its tap only brings the app up (native.ts).
+     */
+    private static void showActivity(Context context, String network) {
+        Bundle extras = new Bundle();
+        extras.putString(EXTRA_NETWORK, network);
+
+        NotificationCompat.Builder builder = base(context, network, "")
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText("New activity while you were away.")
+            .setSubText(PushSubscriptions.name(context, network))
+            .setOnlyAlertOnce(true)
+            .addExtras(extras);
+
+        NotificationManagerCompat manager = NotificationManagerCompat.from(context);
+        if (!manager.areNotificationsEnabled()) {
             return;
         }
-
-        if (line.command.equals("PRIVMSG") || line.command.equals("NOTICE")) {
-            show(network, line);
+        try {
+            manager.notify(TAG_PREFIX + key(network, ""), 0, builder.build());
+        } catch (SecurityException e) {
+            Log.w(TAG, "notification permission withdrawn", e);
         }
     }
 

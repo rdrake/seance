@@ -92,4 +92,22 @@ public class PushLineTest {
         assertEquals(0L, PushLine.parseTime("yesterday"));
         assertEquals(0L, PushLine.parseTime(null));
     }
+
+    @Test
+    public void readsEitherTierOfAPayload() {
+        PushLine line = PushLine.ofPayload("@msgid=m1 :alice!a@h PRIVMSG bob :hi\u0002");
+        assertEquals("PRIVMSG", line.command);
+        assertEquals("hi", line.text);
+
+        PushLine read = PushLine.ofPayload("{\"t\":\"read\",\"target\":\"#c\"}\u0002");
+        assertEquals("MARKREAD", read.command);
+    }
+
+    @Test
+    public void aPayloadOfNeitherTierIsNothingToShow() {
+        // PushService then posts the "new activity" notification.
+        assertNull(PushLine.ofPayload("{\"t\":\"other\"}"));
+        assertNull(PushLine.ofPayload("garbage"));
+        assertNull(PushLine.ofPayload(""));
+    }
 }
