@@ -3,19 +3,25 @@
 		<h2>Messages</h2>
 		<div>
 			<label class="opt">
-				<input :checked="store.state.settings.motd" type="checkbox" name="motd" />
+				<input v-switch :checked="store.state.settings.motd" type="checkbox" name="motd" />
 				Show <abbr title="Message Of The Day">MOTD</abbr>
 			</label>
 		</div>
 		<div>
 			<label class="opt">
-				<input :checked="store.state.settings.markdown" type="checkbox" name="markdown" />
+				<input
+					v-switch
+					:checked="store.state.settings.markdown"
+					type="checkbox"
+					name="markdown"
+				/>
 				Render Markdown formatting (bold, code, spoilers…)
 			</label>
 		</div>
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.showSeconds"
 					type="checkbox"
 					name="showSeconds"
@@ -26,6 +32,7 @@
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.use12hClock"
 					type="checkbox"
 					name="use12hClock"
@@ -49,7 +56,12 @@
 		<h2 id="label-media-previews">Media previews</h2>
 		<div role="group" aria-labelledby="label-media-previews">
 			<label class="opt">
-				<input :checked="store.state.settings.media" type="checkbox" name="media" />
+				<input
+					v-switch
+					:checked="store.state.settings.media"
+					type="checkbox"
+					name="media"
+				/>
 				Preview images, video and audio links inline
 			</label>
 			<div
@@ -166,6 +178,7 @@
 		<div>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.coloredNicks"
 					type="checkbox"
 					name="coloredNicks"
@@ -174,6 +187,7 @@
 			</label>
 			<label class="opt">
 				<input
+					v-switch
 					:checked="store.state.settings.autocomplete"
 					type="checkbox"
 					name="autocomplete"
@@ -204,7 +218,26 @@
 		</div>
 
 		<h2 id="label-font-size">Font size</h2>
-		<div role="group" aria-labelledby="label-font-size" class="font-size-setting">
+		<div v-if="systemTextSize">
+			<label class="opt">
+				<input
+					v-switch
+					:checked="store.state.settings.matchSystemTextSize"
+					type="checkbox"
+					name="matchSystemTextSize"
+				/>
+				Match the system text size
+			</label>
+			<p v-if="store.state.settings.matchSystemTextSize" class="theme-pair-hint">
+				{{ systemTextSizeHint }}
+			</p>
+		</div>
+		<div
+			v-if="!matchingSystemTextSize"
+			role="group"
+			aria-labelledby="label-font-size"
+			class="font-size-setting"
+		>
 			<!-- No `name`: the window's generic @change handler would store the
 			     raw slider index. While the slider moves only the sample below
 			     follows it; the setting is applied when it is let go. -->
@@ -232,7 +265,12 @@
 			</datalist>
 			<span class="font-size-value" aria-hidden="true">{{ shownLabel }}</span>
 		</div>
-		<div class="font-size-sample" :style="{fontSize: sampleFontSize}" aria-hidden="true">
+		<div
+			v-if="!matchingSystemTextSize"
+			class="font-size-sample"
+			:style="{fontSize: sampleFontSize}"
+			aria-hidden="true"
+		>
 			<div v-for="line in sampleLines" :key="line.from" class="line">
 				<span class="time">{{ line.time }}</span>
 				<span class="from user" :class="line.color">{{ line.from }}</span>
@@ -254,9 +292,21 @@
 					:key="theme.name"
 					:value="theme.name"
 				>
-					{{ theme.displayName }}
+					{{ themeOptionLabel(theme.name, theme.displayName) }}
 				</option>
 			</select>
+		</div>
+		<div>
+			<label class="opt">
+				<input
+					v-switch
+					:checked="store.state.settings.matchSystemAppearance"
+					type="checkbox"
+					name="matchSystemAppearance"
+				/>
+				Match the system's light or dark mode
+			</label>
+			<p class="theme-pair-hint">{{ themePairHint }}</p>
 		</div>
 
 		<!-- A theme's own settings, shown while it is the theme. Only ps has
@@ -330,6 +380,11 @@ textarea#user-specified-css-input {
 	color: var(--body-color-muted);
 }
 
+.theme-pair-hint {
+	color: var(--body-color-muted);
+	margin: 0.25rem 0 0;
+}
+
 .own-messages-options .own-messages-hint::before,
 .scene-motion-options .opt-hint::before {
 	content: " — ";
@@ -356,6 +411,7 @@ textarea#user-specified-css-input {
 
 .font-size-setting input[type="range"] {
 	display: block;
+	accent-color: var(--button-color);
 	width: 100%;
 	height: 100%;
 	margin: 0;
@@ -409,6 +465,9 @@ textarea#user-specified-css-input {
 import {computed, defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
 import {normalizeSceneMotion, SCENE_MOTIONS, type SceneMotion} from "../../js/themeScene";
+import {describeThemePairs, themePartner} from "../../js/helpers/themeAppearance";
+import {isIOSShell} from "../../js/helpers/capacitor";
+import {systemTextSizeAvailable} from "../../js/helpers/systemTextSize";
 import {
 	fontSizeLabels,
 	fontSizeScale,
@@ -549,12 +608,49 @@ export default defineComponent({
 			}
 		};
 
+		// What the toggle does for the theme picked: names its pair, or says it
+		// has none (helpers/themeAppearance.ts).
+		const themePairHint = computed(() => {
+			const themes = store.state.serverConfiguration?.themes ?? [];
+			const label = (name: string) =>
+				themes.find((t) => t.name === name)?.displayName ?? name;
+			const chosen = store.state.settings.theme;
+			const partner = chosen ? themePartner(chosen) : null;
+
+			return partner
+				? `${label(chosen)} and ${label(partner)} swap with the system's mode.`
+				: `${label(chosen)} has no light/dark pair; ${describeThemePairs(label)} do.`;
+		});
+
+		// In the native shells the system's text size can stand in for the
+		// slider (helpers/systemTextSize.ts); while it does, the slider and
+		// its sample are hidden and the hint says where the size is set.
+		const systemTextSize = systemTextSizeAvailable();
+		const matchingSystemTextSize = computed(
+			() => systemTextSize && store.state.settings.matchSystemTextSize
+		);
+		const systemTextSizeHint = isIOSShell()
+			? "Set it in iOS Settings → Display & Brightness → Text Size, or Accessibility → Display & Text Size for larger sizes."
+			: "Set it in Android Settings → Display → Display size and text.";
+
+		// A theme that follows the system's mode says so in the list while the
+		// toggle is on; any theme can still be picked.
+		const themeOptionLabel = (name: string, displayName: string) =>
+			store.state.settings.matchSystemAppearance && themePartner(name)
+				? `${displayName} (light/dark)`
+				: displayName;
+
 		return {
 			sceneMotions: SCENE_MOTIONS,
 			psAnimation,
 			sceneMotionLabels,
 			sceneMotionHints,
 			store,
+			systemTextSize,
+			matchingSystemTextSize,
+			systemTextSizeHint,
+			themeOptionLabel,
+			themePairHint,
 			trustedGroups,
 			trustedCount,
 			untrust,
