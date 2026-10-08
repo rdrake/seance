@@ -59,6 +59,12 @@ describe("settingsMigration", function () {
 		});
 	});
 
+	it("reads a damaged entry as nothing stored", function () {
+		for (const stored of [5, "5", null, true, ["theme"]]) {
+			expect(migrateStoredSettings(stored, shell)).to.deep.equal({});
+		}
+	});
+
 	it("does nothing where the new setting defaults to off", function () {
 		const stored = {fontSize: "huge", theme: "creama"};
 		expect(migrateStoredSettings(stored, web)).to.deep.equal(stored);

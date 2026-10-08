@@ -29,7 +29,10 @@ export function createSettingsStore(store: Store<State>) {
 			 * loader (loading-error-handlers.js) reads the same answer. */
 			migrate({state, commit}, {defaultTheme}: {defaultTheme: string}) {
 				const stored = loadFromLocalStorage();
-				const migrated = migrateStoredSettings(stored, {...createState(), theme: defaultTheme});
+				const migrated = migrateStoredSettings(stored, {
+					...createState(),
+					theme: defaultTheme,
+				});
 				let changed = false;
 
 				for (const [name, value] of Object.entries(migrated)) {
@@ -72,7 +75,13 @@ function loadFromLocalStorage() {
 		storage.remove("settings");
 	}
 
-	if (!storedSettings) {
+	// Only an object holds settings; anything else (`5`, `"x"`, `null`, a
+	// list) is a damaged entry and reads as nothing stored.
+	if (
+		typeof storedSettings !== "object" ||
+		storedSettings === null ||
+		Array.isArray(storedSettings)
+	) {
 		return {};
 	}
 

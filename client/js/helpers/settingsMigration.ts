@@ -22,17 +22,22 @@ const OVERRIDES: Record<string, string> = {
  * the stored object with the keys it turned off added.
  */
 export function migrateStoredSettings(
-	stored: Record<string, unknown>,
+	stored: unknown,
 	defaults: Record<string, unknown>
 ): Record<string, unknown> {
-	const migrated = {...stored};
+	// A damaged entry (a number, a string, a list) holds no settings.
+	if (typeof stored !== "object" || stored === null || Array.isArray(stored)) {
+		return {};
+	}
+
+	const migrated: Record<string, unknown> = {...stored};
 
 	for (const [setting, overridden] of Object.entries(OVERRIDES)) {
 		if (setting in stored || defaults[setting] !== true) {
 			continue;
 		}
 
-		if (overridden in stored && stored[overridden] !== defaults[overridden]) {
+		if (overridden in stored && migrated[overridden] !== defaults[overridden]) {
 			migrated[setting] = false;
 		}
 	}

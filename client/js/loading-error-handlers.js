@@ -95,7 +95,9 @@
 	// Apply user theme as soon as possible, before any other code loads
 	// This prevents flash of white while other code loads and socket connects
 	try {
-		const userSettings = JSON.parse(localStorage.getItem("settings") || "{}");
+		const parsed = JSON.parse(localStorage.getItem("settings") || "{}");
+		// A damaged entry (a number, a string, null) holds no settings.
+		const userSettings = typeof parsed === "object" && parsed !== null ? parsed : {};
 		const themeEl = document.getElementById("theme");
 
 		if (!themeEl) {
