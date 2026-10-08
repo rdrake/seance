@@ -66,17 +66,4 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         NativePushPlugin.onIntent(intent);
     }
-
-    /** While the page is on screen its own connection shows messages; pushes only close things. */
-    @Override
-    public void onResume() {
-        super.onResume();
-        PushService.foreground = true;
-    }
-
-    @Override
-    public void onPause() {
-        PushService.foreground = false;
-        super.onPause();
-    }
 }

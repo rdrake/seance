@@ -36,6 +36,8 @@ import org.unifiedpush.android.connector.UnifiedPush;
  * - `subscription({network})`: the stored one (with the `vapid` it was made
  *   for), or `{endpoint: null}`.
  * - `unsubscribe({network})`, `clear({network?, target?})`.
+ * - `seen({msgid})`: the page took this message while the user was looking
+ *   at it; its push shows nothing ({@link PushSeen}).
  * - `takeTap()` / event `tap`: `{network, target}` of a tapped notification.
  * - event `endpoint`: `{network}` — the distributor changed or dropped a
  *   network's endpoint on its own; the page re-reads and re-registers.
@@ -250,6 +252,15 @@ public class NativePushPlugin extends Plugin {
                     pending.reject("unsubscribed");
                 }
             });
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void seen(PluginCall call) {
+        String msgid = call.getString("msgid");
+        if (msgid != null && !msgid.isEmpty()) {
+            PushService.recordSeen(getContext(), msgid);
         }
         call.resolve();
     }

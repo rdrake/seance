@@ -7,6 +7,7 @@ import {SharedMsg, MessageType} from "../../../shared/types/msg";
 import {ChanType} from "../../../shared/types/chan";
 import {addMention} from "../mentions";
 import {recordSeenMsgid} from "../push-seen";
+import {nativeRecordSeen} from "../helpers/nativePush";
 import webpush from "../webpush";
 import {attachMediaPreviews} from "../helpers/messagePreviews";
 import * as saved from "../irc/saved-networks";
@@ -106,13 +107,16 @@ socket.on("msg", function (data) {
 	// Mark pushable messages as taken by this live page, so the service
 	// worker drops the FCM duplicate the ircd may emit for the same
 	// message while this session is attached-but-idle (FEAT_WEBPUSH_IDLE).
-	// The subset is what the server pushes: PMs and channel mentions.
+	// The subset is what the server pushes: PMs and channel mentions. The
+	// Android shell's push service keeps its own ring, fed only while the
+	// user is looking (the shell's page cannot notify by itself).
 	if (
 		!data.msg.self &&
 		data.msg.msgid &&
 		(data.msg.highlight || channel.type === ChanType.QUERY)
 	) {
 		recordSeenMsgid(data.msg.msgid);
+		nativeRecordSeen(data.msg.msgid);
 	}
 
 	let messageLimit = 0;

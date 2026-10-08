@@ -44,9 +44,10 @@ import org.unifiedpush.android.connector.data.PushMessage;
  * do ({@link PushMerge}). The message list rides on the notification's own
  * extras, so it is exactly what the shade shows: a swiped notification
  * starts over, and a process Android killed between two pushes loses
- * nothing. A MARKREAD from another device takes away what it read. While
- * the app is in the foreground its own connection shows the message, so a
- * push only closes things then.
+ * nothing. A MARKREAD from another device takes away what it read. A push
+ * for a message this device already surfaced shows nothing
+ * ({@link PushSeen}: what the page showed the user, what this service
+ * showed before), the service worker's rule.
  */
 public class PushService extends org.unifiedpush.android.connector.PushService {
 
@@ -57,9 +58,8 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
     static final String TAG_PREFIX = "push\n";
     private static final String EXTRA_NETWORK = "seance.network";
     private static final String EXTRA_ENTRIES = "seance.entries";
-
-    /** The activity is resumed: the page has the conversation live. */
-    static volatile boolean foreground = false;
+    private static final String SEEN_PREFS = "seance.push.seen";
+    private static final String SEEN_KEY = "seen";
 
     /** One read-merge-post at a time: two pushes for a conversation must not both start from the same list. */
     private static final Object lock = new Object();
@@ -137,7 +137,7 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
             return;
         }
 
-        if ((line.command.equals("PRIVMSG") || line.command.equals("NOTICE")) && !foreground) {
+        if (line.command.equals("PRIVMSG") || line.command.equals("NOTICE")) {
             show(network, line);
         }
     }
@@ -148,13 +148,40 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
         String key = key(network, conversation);
 
         synchronized (lock) {
-            PushMerge.Result merged = PushMerge.add(shownEntries(this, key), line, System.currentTimeMillis(), PushMerge.KEEP);
-            if (!merged.changed) {
-                return; // delivered twice
+            PushSeen seen = seen(this);
+            if (seen.covers(line)) {
+                return; // the page showed it, or this service already did
             }
-            // A later line of a message already shown grows it in place without a second alert.
-            post(this, network, conversation, merged.entries, !merged.isNew);
+            PushMerge.Result merged = PushMerge.add(shownEntries(this, key), line, System.currentTimeMillis(), PushMerge.KEEP);
+            if (merged.changed) {
+                // A later line of a message already shown grows it in place without a second alert.
+                post(this, network, conversation, merged.entries, !merged.isNew);
+            }
+            seen.add(PushSeen.seenKey(line));
+            saveSeen(this, seen);
         }
+    }
+
+    /**
+     * The page took this message while the user was looking at it: its push
+     * shows nothing (NativePushPlugin `seen`).
+     */
+    static void recordSeen(Context context, String msgid) {
+        synchronized (lock) {
+            PushSeen seen = seen(context);
+            seen.add(msgid);
+            saveSeen(context, seen);
+        }
+    }
+
+    /** Under {@link #lock}. */
+    private static PushSeen seen(Context context) {
+        return PushSeen.fromJson(context.getSharedPreferences(SEEN_PREFS, Context.MODE_PRIVATE).getString(SEEN_KEY, null));
+    }
+
+    /** Under {@link #lock}. */
+    private static void saveSeen(Context context, PushSeen seen) {
+        context.getSharedPreferences(SEEN_PREFS, Context.MODE_PRIVATE).edit().putString(SEEN_KEY, seen.toJson()).apply();
     }
 
     /**

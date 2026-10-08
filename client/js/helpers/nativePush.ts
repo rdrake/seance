@@ -93,6 +93,24 @@ export async function nativeUnsubscribe(network: string): Promise<void> {
 	await nativeCall("NativePush", "unsubscribe", {network});
 }
 
+/**
+ * The page took a pushable message while the user was looking at it: the
+ * shell drops its push (PushSeen.java, the twin of push-seen.ts). Only while
+ * attended — the WebView has no Notification API, so a message the page
+ * takes hidden (the "stay connected" service keeps it running) has nobody
+ * but the push to announce it.
+ */
+export function nativeRecordSeen(msgid: string | undefined): void {
+	if (
+		msgid &&
+		isAndroidShell() &&
+		document.visibilityState === "visible" &&
+		document.hasFocus()
+	) {
+		void nativeCall("NativePush", "seen", {msgid});
+	}
+}
+
 /** Close the notifications for one conversation, a network's, or all of them. */
 export function nativeClearNotifications(network?: string, target?: string): void {
 	if (isAndroidShell()) {
