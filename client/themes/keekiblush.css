@@ -1,6 +1,7 @@
 /* Keeki Blush — Keeki in daylight: the chat on pink paper and the rail
- * lifted from Keeki's purple-black to orchid, so the two meet halfway rather
- * than a near-white chat against Keeki's darkest purple (the first cut, which
+ * lifted from Keeki's purple-black to a dusky lavender (an orchid before it
+ * read as too loud a purple), so the two meet halfway rather than a
+ * near-white chat against Keeki's darkest purple (the first cut, which
  * read as plain Keeki with the lights on). keeki.css does the rest: the
  * glitter, the sunflowers and roses and their drift, the rose-gold open
  * conversation, the hot-pink mention badge and the 🐾; the dividers still
@@ -41,16 +42,16 @@
 	--menu-bg: #f6e1ec;
 	--own-bg: #f0d8e7;
 
-	/* Sidebar rail: orchid under the glitter, white text; the rose-gold
+	/* Sidebar rail: dusky lavender under the glitter, white text; the rose-gold
 	 * active row, the badges and the hot-pink accent are Keeki's. */
-	--rail-bg-top: #7a5091;
-	--rail-bg-bottom: #5e3a74;
+	--rail-bg-top: #6f608c;
+	--rail-bg-bottom: #584974;
 	--rail-fg: #fbf4ff;
 	--rail-fg-strong: #fff;
 	--rail-fg-active: #fff;
 	--rail-fg-muted: #f0e2f6;
-	--rail-input-bg: #4a2b5e;
-	--rail-input-border: #9b74b0;
+	--rail-input-bg: #45385b;
+	--rail-input-border: #988ab2;
 
 	/* Message semantics: joins deep rose, quits violet, notices dark gold,
 	 * /me lines a deep pink. */
