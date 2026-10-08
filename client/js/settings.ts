@@ -47,11 +47,11 @@ function loadTheme(store: TypedStore): void {
 		throw new Error("theme is missing href attribute");
 	}
 
-	if (hrefAttr.value === themeUrl) {
-		return;
+	// The early loader (loading-error-handlers.js) has usually set the href
+	// already; the browser chrome's colour is still this function's to set.
+	if (hrefAttr.value !== themeUrl) {
+		hrefAttr.value = themeUrl;
 	}
-
-	hrefAttr.value = themeUrl;
 
 	if (!store.state.serverConfiguration) {
 		return;
