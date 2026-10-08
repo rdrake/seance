@@ -5953,7 +5953,9 @@ html[data-reduce-motion] #form .upload-bar-track.indeterminate .upload-bar-fill 
  * WebView answers with the settings its process started with. It outranks a
  * theme's `:root`, so this holds whichever theme is loaded; a theme without
  * the handoff tokens only has --body-color-muted, and the others resolve to
- * nothing it reads. */
+ * nothing it reads. A theme that re-maps one of these tokens below :root
+ * (zelenzy's dialogs) outranks this there and restates it for its own
+ * selector. */
 html[data-contrast="more"]:root {
 	--body-color-muted: var(--body-color);
 	--chat-fg-muted: var(--chat-fg);
