@@ -566,9 +566,10 @@ function declineKey(kind: PromptKind, uuid: string, vapid: string): string {
  * asking now would open its prompt over it. Any subscribe in flight counts
  * (a Yes, a Renew click, a silent subscribe): which of them is asking for
  * permission cannot be told from here, and waiting for a silent one costs
- * nothing. */
+ * nothing. A hand-off on its way counts too, so a network announcing in the
+ * gap queues behind the ones already waiting instead of jumping ahead. */
 function promptBusy(): boolean {
-	return pushPrompt.visible || subscribing.size > 0;
+	return pushPrompt.visible || subscribing.size > 0 || handoffTimer !== undefined;
 }
 
 /** The one place the prompt passes on: called whenever it may have become

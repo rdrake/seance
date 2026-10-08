@@ -305,7 +305,8 @@ async function permissionLate(page) {
 	const mark = page.wsFrames.length;
 	await page.click("#pushPromptYes");
 	await page.waitFor(`window.__permissionAsk.asked`, {label: "the permission request"});
-	page.check("4. Yes closed the prompt", (await page.evaluate(promptGone)) === true);
+	// The overlay's visibility fades over 0.2 s, so wait for it.
+	await page.waitFor(promptGone, {label: "the prompt to close on Yes"});
 
 	// The second network connects and announces push while permission is
 	// still being asked.
@@ -386,15 +387,21 @@ async function doubleClick(page, selector, between) {
 	await press(2);
 }
 
-const escapeKey = (page, autoRepeat) =>
-	page.send("Input.dispatchKeyEvent", {
-		type: "keyDown",
+/** One Escape keydown (a held key's repeats carry `autoRepeat`); `release`
+ * sends its keyup. */
+async function escapeKey(page, autoRepeat, release = false) {
+	const key = {
 		key: "Escape",
 		code: "Escape",
 		windowsVirtualKeyCode: 27,
 		nativeVirtualKeyCode: 27,
-		autoRepeat,
-	});
+	};
+	await page.send("Input.dispatchKeyEvent", {type: "rawKeyDown", ...key, autoRepeat});
+
+	if (release) {
+		await page.send("Input.dispatchKeyEvent", {type: "keyUp", ...key});
+	}
+}
 
 // --- 5. a double-click and a held Escape answer only what was on screen -----
 async function doubleClickAndHeldEscape(page) {
@@ -429,6 +436,9 @@ async function doubleClickAndHeldEscape(page) {
 	);
 	await page.screenshot("5-after-double-click");
 
+	// The keys go to the document's binding (App.vue), not the composer's.
+	await page.evaluate(`document.activeElement?.blur()`);
+
 	for (let i = 0; i < 5; i++) {
 		await escapeKey(page, true);
 		await page.sleep(40);
@@ -440,7 +450,8 @@ async function doubleClickAndHeldEscape(page) {
 		(await page.evaluate(promptOpened)) === true
 	);
 
-	await escapeKey(page, false);
+	await escapeKey(page, true, true); // the held key's release
+	await escapeKey(page, false, true);
 	await page.waitFor(promptGone, {label: "the prompt to close on a plain Escape"});
 	await page.sleep(1000);
 	page.check(
