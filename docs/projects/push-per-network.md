@@ -53,11 +53,16 @@ own subscription against that network's key.
   (the worker renewed it) → the entry is updated. `autoRegister` waits for
   that pass so it never re-registers a dead endpoint.
 - **Decisions become per network.** `autoRegister(uuid, vapid)` re-REGISTERs
-  the entry when its `vapid` matches. `maybePrompt(uuid, vapid, sasl)`: no
-  entry → the subscribe prompt (or a silent subscribe when permission is
-  granted; `thelounge.push.neverAsk` still device-wide); entry for another
-  key → the `pushKeyChange` policy (Wary prompt / Naive renew / Suspicious
-  nothing). `subscribe(uuid)` creates that network's registration and
+  the entry when its `vapid` matches. `maybePrompt(uuid)`: a "not now"
+  answered in this page for that network, kind and key → nothing, even once
+  permission has been granted since (by another network's Yes); no entry →
+  the subscribe prompt (or a silent subscribe when permission is granted;
+  `thelounge.push.neverAsk` still device-wide); entry for another key → the
+  `pushKeyChange` policy (Wary prompt / Naive renew / Suspicious nothing).
+  The prompt is one at a time: a network that wants it while it is open, or
+  while a subscribe is in flight (the browser's permission dialog after a
+  Yes), waits, and once the prompt is free again the waiting networks that
+  are still connected get their turn (`scheduleHandoff`). `subscribe(uuid)` creates that network's registration and
   subscription, unregisters the endpoint it replaces on that network, and
   REGISTERs the new one (plus the payload metadata) on that network only.
   `unsubscribe(uuid)` drops the subscription, tells the network, deletes the
