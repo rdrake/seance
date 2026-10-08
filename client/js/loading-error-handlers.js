@@ -109,7 +109,7 @@
 		// with matchSystemAppearance on, a paired theme is shown as whichever
 		// half matches the system's light or dark mode. The setting defaults
 		// to on in the native shell (Capacitor's bridge is injected before any
-		// script runs) and off on the web, as in settings.ts.
+		// script runs) and off on the web (helpers/platformDefaults.ts).
 		const chosen =
 			typeof userSettings.theme === "string"
 				? userSettings.theme

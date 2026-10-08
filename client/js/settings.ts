@@ -6,7 +6,7 @@ import {prefersTwelveHourClock} from "./helpers/hourCycle";
 import {setQueryLogEnabled} from "./irc/querylog";
 import {setKeepAlive} from "./helpers/keepAlive";
 import {effectiveTheme} from "./helpers/themeAppearance";
-import {isNativeShell} from "./helpers/capacitor";
+import {currentPlatform, PLATFORM_DEFAULTS} from "./helpers/platformDefaults";
 import {setMatchSystemTextSize} from "./helpers/systemTextSize";
 
 const defaultSettingConfig = {
@@ -178,7 +178,7 @@ const defaultConfig = {
 	// on the web (helpers/systemTextSize.ts). On by default there: Apple's and
 	// Google's guidelines both ask an app to follow the system's size.
 	matchSystemTextSize: {
-		default: isNativeShell(),
+		default: PLATFORM_DEFAULTS.matchSystemTextSize(currentPlatform()),
 		apply(store: TypedStore, value: boolean) {
 			setMatchSystemTextSize(value);
 		},
@@ -205,7 +205,7 @@ const defaultConfig = {
 	// to honour the system setting; off on the web, where a browser's theme
 	// stays the one picked.
 	matchSystemAppearance: {
-		default: isNativeShell(),
+		default: PLATFORM_DEFAULTS.matchSystemAppearance(currentPlatform()),
 		apply(store: TypedStore) {
 			loadTheme(store);
 		},

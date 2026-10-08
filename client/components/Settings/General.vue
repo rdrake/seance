@@ -192,6 +192,7 @@ import {
 	type KeepAliveStatus,
 } from "../../js/helpers/keepAlive";
 import eventbus from "../../js/eventbus";
+import {currentPlatform} from "../../js/helpers/platformDefaults";
 import {
 	applyBackup,
 	BackupFormatError,
@@ -282,6 +283,7 @@ export default defineComponent({
 					includePasswords: includePasswords.value,
 					settings: {...store.state.settings},
 					app: appName.value,
+					platform: currentPlatform(),
 				});
 				const bytes = await encodeBackup(backup);
 				const blob = new Blob([bytes as BlobPart], {type: "application/octet-stream"});
@@ -335,7 +337,7 @@ export default defineComponent({
 
 					// Nothing runs between the write and the reload, so no
 					// in-memory state can overwrite the file's entries.
-					applyBackup(backup);
+					applyBackup(backup, currentPlatform());
 					window.location.reload();
 				}
 			);
