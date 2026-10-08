@@ -186,10 +186,24 @@ html {
 			z-index: 2000;
 			pointer-events: none;
 			background-color: var(--canvas-bg-color, var(--body-bg-color));
+			transition: background-color 160ms;
 		}
 
 		#sidebar {
 			padding-top: var(--status-bar-tint-height);
+		}
+
+		/* The phone layout's open sidebar is an overlay, and the strip then
+		 * sits over the rail, not the chat: in the chat's colour it is a pale
+		 * seam above the logo wherever the paper is light and the rail dark
+		 * (creama, frost, keekiblush). The rail's top colour instead, eased
+		 * over the sidebar's own 160ms; the themes without --rail-bg-top keep
+		 * their sidebar colour in --body-bg-color. The query is
+		 * PHONE_LAYOUT_QUERY (helpers/device.ts). */
+		@media (max-width: 768px), (max-height: 500px) and (hover: none) and (pointer: coarse) {
+			body:has(#viewport.menu-open) #status-bar-tint {
+				background-color: var(--rail-bg-top, var(--body-bg-color));
+			}
 		}
 	}
 }
