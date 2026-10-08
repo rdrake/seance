@@ -1,0 +1,122 @@
+/* Keeki Blush — Keeki with the chat on blush paper. keeki.css does the rest:
+ * the purple rail keeps its glitter, its sunflowers and roses and their
+ * drift, the rose-gold open conversation, the hot-pink mention badge and the
+ * 🐾; the dividers still bloom. This file is the chat side's token values
+ * alone, as creama.css is to coffee.css, plus a nick palette for a light
+ * surface and the three mIRC colours coffee brightens for a dark one.
+ *
+ * Keeki's pastels are darkened into the same families until they read on
+ * paper: rose gold to a brown rose, blush pink to a deep rose, lavender to a
+ * violet, peach to a dark gold. Every text colour clears 4.5:1 on --chat-bg
+ * and on the mention row; the placeholders (--chat-fg-faint) sit at 4.2 on
+ * the composer. The nick palette is Keeki's warm-weighted sweep (20 slots
+ * pink → rose → peach → gold, 12 through the rest) at oklch(0.46 0.13 h),
+ * ≥ 5:1 on the paper, the mention row and the own-message band. */
+@import "keeki.css";
+
+:root {
+	color-scheme: light;
+
+	/* Chat surface: blush paper, plum ink, a dusky violet for what is
+	 * quieter. */
+	--chat-bg: #fdf6f8;
+	--chat-fg: #2e1a33;
+	--chat-fg-muted: #6e5a85;
+	--chat-fg-faint: #7d6a93;
+	--chat-heading: #5f4b78;
+	--chat-rule: #f0dde8;
+	--chat-accent: #a8336a;
+	--chat-accent-fg: #fdf6f8;
+	--chat-accent-rule: rgb(168 51 106 / 45%);
+	--chat-highlight-bg: #f9e3ec;
+	--chat-selection: #f3cfe0;
+	--composer-bg: #f8ecf2;
+	--composer-border: #ecd8e4;
+	--window-border: #ecd8e4;
+	--window-shadow: 0 0 25px rgb(46 26 51 / 35%);
+	--menu-bg: #fdf6f8;
+	--own-bg: #f4e6f0;
+
+	/* Message semantics: joins deep rose, quits violet, notices dark gold,
+	 * /me lines a deep pink. */
+	--event-join: #b4295a;
+	--event-quit: #7c4fa8;
+	--nick-default: #8d5a4f;
+	--notice-color: #7a5c00;
+	--action-color: #a62d6e;
+
+	/* Notice boxes */
+	--note-bg: #f4e6f0;
+	--note-fg: #5f4b78;
+	--warn-bg: #fbf0dc;
+	--warn-fg: #7a5c00;
+	--error-bg: #fbe3e8;
+	--error-fg: #a3213f;
+	--ok-bg: #f9e3ec;
+	--ok-fg: #9e2a6a;
+
+	/* Tints, focus ring, scrollbars */
+	--tint-soft: rgb(168 51 106 / 5%);
+	--tint-strong: rgb(168 51 106 / 10%);
+	--accent-tint-20: rgb(184 50 122 / 16%);
+	--accent-tint-30: rgb(184 50 122 / 26%);
+	--focus-ring: rgb(184 50 122 / 40%);
+	--scrollbar-track: rgb(46 26 51 / 8%);
+	--scrollbar-thumb: rgb(46 26 51 / 35%);
+	--scrollbar-thumb-active: rgb(46 26 51 / 50%);
+
+	/* Code blocks */
+	--tok-comment: #6e5a85;
+	--tok-keyword: #b8327a;
+	--tok-string: #7a5c00;
+	--tok-number: #8d5a4f;
+	--tok-function: #9e2a6a;
+	--tok-operator: #8d5a4f;
+	--tok-punctuation: #5f4b78;
+	--tok-tag: #7c4fa8;
+	--tok-attr: #7a5c00;
+
+	/* The dividers' text: a rose red and a dark gold on paper. */
+	--sunflower-on-page: #7a5c00;
+	--rose-on-page: #b02040;
+}
+
+/* Nick colours: oklch(0.46 0.13 h), 20 slots over the warm arc 320°→80° and
+ * 12 over the rest. */
+.user.color-1 { color: #773b84; }
+.user.color-2 { color: #7c397e; }
+.user.color-3 { color: #803878; }
+.user.color-4 { color: #843671; }
+.user.color-5 { color: #87346a; }
+.user.color-6 { color: #8a3362; }
+.user.color-7 { color: #8d325a; }
+.user.color-8 { color: #8f3152; }
+.user.color-9 { color: #91314a; }
+.user.color-10 { color: #923141; }
+.user.color-11 { color: #933239; }
+.user.color-12 { color: #93332f; }
+.user.color-13 { color: #933525; }
+.user.color-14 { color: #923719; }
+.user.color-15 { color: #903906; }
+.user.color-16 { color: #8e3c00; }
+.user.color-17 { color: #8c3f00; }
+.user.color-18 { color: #894200; }
+.user.color-19 { color: #864600; }
+.user.color-20 { color: #814900; }
+.user.color-21 { color: #7d4c00; }
+.user.color-22 { color: #6a5800; }
+.user.color-23 { color: #506100; }
+.user.color-24 { color: #296818; }
+.user.color-25 { color: #006d3d; }
+.user.color-26 { color: #006e5b; }
+.user.color-27 { color: #006b74; }
+.user.color-28 { color: #006689; }
+.user.color-29 { color: #005e98; }
+.user.color-30 { color: #29559f; }
+.user.color-31 { color: #4c4c9e; }
+.user.color-32 { color: #644395; }
+
+/* style.css's mIRC values again: coffee brightens these for its dark surface. */
+.irc-fg2 { color: #001f3f; }
+.irc-fg5 { color: #85144b; }
+.irc-fg12 { color: #0074d9; }

@@ -1,3 +1,5 @@
+| `keekiblush` | "Keeki", light: the same glittering, flowered purple rail, the chat surface on blush paper in plum ink, Keeki's pastels darkened into deep rose, violet and dark gold. | `@import "keeki.css"`, then the light token values, a 32-slot oklch nick palette on the same warm-weighted sweep, and the three mIRC colours coffee brightens. |
+
 # Themes
 
 A theme is one plain CSS file in `client/themes/`, copied by webpack to `public/themes/` and loaded after `css/style.css` through the `<link id="theme">` in `index.html`. Picking a theme in Settings → Appearance rewrites that link's `href` to `themes/<name>.css` (`client/js/settings.ts`); `js/loading-error-handlers.js` does the same from localStorage before the app boots so there is no flash of the wrong theme. There is no preprocessing: a theme's rules simply cascade over the base stylesheet, and the user's custom stylesheet (Settings → Appearance) cascades over the theme.
