@@ -47,6 +47,18 @@ describe("settingsMigration", function () {
 		expect(migrateStoredSettings(stored, shell)).to.deep.equal(stored);
 	});
 
+	it("measures the stored theme against the deploy's default, not the build's", function () {
+		// boot.ts stores a branded default theme without the user picking it.
+		const branded = {...shell, theme: "princess"};
+		expect(migrateStoredSettings({theme: "princess"}, branded)).to.deep.equal({
+			theme: "princess",
+		});
+		expect(migrateStoredSettings({theme: "coffee"}, branded)).to.deep.equal({
+			theme: "coffee",
+			matchSystemAppearance: false,
+		});
+	});
+
 	it("does nothing where the new setting defaults to off", function () {
 		const stored = {fontSize: "huge", theme: "creama"};
 		expect(migrateStoredSettings(stored, web)).to.deep.equal(stored);

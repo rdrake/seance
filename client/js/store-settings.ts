@@ -10,7 +10,7 @@ import {State} from "./store";
 export function createSettingsStore(store: Store<State>) {
 	return {
 		namespaced: true,
-		state: loadSettings(),
+		state: assignStoredSettings(createState(), loadFromLocalStorage()),
 		mutations: {
 			set(state, {name, value}) {
 				state[name] = value;
@@ -20,6 +20,27 @@ export function createSettingsStore(store: Store<State>) {
 			applyAll({state}) {
 				for (const settingName in config) {
 					config[settingName].apply(store, state[settingName], true);
+				}
+			},
+			/** Settings that arrived switched on, off for an upgraded user who
+			 * already chose what they override (helpers/settingsMigration.ts).
+			 * boot.ts runs it once the deploy's default theme is known, before
+			 * applyAll; what it turns off is stored at once, so the early theme
+			 * loader (loading-error-handlers.js) reads the same answer. */
+			migrate({state, commit}, {defaultTheme}: {defaultTheme: string}) {
+				const stored = loadFromLocalStorage();
+				const migrated = migrateStoredSettings(stored, {...createState(), theme: defaultTheme});
+				let changed = false;
+
+				for (const [name, value] of Object.entries(migrated)) {
+					if (!(name in stored)) {
+						commit("set", {name, value});
+						changed = true;
+					}
+				}
+
+				if (changed) {
+					storage.set("settings", JSON.stringify(state));
 				}
 			},
 			update({state, commit}, {name, value}) {
@@ -40,11 +61,6 @@ export function createSettingsStore(store: Store<State>) {
 			},
 		},
 	};
-}
-
-function loadSettings() {
-	const defaults = createState();
-	return assignStoredSettings(defaults, migrateStoredSettings(loadFromLocalStorage(), defaults));
 }
 
 function loadFromLocalStorage() {

@@ -75,6 +75,10 @@ export async function boot(): Promise<void> {
 	// off, stamps notifyEnabled: false onto every saved network.
 	saved.migrateGlobalNotify();
 
+	// Needs the deploy's default theme, which a stored theme is measured
+	// against, and has to come before the settings are applied.
+	void store.dispatch("settings/migrate", {defaultTheme: configuration.defaultTheme});
+
 	// 'theme' setting depends on serverConfiguration.themes so
 	// settings cannot be applied before this point
 	void store.dispatch("settings/applyAll");
