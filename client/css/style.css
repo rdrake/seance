@@ -198,10 +198,14 @@ html {
 		 * seam above the logo wherever the paper is light and the rail dark
 		 * (creama, frost, keekiblush). The rail's top colour instead, eased
 		 * over the sidebar's own 160ms; the themes without --rail-bg-top keep
-		 * their sidebar colour in --body-bg-color. The query is
+		 * their sidebar colour in --body-bg-color. A swipe counts from the
+		 * moment the pane starts to move (menu-dragging), not from the
+		 * release: otherwise the seam rides above the rail for the whole
+		 * drag and flips once the finger lifts. The query is
 		 * PHONE_LAYOUT_QUERY (helpers/device.ts). */
 		@media (max-width: 768px), (max-height: 500px) and (hover: none) and (pointer: coarse) {
-			body:has(#viewport.menu-open) #status-bar-tint {
+			body:has(#viewport.menu-open) #status-bar-tint,
+			body:has(#viewport.menu-dragging) #status-bar-tint {
 				background-color: var(--rail-bg-top, var(--body-bg-color));
 			}
 		}
