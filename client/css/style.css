@@ -191,6 +191,30 @@ html {
 		#sidebar {
 			padding-top: var(--status-bar-tint-height);
 		}
+
+		/* The phone layout's open sidebar is an overlay, and the strip then
+		 * sits over the rail, not the chat: in the chat's colour it is a pale
+		 * seam above the logo wherever the paper is light and the rail dark
+		 * (creama, frost, keekiblush). Recolouring it buys nothing: iOS
+		 * samples the strip at launch and not again while the app is open
+		 * (measured on iOS 27: an orchid strip under a status bar that kept
+		 * the paper's pink), and in any one colour it is a band over the
+		 * rail's glitter and an undimmed one over the overlay; fading it out
+		 * is a flash on the first frame of every swipe. So it goes under the
+		 * page instead, from the moment the pane starts to move
+		 * (menu-dragging): still painted, covered by the sidebar's
+		 * padding-top on one side and the overlay on the other, both of
+		 * which follow the finger. #viewport is a stacking context of its own
+		 * (container-type: size), so any z-index below its auto puts the
+		 * whole page on top. The chat's header is the paper the strip was,
+		 * so the swap itself shows nothing. The query is PHONE_LAYOUT_QUERY
+		 * (helpers/device.ts). */
+		@media (max-width: 768px), (max-height: 500px) and (hover: none) and (pointer: coarse) {
+			body:has(#viewport.menu-open) #status-bar-tint,
+			body:has(#viewport.menu-dragging) #status-bar-tint {
+				z-index: -1;
+			}
+		}
 	}
 }
 
