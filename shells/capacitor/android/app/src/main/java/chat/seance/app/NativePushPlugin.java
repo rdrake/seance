@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import com.getcapacitor.Bridge;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -50,13 +51,47 @@ public class NativePushPlugin extends Plugin {
 
     private static final long REGISTER_TIMEOUT_MS = 30_000;
 
+    // Plugin methods run on Capacitor's plugin thread, the permission and
+    // distributor callbacks and PushService's reports on others: every
+    // field below is touched on the main thread only, and everything that
+    // reaches them is posted there.
+    private static final Handler main = new Handler(Looper.getMainLooper());
     /** The live instance; null between activities. */
     private static NativePushPlugin instance;
     /** A tap that arrived before the page could hear it (a cold start). */
     private static JSObject pendingTap;
     /** subscribe() calls waiting for their endpoint, by network. */
-    private static final Map<String, PluginCall> waiting = new HashMap<>();
-    private static final Handler main = new Handler(Looper.getMainLooper());
+    private static final Map<String, Waiting> waiting = new HashMap<>();
+
+    /**
+     * A subscribe() call waiting for its endpoint. Answering it lets the
+     * bridge go of it too: the permission request saved it with the bridge
+     * (Bridge.savePermissionCall), and nothing else ever releases it.
+     */
+    private static final class Waiting {
+        final PluginCall call;
+        final Bridge bridge;
+
+        Waiting(PluginCall call, Bridge bridge) {
+            this.call = call;
+            this.bridge = bridge;
+        }
+
+        void resolve(JSObject result) {
+            call.resolve(result);
+            call.release(bridge);
+        }
+
+        void reject(String message) {
+            call.reject(message);
+            call.release(bridge);
+        }
+
+        void reject(String message, Exception e) {
+            call.reject(message, e);
+            call.release(bridge);
+        }
+    }
 
     @Override
     public void load() {
@@ -101,7 +136,7 @@ public class NativePushPlugin extends Plugin {
     /** From PushService: a registration finished, with its subscription or why not. */
     static void registrationDone(String network, JSONObject subscription, String failure) {
         main.post(() -> {
-            PluginCall call = waiting.remove(network);
+            Waiting call = waiting.remove(network);
             if (call == null) {
                 // Nobody asked: the distributor renewed the endpoint by itself.
                 notifyEndpoint(network);
@@ -134,10 +169,12 @@ public class NativePushPlugin extends Plugin {
 
     @PluginMethod
     public void takeTap(PluginCall call) {
-        JSObject result = new JSObject();
-        result.put("tap", pendingTap);
-        pendingTap = null;
-        call.resolve(result);
+        main.post(() -> {
+            JSObject result = new JSObject();
+            result.put("tap", pendingTap);
+            pendingTap = null;
+            call.resolve(result);
+        });
     }
 
     @PluginMethod
@@ -164,58 +201,76 @@ public class NativePushPlugin extends Plugin {
     @PermissionCallback
     private void permissionAnswered(PluginCall call) {
         if (!"granted".equals(permission())) {
-            call.reject("denied", "denied");
+            new Waiting(call, getBridge()).reject("denied");
             return;
         }
         register(call);
     }
 
     private void register(PluginCall call) {
+        Waiting answer = new Waiting(call, getBridge());
         String network = call.getString("network");
         String vapid = call.getString("vapid");
 
         if (network == null || vapid == null) {
-            call.reject("network and vapid are required");
+            answer.reject("network and vapid are required");
             return;
         }
 
         PushSubscriptions.setName(getContext(), network, call.getString("name"));
-        call.setKeepAlive(true);
+        main.post(() -> start(network, vapid, answer));
+    }
+
+    /** On the main thread. */
+    private void start(String network, String vapid, Waiting answer) {
+        Waiting previous = waiting.put(network, answer);
+        if (previous != null) {
+            previous.reject("superseded");
+        }
+
+        boolean renewing = PushSubscriptions.has(getContext(), network);
+
+        // Armed before the distributor is chosen: the connector keeps the
+        // chooser's callback in one static field (LinkActivity), which a
+        // second chooser replaces and a chooser closed without a result
+        // never calls, so the answer may never come.
+        main.postDelayed(() -> {
+            if (waiting.get(network) != answer) {
+                return; // answered, superseded or withdrawn
+            }
+            waiting.remove(network);
+            answer.reject("timed out waiting for the push endpoint");
+            // A first registration the page has given up on would be owned
+            // by nothing if it completed later: drop it. A renewal is left
+            // to finish; its endpoint reaches the page as a renewal
+            // (`endpoint`), with the key it was made for.
+            if (!renewing) {
+                UnifiedPush.unregister(getContext(), network);
+                PushSubscriptions.remove(getContext(), network);
+            }
+        }, REGISTER_TIMEOUT_MS);
 
         UnifiedPush.tryUseCurrentOrDefaultDistributor(getActivity(), ok -> {
-            if (!ok) {
-                call.reject("no UnifiedPush distributor chosen");
-                return Unit.INSTANCE;
-            }
-
-            PluginCall previous = waiting.put(network, call);
-            if (previous != null) {
-                previous.reject("superseded");
-            }
-
-            // The VAPID key binds the endpoint to this network's server:
-            // FCM only accepts pushes signed with it.
-            boolean renewing = PushSubscriptions.has(getContext(), network);
-            PushSubscriptions.setVapid(getContext(), network, vapid);
-            UnifiedPush.register(getContext(), network, null, vapid.replace("=", ""));
-
-            main.postDelayed(() -> {
-                if (waiting.get(network) == call) {
-                    waiting.remove(network);
-                    call.reject("timed out waiting for the push endpoint");
-                    // A first registration the page has given up on would
-                    // be owned by nothing if it completed later: drop it. A
-                    // renewal is left to finish; its endpoint reaches the
-                    // page as a renewal (`endpoint`), with the key it was
-                    // made for.
-                    if (!renewing) {
-                        UnifiedPush.unregister(getContext(), network);
-                        PushSubscriptions.remove(getContext(), network);
-                    }
-                }
-            }, REGISTER_TIMEOUT_MS);
+            main.post(() -> distributorChosen(network, vapid, answer, ok));
             return Unit.INSTANCE;
         });
+    }
+
+    /** On the main thread. */
+    private void distributorChosen(String network, String vapid, Waiting answer, boolean ok) {
+        if (waiting.get(network) != answer) {
+            return; // timed out, superseded or withdrawn meanwhile
+        }
+        if (!ok) {
+            waiting.remove(network);
+            answer.reject("no UnifiedPush distributor chosen");
+            return;
+        }
+
+        // The VAPID key binds the endpoint to this network's server: FCM
+        // only accepts pushes signed with it.
+        PushSubscriptions.setVapid(getContext(), network, vapid);
+        UnifiedPush.register(getContext(), network, null, vapid.replace("=", ""));
     }
 
     @PluginMethod
@@ -247,7 +302,7 @@ public class NativePushPlugin extends Plugin {
             UnifiedPush.unregister(getContext(), network);
             PushService.cancelAll(getContext(), network);
             main.post(() -> {
-                PluginCall pending = waiting.remove(network);
+                Waiting pending = waiting.remove(network);
                 if (pending != null) {
                     pending.reject("unsubscribed");
                 }
