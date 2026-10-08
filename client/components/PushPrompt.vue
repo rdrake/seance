@@ -7,7 +7,9 @@
 		<div
 			v-if="webpush.pushPrompt.visible"
 			id="push-prompt"
+			ref="dialog"
 			:class="webpush.pushPrompt.kind"
+			:data-network="webpush.pushPrompt.network"
 			role="dialog"
 			aria-modal="true"
 		>
@@ -94,7 +96,7 @@
 </style>
 
 <script lang="ts">
-import {computed, defineComponent, onMounted, onUnmounted} from "vue";
+import {computed, defineComponent, onMounted, onUnmounted, ref} from "vue";
 import eventbus from "../js/eventbus";
 import {useStore} from "../js/store";
 import webpush from "../js/webpush";
@@ -134,13 +136,31 @@ export default defineComponent({
 			};
 		});
 
-		const no = () => webpush.declinePrompt();
-		const never = () => webpush.neverPrompt();
-		const yes = () => webpush.acceptPrompt();
+		const dialog = ref<HTMLElement | null>(null);
+
+		// An answer is for the prompt on screen: the network its rendered
+		// dialog names, not whatever the state says by the time the event is
+		// handled. webpush.ts ignores it when that is no longer the open one.
+		const answer = (kind: "yes" | "no" | "never") =>
+			webpush.answerPrompt(kind, dialog.value?.dataset.network);
+
+		// The second click of a double-click (`detail` counts the clicks) is
+		// not an answer: once the first has answered, the next network's
+		// prompt may stand where this one was, and the user never saw it.
+		// Keyboard activation reports 0.
+		const clicked = (kind: "yes" | "no" | "never") => (event: MouseEvent) => {
+			if (event.detail <= 1) {
+				answer(kind);
+			}
+		};
+
+		const no = clicked("no");
+		const never = clicked("never");
+		const yes = clicked("yes");
 
 		const onEscape = (layer: string | null) => {
 			if (layer === "push-prompt" && webpush.pushPrompt.visible) {
-				no();
+				answer("no");
 			}
 		};
 
@@ -154,6 +174,7 @@ export default defineComponent({
 
 		return {
 			webpush,
+			dialog,
 			target,
 			no,
 			never,
