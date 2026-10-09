@@ -855,20 +855,30 @@ html[data-touch-grass="on"] #viewport {
 	opacity: 0;
 }
 
-#touch-grass-hint {
+#touch-grass-exit {
 	position: fixed;
 	left: 50%;
 	bottom: calc(env(safe-area-inset-bottom, 0px) + 2.5rem);
 	transform: translateX(-50%);
 	z-index: 1000;
 	padding: 0.5rem 1rem;
+	border: 0;
 	border-radius: 999px;
 	background: rgb(0 0 0 / 45%);
 	color: #fff;
+	font: inherit;
 	font-size: 0.875rem;
 	white-space: nowrap;
 	pointer-events: none;
 	animation: touch-grass-hint 0.6s ease 0.3s both;
+	transition: opacity 0.6s ease;
+}
+
+/* Out of sight after the hint's time, still focused for a screen reader or a
+ * keyboard (any key brings the app back). */
+#touch-grass-exit.quiet {
+	animation: none;
+	opacity: 0;
 }
 
 @keyframes touch-grass-hint {

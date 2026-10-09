@@ -16,11 +16,15 @@ function fakeEnv(opts: {wakeLock?: boolean; visible?: boolean} = {}) {
 	const timers: Array<{at: number; fn: () => void; live: boolean}> = [];
 	const listeners = new Map<string, Set<(event: Event) => void>>();
 	const locks: string[] = [];
+	let lastActivate: (() => void) | null = null;
 
 	const env: TouchGrassEnv = {
 		mark: (state) => log.push(`mark ${state}`),
 		watch: (watching) => log.push(`watch ${watching}`),
-		hint: (shown) => log.push(`hint ${shown}`),
+		control(state, activate) {
+			log.push(`control ${state}`);
+			lastActivate = activate;
+		},
 		listen(type, fn) {
 			if (!listeners.has(type)) {
 				listeners.set(type, new Set());
@@ -83,20 +87,20 @@ function fakeEnv(opts: {wakeLock?: boolean; visible?: boolean} = {}) {
 
 	const count = (type: string) => listeners.get(type)?.size ?? 0;
 	const setVisible = (v: boolean) => (visible = v);
-	return {env, log, fire, advance, count, locks, setVisible};
+	return {env, log, fire, advance, count, locks, setVisible, activate: () => lastActivate?.()};
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("touch grass (client/js/touchGrass.ts)", function () {
-	it("hides the app, tells the host and shows the hint, which goes after HINT_MS", function () {
+	it("hides the app, tells the host and puts up the way out, which goes quiet after HINT_MS", function () {
 		const f = fakeEnv();
 		const tg = createTouchGrass(f.env);
 		tg.enter();
 		expect(tg.state).to.equal("on");
-		expect(f.log).to.deep.equal(["mark on", "watch true", "hint true"]);
+		expect(f.log).to.deep.equal(["mark on", "watch true", "control hint"]);
 		f.advance(HINT_MS);
-		expect(f.log.at(-1)).to.equal("hint false");
+		expect(f.log.at(-1)).to.equal("control quiet");
 	});
 
 	it("ignores the press that opened it, then any press or key ends it and is swallowed", function () {
@@ -122,7 +126,7 @@ describe("touch grass (client/js/touchGrass.ts)", function () {
 		f.advance(ARM_MS);
 		f.log.length = 0;
 		f.fire("pointerdown");
-		expect(f.log).to.deep.equal(["hint false", "mark leaving", "watch false"]);
+		expect(f.log).to.deep.equal(["control null", "mark leaving", "watch false"]);
 		f.advance(LEAVE_MS - 1);
 		expect(tg.state).to.equal("leaving");
 		f.advance(1);
@@ -175,6 +179,15 @@ describe("touch grass (client/js/touchGrass.ts)", function () {
 		tg.leave(); // before the request settles
 		await flush();
 		expect(f.locks).to.deep.equal(["released 0"]);
+	});
+
+	it("its button ends it: the way out a screen reader or a keyboard takes", function () {
+		const f = fakeEnv();
+		const tg = createTouchGrass(f.env);
+		tg.enter();
+		f.activate();
+		expect(tg.state).to.equal("leaving");
+		expect(f.log).to.include("control null");
 	});
 
 	it("works without a wake lock", function () {

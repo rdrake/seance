@@ -10,14 +10,19 @@ import {themeScene} from "./themeScene";
  * The press that ends it must not land on the app it uncovers: the app comes
  * back at once but takes no pointer for LEAVE_MS (`leaving`), so the click,
  * the focus and the long press that follow a tap all fall on the scene, and
- * the key that ends it is swallowed. Vue-free; the document and the host are
- * injected so mocha drives it with fakes.
+ * the key that ends it is swallowed.
+ *
+ * It must work without sight or a pointer: while it lasts the hidden app is
+ * inert, and a real button — "Back to the chat", the hint's text on screen —
+ * holds the focus, so a screen reader lands on the way out and Enter, Space
+ * or a double tap takes it; the focus goes back where it was after. Vue-free;
+ * the document and the host are injected so mocha drives it with fakes.
  */
 
 /** How long after the press that ends it the app still ignores the pointer. */
 export const LEAVE_MS = 450;
 
-/** How long the "tap to come back" hint stays up. */
+/** How long the "tap to come back" hint shows before its button goes quiet (still there, still focused). */
 export const HINT_MS = 3500;
 
 /** The press that opened it (the menu item) must not close it again. */
@@ -34,8 +39,12 @@ export interface TouchGrassEnv {
 	mark(state: "on" | "leaving" | null): void;
 	/** Tells the scene host (themeScene.setWatching). */
 	watch(watching: boolean): void;
-	/** Shows the hint, or takes it down. */
-	hint(shown: boolean): void;
+	/**
+	 * The way out: `hint` puts it up (the hidden app inert, the button focused),
+	 * `quiet` keeps it but out of sight, `null` takes it down and gives the
+	 * focus back. `activate` is what the button does.
+	 */
+	control(state: "hint" | "quiet" | null, activate: () => void): void;
 	/** Adds a capturing window listener; returns its removal. */
 	listen(type: string, fn: (event: Event) => void): () => void;
 	after(ms: number, fn: () => void): () => void;
@@ -96,7 +105,7 @@ export function createTouchGrass(env: TouchGrassEnv): TouchGrass {
 
 		hintTimer?.();
 		hintTimer = undefined;
-		env.hint(false);
+		env.control(null, () => undefined);
 		releaseLock();
 	};
 
@@ -147,10 +156,10 @@ export function createTouchGrass(env: TouchGrassEnv): TouchGrass {
 			armedAt = env.now();
 			env.mark("on");
 			env.watch(true);
-			env.hint(true);
+			env.control("hint", leave);
 			hintTimer = env.after(HINT_MS, () => {
 				hintTimer = undefined;
-				env.hint(false);
+				env.control("quiet", leave);
 			});
 			takeLock();
 
@@ -174,7 +183,9 @@ export function createTouchGrass(env: TouchGrassEnv): TouchGrass {
 
 let instance: TouchGrass | null = null;
 
-const HINT_ID = "touch-grass-hint";
+const EXIT_ID = "touch-grass-exit";
+// What had the focus when it began, to give it back.
+let returnFocus: HTMLElement | null = null;
 
 /** The app's own, on the real document and the real scene host. */
 export function touchGrass(): TouchGrass {
@@ -193,21 +204,48 @@ export function touchGrass(): TouchGrass {
 		watch(watching) {
 			themeScene.setWatching(watching);
 		},
-		hint(shown) {
-			document.getElementById(HINT_ID)?.remove();
+		control(state, activate) {
+			const viewport = document.getElementById("viewport");
+			let button = document.getElementById(EXIT_ID) as HTMLButtonElement | null;
 
-			if (!shown) {
+			if (state === null) {
+				button?.remove();
+
+				if (viewport) {
+					viewport.inert = false;
+				}
+
+				if (returnFocus?.isConnected) {
+					returnFocus.focus({preventScroll: true});
+				}
+
+				returnFocus = null;
 				return;
 			}
 
-			const el = document.createElement("div");
-			el.id = HINT_ID;
-			el.setAttribute("role", "status");
-			el.textContent =
-				document.documentElement.dataset.input === "touch"
-					? "Tap anywhere to come back"
-					: "Click or press any key to come back";
-			document.body.append(el);
+			if (!button) {
+				returnFocus =
+					document.activeElement instanceof HTMLElement ? document.activeElement : null;
+				button = document.createElement("button");
+				button.id = EXIT_ID;
+				button.type = "button";
+				button.setAttribute("aria-label", "Back to the chat");
+				button.textContent =
+					document.documentElement.dataset.input === "touch"
+						? "Tap anywhere to come back"
+						: "Click or press any key to come back";
+				// A screen reader's activation can arrive as a bare click.
+				button.addEventListener("click", activate);
+				document.body.append(button);
+
+				if (viewport) {
+					viewport.inert = true;
+				}
+
+				button.focus({preventScroll: true});
+			}
+
+			button.classList.toggle("quiet", state === "quiet");
 		},
 		listen(type, fn) {
 			const target = type === "visibilitychange" ? document : window;
