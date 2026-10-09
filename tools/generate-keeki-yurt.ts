@@ -2,10 +2,10 @@
 // The yurt at the foot of the Keeki rails (client/themes/keeki.css,
 // keekiblush.css): the ps theme's yurt (client/js/scenes/ps/plains.ts
 // yurtSvg) redrawn as a still, opaque picture in the rail's own colours —
-// every part a mix of the rail's foot colour toward a tint, so it reads as
-// the rail lifted a step and nothing behind it shows through. Keeki is the
-// night (a warm door; keeki.css adds the smoke), Keeki Blush the day (a dark
-// doorway).
+// every part a mix of the rail's foot colour, so nothing behind it shows
+// through: Keeki's lifted a step toward rose gold, Keeki Blush's sunk a step
+// toward the plum ink. Keeki is the night (a warm door; keeki.css adds the
+// smoke), Keeki Blush the day (a dark doorway).
 //
 //   npx tsx tools/generate-keeki-yurt.ts
 //
@@ -72,13 +72,31 @@ const keeki = palette(
 	mix(KEEKI_BASE, "#ffb86a", 0.32),
 	mix(KEEKI_BASE, "#ffb86a", 0.12)
 );
-const blush = palette(
-	BLUSH_BASE,
-	"#f6e1ec",
-	"#ff7bc8",
-	mix(BLUSH_BASE, "#2e1a33", 0.4),
-	mix(BLUSH_BASE, "#f6e1ec", 0.16)
-);
+// Keeki Blush's rail is a mid lavender under white text, so its yurt is drawn a
+// step below the rail rather than above it: the rail's rows scroll over it,
+// and white on a lifted felt fell to 3.4:1 where every part here keeps it at
+// 8:1 or more. The lines that must show on the dark (the door's carving, the
+// logs' rings) go toward the paper instead.
+const PLUM = "#2e1a33";
+const PAPER = "#f6e1ec";
+const blush: Palette = {
+	shadow: mix(BLUSH_BASE, PLUM, 0.45),
+	feltEdge: mix(BLUSH_BASE, PLUM, 0.26),
+	felt: mix(BLUSH_BASE, PLUM, 0.18),
+	roofTop: mix(BLUSH_BASE, PLUM, 0.1),
+	roofFoot: mix(BLUSH_BASE, PLUM, 0.24),
+	band: mix(BLUSH_BASE, PLUM, 0.34),
+	mark: mix(BLUSH_BASE, "#ff7bc8", 0.42),
+	rope: mix(BLUSH_BASE, PLUM, 0.36),
+	rib: mix(BLUSH_BASE, PLUM, 0.3),
+	crown: mix(BLUSH_BASE, PLUM, 0.34),
+	pipe: mix(BLUSH_BASE, PLUM, 0.2),
+	door: mix(BLUSH_BASE, PLUM, 0.55),
+	doorOrn: mix(BLUSH_BASE, PAPER, 0.14),
+	stone: mix(BLUSH_BASE, PLUM, 0.22),
+	wood: mix(BLUSH_BASE, PLUM, 0.28),
+	grain: mix(BLUSH_BASE, PAPER, 0.16),
+};
 
 /** The woodpile beside the wall, end on: three logs, two, one. */
 const LOGS: Array<[number, number]> = [
