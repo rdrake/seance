@@ -3477,8 +3477,9 @@ describe("the ps theme's birds (plan 3 task 6, spec §5.4: the user's N2, D1 buz
 	it("shows each bird through a window on its kind's wing strip, the alpha on the whole strip", function () {
 		expect(valueOf(`${S} .ps-bird`, "overflow")).to.equal("hidden");
 		expect(valueOf(`${S} .ps-wings`, "opacity")).to.equal("var(--ps-bird-alpha, 0.8)");
-		// 30 frames (birds.ts WING_FRAMES) of 34 units, the window showing 32 of each.
-		expect(valueOf(`${S} .ps-wings`, "width")).to.equal("calc(100% * 30 * 34 / 32)");
+		// 6 × 5 cells of 34 × 22 units (birds.ts), the window showing 32 × 20 of each.
+		expect(valueOf(`${S} .ps-wings`, "width")).to.equal("calc(100% * 6 * 34 / 32)");
+		expect(valueOf(`${S} .ps-wings`, "height")).to.equal("calc(100% * 5 * 22 / 20)");
 		expect(valueOf(`${S} .ps-wings`, "will-change")).to.equal("transform");
 		expect(valueOf(`${S} .ps-wings-goose`, "background-image")).to.equal(
 			"var(--ps-wings-goose, none)"

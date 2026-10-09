@@ -10,6 +10,9 @@ import {
 	wingFrame,
 	wingSprite,
 	WING_CELL,
+	WING_CELL_H,
+	WING_COLS,
+	WING_ROWS,
 	WING_FRAMES,
 	WING_STRIP,
 } from "../../../client/js/scenes/ps/birds";
@@ -407,7 +410,7 @@ describe("ps birds: the skeins (skeinsMarkup, the mockup's bird() and three skei
 		expect(goose.match(/<g transform/g)).to.have.length(WING_FRAMES);
 		expect(goose).to.include('stop-color="#111111"').and.include('stop-color="#333333"');
 		expect(goose).to.include('fill="#222222" opacity=".55"');
-		expect(goose).to.include(`viewBox="0 0 ${WING_FRAMES * WING_CELL} 20"`);
+		expect(goose).to.include(`viewBox="0 0 ${6 * WING_CELL} ${5 * WING_CELL_H}"`);
 	});
 
 	it("starts the strip on the up pose, and the downstroke is the quicker half", function () {
@@ -421,9 +424,9 @@ describe("ps birds: the skeins (skeinsMarkup, the mockup's bird() and three skei
 		expect(lowest).to.equal(9);
 	});
 
-	it("holds the strip's frame count in step with ps.css's", function () {
+	it("holds the sprite's grid in step with ps.css's: 30 frames in 6 × 5 cells of 34 × 22", function () {
 		expect(WING_FRAMES).to.equal(30);
-		expect(WING_CELL).to.equal(34);
+		expect([WING_COLS, WING_ROWS, WING_CELL, WING_CELL_H]).to.deep.equal([6, 5, 34, 22]);
 	});
 
 	it("shows the frame the old SMIL keyframes give at a time: beats, then the glide, then up again", function () {
