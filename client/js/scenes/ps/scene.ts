@@ -34,8 +34,7 @@ import {
 	createWings,
 	dayBirdsMarkup,
 	skeinsMarkup,
-	WING_COLS,
-	WING_ROWS,
+	WING_FRAMES,
 	wingSprite,
 	type WingBird,
 } from "./birds";
@@ -560,9 +559,7 @@ function skeinWings(root: HTMLElement) {
 		return {
 			beat: {period, flaps, glide, phase},
 			show(frame) {
-				const x = (-100 * (frame % WING_COLS)) / WING_COLS;
-				const y = (-100 * Math.floor(frame / WING_COLS)) / WING_ROWS;
-				el.style.transform = `translate(${x}%, ${y}%)`;
+				el.style.transform = `translateX(${(-100 * frame) / WING_FRAMES}%)`;
 			},
 		};
 	});

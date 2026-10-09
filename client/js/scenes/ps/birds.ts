@@ -316,22 +316,11 @@ export function wingFrame(w: Wingbeat, t: number): number {
 	return Math.round((u - Math.floor(u)) * BEAT_FRAMES) % BEAT_FRAMES;
 }
 
-/**
- * A frame's cell in the sprite: the bird's 32 × 20 units and a gutter, so a
- * scaled-up frame never bleeds into the next. The cells are a grid of
- * WING_COLS columns, not one strip: a 30-frame strip was 4080 css px long,
- * which WebKit tiles and paints a tile at a time as the window moves along
- * it — the sprite's paths and gradient redrawn every step in the GPU
- * process (40 % of the iPhone's). A grid is a layer small enough to keep
- * one backing store, painted once.
- */
+/** A frame's width in the strip: the bird's 32 units and a gutter, so a scaled-up frame never bleeds into the next. */
 export const WING_CELL = 34;
-export const WING_CELL_H = 22;
-export const WING_COLS = 6;
-export const WING_ROWS = Math.ceil(WING_FRAMES / WING_COLS);
 
 /**
- * Every pose of one kind of bird in a grid, in the hour's colours: the
+ * Every pose of one kind of bird side by side, in the hour's colours: the
  * far wing in the wing colour at 0.55 and a little up and behind, the body
  * two-tone (the back in the ink, the belly catching the light from below),
  * the near wing over it — the mockup's bird, drawn once instead of morphed.
@@ -340,20 +329,14 @@ export const WING_ROWS = Math.ceil(WING_FRAMES / WING_COLS);
 export function wingSprite(kind: Kind, ink: string, wing: string, belly: string): string {
 	const cells = WING_STRIP.map(
 		(f, i) =>
-			`<g transform="translate(${(i % WING_COLS) * WING_CELL} ${
-				Math.floor(i / WING_COLS) * WING_CELL_H + f.lift
-			})">` +
+			`<g transform="translate(${i * WING_CELL} ${f.lift})">` +
 			`<path fill="${wing}" opacity=".55" transform="translate(1.3 -.9)" d="${f.d}"/>` +
 			`<path fill="url(#b)" d="${BODY[kind]}"/>` +
 			`<path fill="${wing}" d="${f.d}"/></g>`
 	).join("");
 	return (
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WING_COLS * WING_CELL} ${
-			WING_ROWS * WING_CELL_H
-		}" ` +
-		`width="${WING_COLS * WING_CELL}" height="${
-			WING_ROWS * WING_CELL_H
-		}" preserveAspectRatio="none">` +
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WING_FRAMES * WING_CELL} 20" ` +
+		`width="${WING_FRAMES * WING_CELL}" height="20" preserveAspectRatio="none">` +
 		`<defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1">` +
 		`<stop offset=".3" stop-color="${ink}"/><stop offset="1" stop-color="${belly}"/>` +
 		`</linearGradient></defs>${cells}</svg>`
