@@ -12,13 +12,14 @@ describe("themeAppearance", function () {
 			["coffee", "creama"],
 			["cobalt", "frost"],
 			["princess_", "princess"],
+			["keeki", "keekiblush"],
 			["morning", "day"],
 		]) {
 			expect(themePartner(a)).to.equal(b);
 			expect(themePartner(b)).to.equal(a);
 		}
 
-		expect(themePartner("keeki")).to.equal(null);
+		expect(themePartner("molokai")).to.equal(null);
 	});
 
 	it("shows the chosen theme when not following the system", function () {
@@ -33,18 +34,20 @@ describe("themeAppearance", function () {
 		expect(effectiveTheme("frost", true, true)).to.equal("cobalt");
 		expect(effectiveTheme("princess_", true, false)).to.equal("princess");
 		expect(effectiveTheme("day", true, true)).to.equal("morning");
+		expect(effectiveTheme("keeki", true, false)).to.equal("keekiblush");
+		expect(effectiveTheme("keekiblush", true, true)).to.equal("keeki");
 	});
 
 	it("names every pair in the settings hint, dark first", function () {
 		const label = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
 		expect(describeThemePairs(label)).to.equal(
-			"Coffee/Creama, Cobalt/Frost, Princess_/Princess and Morning/Day"
+			"Coffee/Creama, Cobalt/Frost, Princess_/Princess, Keeki/Keekiblush and Morning/Day"
 		);
-		expect(THEME_PAIRS).to.have.length(4);
+		expect(THEME_PAIRS).to.have.length(5);
 	});
 
 	it("leaves a theme without a partner alone", function () {
-		expect(effectiveTheme("keeki", true, false)).to.equal("keeki");
+		expect(effectiveTheme("molokai", true, false)).to.equal("molokai");
 		expect(effectiveTheme("gates", true, true)).to.equal("gates");
 	});
 });
