@@ -34,7 +34,8 @@ type Palette = Record<
 	| "door"
 	| "doorOrn"
 	| "stone"
-	| "wood",
+	| "wood"
+	| "grain",
 	string
 >;
 
@@ -55,7 +56,8 @@ function palette(base: string, tint: string, mark: string, door: string, doorOrn
 		door,
 		doorOrn,
 		stone: mix(base, tint, 0.16),
-		wood: mix(base, tint, 0.2),
+		wood: mix(base, tint, 0.26),
+		grain: mix(base, tint, 0.42),
 	};
 }
 
@@ -77,6 +79,16 @@ const blush = palette(
 	mix(BLUSH_BASE, "#f6e1ec", 0.16)
 );
 
+/** The woodpile beside the wall, end on: three logs, two, one. */
+const LOGS: Array<[number, number]> = [
+	[10, 147],
+	[18.5, 147],
+	[27, 147],
+	[14.25, 139.8],
+	[22.75, 139.8],
+	[18.5, 132.6],
+];
+
 const WALL = "M38,150 L38,98 Q120,90 202,98 L202,150 Q120,158 38,150 Z";
 
 function svg(p: Palette): string {
@@ -87,13 +99,18 @@ function svg(p: Palette): string {
 		)
 		.join("");
 	return (
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 18 212 150">` +
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 18 226 150">` +
 		`<defs>` +
 		`<linearGradient id="w" x1="0" x2="1"><stop offset="0" stop-color="${p.feltEdge}"/><stop offset=".48" stop-color="${p.felt}"/><stop offset="1" stop-color="${p.feltEdge}"/></linearGradient>` +
 		`<linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.roofTop}"/><stop offset="1" stop-color="${p.roofFoot}"/></linearGradient>` +
 		`</defs>` +
 		`<ellipse cx="120" cy="153" rx="98" ry="6" fill="${p.shadow}"/>` +
-		`<g fill="${p.wood}"><rect x="20" y="136" width="22" height="5" rx="2.5"/><rect x="22" y="131" width="19" height="5" rx="2.5"/><rect x="25" y="126" width="13" height="5" rx="2.5"/></g>` +
+		`<g fill="${p.wood}">${LOGS.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4"/>`).join(
+			""
+		)}</g>` +
+		`<g fill="none" stroke="${p.grain}" stroke-width=".8">${LOGS.map(
+			([x, y]) => `<circle cx="${x}" cy="${y}" r="2.2"/>`
+		).join("")}</g>` +
 		`<g fill="${p.stone}"><ellipse cx="100" cy="160" rx="5" ry="2.2"/><ellipse cx="140" cy="164" rx="5.5" ry="2.4"/></g>` +
 		`<path d="${WALL}" fill="url(#w)"/>` +
 		`<g fill="none" stroke="${p.rope}" stroke-width="1.3"><path d="M38,114 Q120,121 202,114"/><path d="M38,130 Q120,137 202,130"/><path d="M38,145 Q120,152 202,145"/></g>` +
@@ -109,6 +126,37 @@ function svg(p: Palette): string {
 	);
 }
 
+/**
+ * The smoke from the pipe, for the night (Keeki) only, as the ps yurt smokes
+ * only at night: the ps theme's five puffs (plains.ts PUFFS, ps.css
+ * ps-smoke-rise) as SMIL in one picture, since the rail has no element to
+ * spare for each. One unit is 1/16 rem; the pipe's top is (40, 116).
+ */
+const PUFFS = [
+	{d: 6.2, dl: 0, w: 9},
+	{d: 7.1, dl: 1.5, w: 11},
+	{d: 6.6, dl: 3, w: 8},
+	{d: 7.6, dl: 4.4, w: 12},
+	{d: 6.9, dl: 5.6, w: 9},
+];
+
+function smokeSvg(colour: string): string {
+	const puffs = PUFFS.map(
+		({d, dl, w}) =>
+			`<circle r="${w / 2}" fill="url(#s)" opacity="0">` +
+			`<animateTransform attributeName="transform" type="translate" values="0 0;34 -96" dur="${d}s" begin="${dl}s" repeatCount="indefinite"/>` +
+			`<animateTransform attributeName="transform" type="scale" additive="sum" values=".45;3.1" dur="${d}s" begin="${dl}s" repeatCount="indefinite"/>` +
+			`<animate attributeName="opacity" values="0;.9;0" keyTimes="0;.12;1" dur="${d}s" begin="${dl}s" repeatCount="indefinite"/>` +
+			`</circle>`
+	).join("");
+	return (
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 120">` +
+		`<defs><radialGradient id="s"><stop offset="0" stop-color="${colour}"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient></defs>` +
+		`<g transform="translate(40 116)" opacity=".45">${puffs}</g>` +
+		`</svg>`
+	);
+}
+
 // The encoding keeki.css's other drawings use: double quotes become single,
 // and only the characters a CSS url("…") data URI cannot carry are escaped.
 const dataUri = (s: string) =>
@@ -120,4 +168,5 @@ const dataUri = (s: string) =>
 		.replaceAll(">", "%3E")}")`;
 
 console.log(`keeki:\t--keeki-yurt: ${dataUri(svg(keeki))};`);
+console.log(`smoke:\t--keeki-smoke: ${dataUri(smokeSvg(mix(KEEKI_BASE, "#f0e2f6", 0.75)))};`);
 console.log(`blush:\t--keeki-yurt: ${dataUri(svg(blush))};`);
