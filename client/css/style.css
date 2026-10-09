@@ -591,6 +591,7 @@ p {
 .context-menu-edit::before { content: "\f303"; /* https://fontawesome.com/icons/pencil-alt?style=solid */ }
 .context-menu-clear-history::before { content: "\f1f8"; /* https://fontawesome.com/icons/trash?style=solid */ }
 .context-menu-mute::before { content: "\f6a9"; /* https://fontawesome.com/v5.15/icons/volume-mute?style=solid */ }
+.context-menu-touch-grass::before { content: "\f4d8"; /* https://fontawesome.com/v5.15/icons/seedling?style=solid */ }
 .context-menu-media-host::before { content: "\f0ac"; /* https://fontawesome.com/icons/globe?style=solid */ }
 .context-menu-media-account::before { content: "\f007"; /* https://fontawesome.com/icons/user?style=solid */ }
 .context-menu-media-channel::before { content: "\f292"; /* https://fontawesome.com/icons/hashtag?style=solid */ }
@@ -840,6 +841,39 @@ p {
 	container-type: size;
 	/* stylelint-disable-next-line property-no-unknown */
 	container-name: viewport;
+	transition: opacity 0.6s ease;
+}
+
+/* Touch grass (touchGrass.ts): the app fades away over a theme's scene until
+ * a tap or a key brings it back; it takes no pointer while hidden or for the
+ * moment after (leaving), so the press that ends it never lands on it. */
+html[data-touch-grass] #viewport {
+	pointer-events: none;
+}
+
+html[data-touch-grass="on"] #viewport {
+	opacity: 0;
+}
+
+#touch-grass-hint {
+	position: fixed;
+	left: 50%;
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 2.5rem);
+	transform: translateX(-50%);
+	z-index: 1000;
+	padding: 0.5rem 1rem;
+	border-radius: 999px;
+	background: rgb(0 0 0 / 45%);
+	color: #fff;
+	font-size: 0.875rem;
+	white-space: nowrap;
+	pointer-events: none;
+	animation: touch-grass-hint 0.6s ease 0.3s both;
+}
+
+@keyframes touch-grass-hint {
+	from { opacity: 0; }
+	to { opacity: 1; }
 }
 
 #form button,

@@ -63,6 +63,12 @@ export interface SceneHost {
 	setMotion(motion: SceneMotion): void;
 	setView(view: SceneView): void;
 	/**
+	 * Touch grass (touchGrass.ts): the app is hidden and the scene is all there
+	 * is to watch, so it counts as attended without input and shows no query's
+	 * frost — nothing private is on screen.
+	 */
+	setWatching(watching: boolean): void;
+	/**
 	 * Re-attempts the load of the currently-asked theme's scene, if its last
 	 * load failed and nothing has replaced it since. A no-op otherwise (nothing
 	 * failed, or a later `setTheme` moved on). Callers that do not need to wait
@@ -83,6 +89,9 @@ export function createSceneHost(opts: {
 	// is the one the scene is given.
 	let attention = state.attended;
 	let pauseWhenAway = true;
+	let watching = false;
+	// The view the app reports; state.view is the one the scene is given.
+	let view = state.view;
 	let asked: string | null = null;
 	let mounted: string | null = null;
 	let handle: SceneHandle | null = null;
@@ -157,7 +166,7 @@ export function createSceneHost(opts: {
 
 	const setAttended = (attended: boolean): void => {
 		attention = attended;
-		const given = attention || !pauseWhenAway;
+		const given = attention || !pauseWhenAway || watching;
 
 		if (state.attended !== given) {
 			state.attended = given;
@@ -218,13 +227,28 @@ export function createSceneHost(opts: {
 			}
 		},
 
-		setView(view: SceneView): void {
-			if (state.view === view) {
+		setView(next: SceneView): void {
+			view = next;
+			const given = watching ? "channel" : view;
+
+			if (state.view === given) {
 				return;
 			}
 
-			state.view = view;
+			state.view = given;
 			handle?.update({...state});
+		},
+
+		setWatching(next: boolean): void {
+			watching = next;
+			const given = watching ? "channel" : view;
+			const attended = attention || !pauseWhenAway || watching;
+
+			if (state.view !== given || state.attended !== attended) {
+				state.view = given;
+				state.attended = attended;
+				handle?.update({...state});
+			}
 		},
 
 		retry,

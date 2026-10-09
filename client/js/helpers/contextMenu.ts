@@ -7,6 +7,8 @@ import {switchToChannel} from "../router";
 import {TypedStore} from "../store";
 import useCloseChannel from "../hooks/use-close-channel";
 import {ChanType} from "../../../shared/types/chan";
+import {themeScene} from "../themeScene";
+import {touchGrass} from "../touchGrass";
 
 type BaseContextMenuItem = {
 	label: string;
@@ -219,6 +221,18 @@ export function generateChannelContextMenu(
 			class: "mute",
 			action() {
 				setMuteStatus(channel.id, !channel.muted);
+			},
+		});
+	}
+
+	// A theme with a scene of its own: hide the app and watch it.
+	if (themeScene.mounted) {
+		items.push({
+			label: "Touch grass",
+			type: "item",
+			class: "touch-grass",
+			action() {
+				touchGrass().enter();
 			},
 		});
 	}

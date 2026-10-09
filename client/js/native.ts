@@ -5,6 +5,7 @@
 // viewport) talk to; this file is free to pull in the store and the router.
 
 import {leavePage, onStandalonePage} from "./router";
+import {leaveTouchGrass} from "./touchGrass";
 import {closeOpenImage} from "./helpers/imageViewer";
 import {reconnectAll} from "./irc/manager";
 import {isPhoneLayout} from "./helpers/device";
@@ -228,6 +229,10 @@ export function installNativeHooks(): void {
 	// kept one deep (router.ts). Without the middle steps a back press meant
 	// to close a menu backgrounded the app, menu and all.
 	nativeListen("App", "backButton", () => {
+		if (leaveTouchGrass()) {
+			return;
+		}
+
 		if (closeOpenImage()) {
 			return;
 		}
