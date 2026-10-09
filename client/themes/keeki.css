@@ -277,7 +277,8 @@
 	content: "❀ New messages ❀";
 }
 
-/* The yurt stands on the footer, in front of the flowers and the glitter.
+/* The yurt stands on the footer at the rail's right, clear of the channel
+ * names, which start at the left, and in front of the flowers and the glitter.
  * It and the smoke are placed against #sidebar, the containing block its
  * contain: paint makes, and painted in the rail's stacking context: z-index
  * -1, later in the tree than the two drifting layers, under the rail's own
@@ -291,7 +292,7 @@ html[data-shell="native"] {
 	content: "";
 	position: absolute;
 	bottom: calc(var(--keeki-lift, 0rem) + 3.25rem);
-	left: 0.25rem;
+	right: 0.5rem;
 	z-index: -1;
 	width: calc(8rem * 226 / 212);
 	aspect-ratio: 226 / 150;
@@ -304,8 +305,8 @@ html[data-shell="native"] {
  * pseudo-element the rail has spare — the footer's ::after and the scroll
  * area's two, which are placed against #sidebar and so neither scroll nor
  * clip — moved by transform and opacity alone, on the compositor. Each stands
- * on the pipe's top: 4.78rem in and 5.76rem above the footer in the yurt's
- * drawing. Keeki Blush, the day, sets --keeki-smoke to none. */
+ * on the pipe's top: 4.5rem in from the rail's right and 5.76rem above the
+ * footer in the yurt's drawing. Keeki Blush, the day, sets --keeki-smoke to none. */
 @media (hover: hover) {
 	html:not([data-reduce-motion]) #footer::after,
 	html:not([data-reduce-motion]) #sidebar .scrollable-area::before,
@@ -313,7 +314,7 @@ html[data-shell="native"] {
 		content: var(--keeki-smoke);
 		position: absolute;
 		bottom: calc(var(--keeki-lift, 0rem) + 3rem + 5.76rem);
-		left: 4.78rem;
+		left: calc(100% - 4.5rem);
 		z-index: -1;
 		width: var(--puff);
 		height: var(--puff);
