@@ -29,13 +29,16 @@ const STATE = `(async () => {
 	return {
 		mark: document.documentElement.dataset.touchGrass ?? null,
 		opacity: getComputedStyle(document.querySelector("#viewport")).opacity,
-		hint: document.querySelector("#touch-grass-hint")?.textContent ?? null,
+		hint: document.querySelector("#touch-grass-exit")?.textContent ?? null,
+		hintShown: (() => { const b = document.querySelector("#touch-grass-exit"); return !!b && getComputedStyle(b).opacity !== "0"; })(),
+		exitLabel: document.querySelector("#touch-grass-exit")?.getAttribute("aria-label") ?? null,
+		inert: document.querySelector("#viewport").inert,
 		paused: s.classList.contains("ps-paused"),
 		frosted: s.classList.contains("ps-private"),
 		moving: anims.filter((a, i) => a.currentTime !== at[i]).length,
 		hash: location.hash,
 		input: document.querySelector("#input")?.value ?? null,
-		focused: document.activeElement?.id ?? "",
+		focused: document.activeElement?.id || document.activeElement?.className || "",
 	};
 })()`;
 
@@ -57,7 +60,9 @@ export default async function run(page) {
 	await page.evaluate(`document.querySelector("#connect form").requestSubmit()`);
 	await page.waitFor(`document.querySelector("#theme-scene").children.length > 0`);
 	await page.waitFor(
-		`document.querySelector("#chat .header .title")?.textContent.includes(${JSON.stringify(CHANNEL)})`,
+		`document.querySelector("#chat .header .title")?.textContent.includes(${JSON.stringify(
+			CHANNEL
+		)})`,
 		{timeout: 15000, label: "the channel open"}
 	);
 	await page.sleep(1500);
@@ -66,7 +71,14 @@ export default async function run(page) {
 	let s = await page.evaluate(STATE);
 	page.check(`on: html[data-touch-grass] = ${s.mark}`, s.mark === "on");
 	page.check(`the app is hidden (#viewport opacity ${s.opacity})`, Number(s.opacity) === 0);
-	page.check(`the hint says how to come back: "${s.hint}"`, /come back/.test(s.hint ?? ""));
+	page.check(
+		`the hint says how to come back: "${s.hint}"`,
+		/come back/.test(s.hint ?? "") && s.hintShown
+	);
+	page.check(
+		`for a screen reader or a keyboard: the hidden app is inert (${s.inert}) and the focus is on "${s.exitLabel}" (${s.focused})`,
+		s.inert === true && s.focused === "touch-grass-exit" && s.exitLabel === "Back to the chat"
+	);
 	page.check(`the scene moves (${s.moving} animations moving)`, !s.paused && s.moving > 0);
 	await page.screenshot("touch-grass-on");
 
@@ -78,7 +90,10 @@ export default async function run(page) {
 		`16.5 s after a blur with no input, the watched scene still moves (${s.moving}; ps-paused ${s.paused})`,
 		!s.paused && s.moving > 0
 	);
-	page.check(`the hint has gone (${s.hint})`, s.hint === null);
+	page.check(
+		`the hint has gone quiet, the way out still there and focused (shown ${s.hintShown}, ${s.focused})`,
+		!s.hintShown && s.focused === "touch-grass-exit"
+	);
 	await page.evaluate(`window.dispatchEvent(new Event("focus")); 1`);
 
 	// A click on a sidebar row ends it and does not open that row.
@@ -102,6 +117,10 @@ export default async function run(page) {
 	await page.sleep(700);
 	s = await page.evaluate(STATE);
 	page.check(`a key ends it (mark ${s.mark})`, s.mark === null);
+	page.check(
+		`the focus is back where it was, the conversation's menu button (${s.focused}), the app no longer inert`,
+		s.focused === "menu" && s.inert === false
+	);
 	page.check(`and types nothing into the composer ("${s.input}")`, s.input === "");
 
 	// A query's frost lifts while watching, and comes back after.
@@ -113,12 +132,18 @@ export default async function run(page) {
 	});
 	await enter(page);
 	s = await page.evaluate(STATE);
-	page.check(`in a query, watching lifts the frost (ps-private ${s.frosted})`, !s.frosted && s.moving > 0);
+	page.check(
+		`in a query, watching lifts the frost (ps-private ${s.frosted})`,
+		!s.frosted && s.moving > 0
+	);
 	await page.send("Input.dispatchKeyEvent", {type: "keyDown", key: "Escape", code: "Escape"});
 	await page.send("Input.dispatchKeyEvent", {type: "keyUp", key: "Escape", code: "Escape"});
 	await page.sleep(700);
 	s = await page.evaluate(STATE);
-	page.check(`Escape ends it and the frost is back (ps-private ${s.frosted})`, s.mark === null && s.frosted);
+	page.check(
+		`Escape ends it and the frost is back (ps-private ${s.frosted})`,
+		s.mark === null && s.frosted
+	);
 
 	page.check(`no console errors (${page.consoleErrors.length})`, page.consoleErrors.length === 0);
 }
