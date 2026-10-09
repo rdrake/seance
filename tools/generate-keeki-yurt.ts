@@ -4,7 +4,8 @@
 // yurtSvg) redrawn as a still, opaque picture in the rail's own colours —
 // every part a mix of the rail's foot colour toward a tint, so it reads as
 // the rail lifted a step and nothing behind it shows through. Keeki is the
-// night (a warm door), Keeki Blush the day (a dark doorway).
+// night (a warm door; keeki.css adds the smoke), Keeki Blush the day (a dark
+// doorway).
 //
 //   npx tsx tools/generate-keeki-yurt.ts
 //
@@ -126,37 +127,6 @@ function svg(p: Palette): string {
 	);
 }
 
-/**
- * The smoke from the pipe, for the night (Keeki) only, as the ps yurt smokes
- * only at night: the ps theme's five puffs (plains.ts PUFFS, ps.css
- * ps-smoke-rise) as SMIL in one picture, since the rail has no element to
- * spare for each. One unit is 1/16 rem; the pipe's top is (40, 116).
- */
-const PUFFS = [
-	{d: 6.2, dl: 0, w: 9},
-	{d: 7.1, dl: 1.5, w: 11},
-	{d: 6.6, dl: 3, w: 8},
-	{d: 7.6, dl: 4.4, w: 12},
-	{d: 6.9, dl: 5.6, w: 9},
-];
-
-function smokeSvg(colour: string): string {
-	const puffs = PUFFS.map(
-		({d, dl, w}) =>
-			`<circle r="${w / 2}" fill="url(#s)" opacity="0">` +
-			`<animateTransform attributeName="transform" type="translate" values="0 0;34 -96" dur="${d}s" begin="${dl}s" repeatCount="indefinite"/>` +
-			`<animateTransform attributeName="transform" type="scale" additive="sum" values=".45;3.1" dur="${d}s" begin="${dl}s" repeatCount="indefinite"/>` +
-			`<animate attributeName="opacity" values="0;.9;0" keyTimes="0;.12;1" dur="${d}s" begin="${dl}s" repeatCount="indefinite"/>` +
-			`</circle>`
-	).join("");
-	return (
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 120">` +
-		`<defs><radialGradient id="s"><stop offset="0" stop-color="${colour}"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient></defs>` +
-		`<g transform="translate(40 116)" opacity=".45">${puffs}</g>` +
-		`</svg>`
-	);
-}
-
 // The encoding keeki.css's other drawings use: double quotes become single,
 // and only the characters a CSS url("…") data URI cannot carry are escaped.
 const dataUri = (s: string) =>
@@ -168,5 +138,4 @@ const dataUri = (s: string) =>
 		.replaceAll(">", "%3E")}")`;
 
 console.log(`keeki:\t--keeki-yurt: ${dataUri(svg(keeki))};`);
-console.log(`smoke:\t--keeki-smoke: ${dataUri(smokeSvg(mix(KEEKI_BASE, "#f0e2f6", 0.75)))};`);
 console.log(`blush:\t--keeki-yurt: ${dataUri(svg(blush))};`);
