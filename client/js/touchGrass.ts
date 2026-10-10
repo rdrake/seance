@@ -67,6 +67,8 @@ export function createTouchGrass(env: TouchGrassEnv): TouchGrass {
 	let armedAt = 0;
 	let lock: WakeLockLike | null = null;
 	let wantLock = false;
+	// A request is out: a second one would overwrite its sentinel, never released.
+	let pending = false;
 	const undo: Array<() => void> = [];
 	let leaving: (() => void) | undefined;
 	let hintTimer: (() => void) | undefined;
@@ -83,9 +85,18 @@ export function createTouchGrass(env: TouchGrassEnv): TouchGrass {
 			return;
 		}
 
+		// Wanted again (back in before it settled): the request out now is kept.
 		wantLock = true;
+
+		if (pending) {
+			return;
+		}
+
+		pending = true;
 		env.wakeLock().then(
 			(sentinel) => {
+				pending = false;
+
 				// Ended (or hidden) while the lock was being granted.
 				if (!wantLock || state !== "on") {
 					void sentinel.release().catch(() => undefined);
@@ -94,7 +105,9 @@ export function createTouchGrass(env: TouchGrassEnv): TouchGrass {
 
 				lock = sentinel;
 			},
-			() => undefined // refused (battery saver, no permission): watch anyway
+			() => {
+				pending = false; // refused (battery saver, no permission): watch anyway
+			}
 		);
 	};
 

@@ -181,6 +181,20 @@ describe("touch grass (client/js/touchGrass.ts)", function () {
 		expect(f.locks).to.deep.equal(["released 0"]);
 	});
 
+	it("asks for one lock at a time, so none is left held after it ends", async function () {
+		const f = fakeEnv({wakeLock: true});
+		const tg = createTouchGrass(f.env);
+		tg.enter();
+		f.fire("visibilitychange"); // before the first request settles
+		tg.leave();
+		tg.enter();
+		await flush();
+		expect(f.locks).to.deep.equal(["held 0"]);
+		tg.leave();
+		await flush();
+		expect(f.locks).to.deep.equal(["released 0"]);
+	});
+
 	it("its button ends it: the way out a screen reader or a keyboard takes", function () {
 		const f = fakeEnv();
 		const tg = createTouchGrass(f.env);
