@@ -53,7 +53,7 @@
 							<button
 								type="button"
 								class="btn btn-small btn-cancel"
-								@click="editingNote = false"
+								@click="cancelNote"
 							>
 								Cancel
 							</button>
@@ -529,6 +529,7 @@ import {
 	onUnmounted,
 	ref,
 	shallowRef,
+	watch,
 } from "vue";
 import eventbus from "../../js/eventbus";
 import socket from "../../js/socket";
@@ -900,8 +901,43 @@ export default defineComponent({
 			});
 		};
 
+		// A note being written is set aside, not lost, when the editor closes
+		// any way but Save or Cancel — Escape, Android's Back, the card closing
+		// or another stacked over it — and put back when the editor next opens
+		// for the same note. Saving on Back would keep a half-typed note the
+		// oper never chose to keep; Cancel is the way to throw one away.
+		let editingFor: {network: string; key: string} | undefined;
+		// Keyed by network uuid and note key; for this page only.
+		const setAside = new Map<string, string>();
+		let discardDraft = false;
+
+		watch(editingNote, (editing, was) => {
+			if (!was || editing) {
+				return;
+			}
+
+			const target = editingFor;
+
+			if (
+				!discardDraft &&
+				target &&
+				noteDraft.value !== getNote(target.network, target.key)
+			) {
+				setAside.set(`${target.network} ${target.key}`, noteDraft.value);
+			}
+
+			discardDraft = false;
+			editingFor = undefined;
+		});
+
 		const editNote = () => {
-			noteDraft.value = note.value;
+			const uuid = top.value?.request.network ?? "";
+			const key = noteKey.value;
+			const kept = setAside.get(`${uuid} ${key}`);
+			setAside.delete(`${uuid} ${key}`);
+			editingFor = {network: uuid, key};
+			discardDraft = false;
+			noteDraft.value = kept ?? note.value;
 			editingNote.value = true;
 			void nextTick(() => noteField.value?.focus());
 		};
@@ -911,8 +947,14 @@ export default defineComponent({
 				setNote(top.value.request.network, noteKey.value, noteDraft.value);
 			}
 
+			discardDraft = true;
 			editingNote.value = false;
 			readNote();
+		};
+
+		const cancelNote = () => {
+			discardDraft = true;
+			editingNote.value = false;
 		};
 
 		const askCompare = () => {
@@ -1047,6 +1089,7 @@ export default defineComponent({
 			killUser,
 			editNote,
 			saveNote,
+			cancelNote,
 			askCompare,
 			startCompare,
 			endCompare,

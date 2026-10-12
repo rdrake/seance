@@ -486,35 +486,43 @@ describe("services support: the feed (irc/servicesfeed.ts)", function () {
 	}
 
 	it("keeps a snoop line from the oper bot in the snoop channel, and shows it unchanged", async function () {
-		const {client, transport} = setup();
-		client.setServices(X3);
-		const snoopy = join(client, transport, "#MrSnoopy");
+		// The fixture is stamped; the notice log keeps a day. Pin the clock a
+		// minute after it so the test does not age out of the window.
+		const clock = sinon.useFakeTimers({now: Date.parse("2026-10-10T21:15:03.000Z")});
 
-		const raw = `[21:14:03] ${B}JOIN${B} #seance by alice`;
-		transport.line(
-			`@time=2026-10-10T21:14:03.000Z :O3!O3@services.test PRIVMSG #MrSnoopy :${raw}`
-		);
-		await flush();
+		try {
+			const {client, transport} = setup();
+			client.setServices(X3);
+			const snoopy = join(client, transport, "#MrSnoopy");
 
-		const shown = messages(snoopy);
-		expect(shown).to.have.length(1);
-		expect(shown[0].text, "the channel message is as sent").to.equal(raw);
-		expect(shown[0].from?.nick).to.equal("O3");
+			const raw = `[21:14:03] ${B}JOIN${B} #seance by alice`;
+			transport.line(
+				`@time=2026-10-10T21:14:03.000Z :O3!O3@services.test PRIVMSG #MrSnoopy :${raw}`
+			);
+			await flush();
 
-		expect(logged(client)).to.deep.equal([
-			{
-				time: Date.parse("2026-10-10T21:14:03.000Z"),
-				type: "snoop",
-				text: "[21:14:03] JOIN #seance by alice",
-				snotice: {
-					kind: "x3.snoop.join",
-					category: "SERVICES",
-					fields: {channel: "#seance", nick: "alice"},
-					route: "network",
+			const shown = messages(snoopy);
+			expect(shown).to.have.length(1);
+			expect(shown[0].text, "the channel message is as sent").to.equal(raw);
+			expect(shown[0].from?.nick).to.equal("O3");
+
+			expect(logged(client)).to.deep.equal([
+				{
+					time: Date.parse("2026-10-10T21:14:03.000Z"),
+					type: "snoop",
+					text: "[21:14:03] JOIN #seance by alice",
+					snotice: {
+						kind: "x3.snoop.join",
+						category: "SERVICES",
+						fields: {channel: "#seance", nick: "alice"},
+						route: "network",
+					},
 				},
-			},
-		]);
-		expect(messages(client.lobby.id), "nothing routed to the lobby").to.have.length(0);
+			]);
+			expect(messages(client.lobby.id), "nothing routed to the lobby").to.have.length(0);
+		} finally {
+			clock.restore();
+		}
 	});
 
 	it("keeps an audit line and a module log line in the report channel, from any of the bots", async function () {

@@ -226,6 +226,7 @@ import {
 	watch,
 } from "vue";
 import eventbus from "../../js/eventbus";
+import {hasVirtualKeyboard} from "../../js/helpers/device";
 import {useStore} from "../../js/store";
 import {clientForNetwork} from "../../js/irc/manager";
 import {
@@ -548,7 +549,11 @@ export default defineComponent({
 			}
 
 			scheduleTrace();
-			void nextTick(() => nameField.value?.focus());
+
+			// Not on a touch phone: the keyboard would come up over the buttons.
+			if (!hasVirtualKeyboard()) {
+				void nextTick(() => nameField.value?.focus());
+			}
 		};
 
 		const close = () => {

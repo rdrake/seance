@@ -397,6 +397,7 @@ import {computed, defineComponent, onMounted, onUnmounted, PropType, ref, watch}
 import type {Route} from "../../../shared/types/oper";
 import type {ClientNetwork} from "../../js/types";
 import socket from "../../js/socket";
+import {settleDebounce} from "../../js/helpers/settleDebounce";
 import eventbus from "../../js/eventbus";
 import {profileById} from "../../js/irc/profiles";
 import type {AlertLine, NoticeKind, SnomaskBit} from "../../js/irc/profiles/types";
@@ -510,7 +511,6 @@ export default defineComponent({
 		const hasS = computed(() => (props.network.oper?.umodes ?? "").includes("s"));
 		const draft = ref(props.network.oper?.snomask ?? 0);
 		const pending = ref(false);
-		let timer: ReturnType<typeof setTimeout> | undefined;
 
 		watch(
 			() => props.network.oper?.snomask,
@@ -521,21 +521,23 @@ export default defineComponent({
 			}
 		);
 
-		const send = () => {
-			timer = undefined;
-			socket.emit("oper:snomask", {network: props.network.uuid, mask: draft.value});
-			// The 008 answer moves `snomask`; until then the switches hold.
-			setTimeout(() => {
+		// The 008 answer moves `snomask`; until the settle the switches hold.
+		// An edit calls off a settle still due, so it is never put back.
+		const sender = settleDebounce({
+			delayMs: 400,
+			settleMs: 1500,
+			send: () =>
+				socket.emit("oper:snomask", {network: props.network.uuid, mask: draft.value}),
+			settle() {
 				pending.value = false;
 				draft.value = props.network.oper?.snomask ?? draft.value;
-			}, 1500);
-		};
+			},
+		});
 
 		const apply = (mask: number) => {
 			draft.value = mask;
 			pending.value = true;
-			clearTimeout(timer);
-			timer = setTimeout(send, 400);
+			sender.schedule();
 		};
 
 		const toggle = (bit: number) => apply(draft.value ^ bit);
@@ -687,10 +689,7 @@ export default defineComponent({
 			eventbus.off("oper:routes", onRoutes);
 			eventbus.off("oper:alerts-changed", onAlertsChanged);
 
-			if (timer !== undefined) {
-				clearTimeout(timer);
-				send();
-			}
+			sender.flush();
 		});
 
 		return {
