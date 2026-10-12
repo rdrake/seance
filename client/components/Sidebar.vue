@@ -80,6 +80,39 @@ import {useStore} from "../js/store";
 import NetworkList from "./NetworkList.vue";
 import {devtoolsAvailable, toggleDevtools} from "../js/devtools";
 
+/** An open modal overlay (the oper cards, builder and dialog, the confirm
+ * dialog, the upload preview…): they carry `.opened` while shown. The
+ * sidebar's own dimmer is not one; a swipe on it closes the sidebar. */
+const OPEN_OVERLAY = '[id$="-overlay"].opened:not(#sidebar-overlay), #image-viewer.opened';
+
+function inOpenOverlay(el: Element): boolean {
+	return el.closest(OPEN_OVERLAY) !== null;
+}
+
+/** The panes the walk stops at: they scroll up and down (which computes
+ * `overflow-x: auto` too), and one wide child must not take the swipe away
+ * from the whole pane. */
+const PANE = "#chat .chat, .window, #viewport";
+
+/** Whether `el` or an ancestor inside its pane scrolls sideways and has something to scroll. */
+function inSidewaysScroller(el: Element): boolean {
+	for (
+		let node: Element | null = el;
+		node && node !== document.body && !node.matches(PANE);
+		node = node.parentElement
+	) {
+		if (node.scrollWidth > node.clientWidth + 1) {
+			const overflowX = window.getComputedStyle(node).overflowX;
+
+			if (overflowX === "auto" || overflowX === "scroll") {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 export default defineComponent({
 	name: "Sidebar",
 	components: {
@@ -238,6 +271,16 @@ export default defineComponent({
 			const target = e.target;
 
 			if (target instanceof Element && target.closest("input, textarea, [contenteditable]")) {
+				return;
+			}
+
+			// A sideways swipe in something that scrolls sideways (an oper
+			// report's table, its raw lines, a code block) is that scroll, and
+			// nothing behind an open dialog or card is the sidebar's to move.
+			if (
+				target instanceof Element &&
+				(inOpenOverlay(target) || inSidewaysScroller(target))
+			) {
 				return;
 			}
 
