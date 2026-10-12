@@ -31,7 +31,7 @@
 					<input
 						v-switch
 						type="checkbox"
-						:checked="has(m.letter)"
+						:checked="shown(m.letter)"
 						:disabled="!allowed(m) && !has(m.letter)"
 						@change="set(m.letter, ($event.target as HTMLInputElement).checked)"
 					/>
@@ -128,10 +128,11 @@
 </style>
 
 <script lang="ts">
-import {computed, defineComponent, PropType} from "vue";
+import {computed, defineComponent, onUnmounted, PropType, ref, watch} from "vue";
 import type {ClientNetwork} from "../../js/types";
 import socket from "../../js/socket";
 import {hasPriv} from "../../js/helpers/operMenu";
+import {PendingSwitches} from "../../js/helpers/pendingSwitches";
 import {profileById} from "../../js/irc/profiles";
 
 interface UserMode {
@@ -263,7 +264,23 @@ export default defineComponent({
 		const has = (letter: string) => (props.network.oper?.umodes ?? "").includes(letter);
 		const allowed = (m: UserMode) => !m.priv || hasPriv(props.network, m.priv);
 
+		// A switch shows what was asked until the server's MODE line agrees
+		// or 4 s pass without one (a refusal), then the real mode again.
+		const switchesChanged = ref(0);
+		const pending = new PendingSwitches(4000, () => switchesChanged.value++);
+		watch(
+			() => props.network.oper?.umodes ?? "",
+			() => pending.reconcile(has)
+		);
+		onUnmounted(() => pending.dispose());
+
+		const shown = (letter: string) => {
+			void switchesChanged.value; // re-render when a request settles
+			return pending.shown(letter, has(letter));
+		};
+
 		const set = (letter: string, on: boolean) => {
+			pending.request(letter, on);
 			socket.emit("input", {
 				target: props.network.channels[0].id,
 				text: `/umode ${on ? "+" : "-"}${letter}`,
@@ -278,6 +295,7 @@ export default defineComponent({
 			levelLabel,
 			profileName: computed(() => profile.value.name),
 			has,
+			shown,
 			allowed,
 			set,
 			refresh,
