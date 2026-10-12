@@ -36,8 +36,9 @@
 import type {IrcClient} from "./client";
 import {isErrorNumeric} from "./errors";
 import {openBatchesOf, type BatchHandler, type OpenBatch} from "./handlers/batch";
-import type {IrcMessage} from "./message";
+import {MAX_LINE_BYTES, utf8ByteLength, type IrcMessage} from "./message";
 import {takeQuietLabel} from "./quiet";
+import {NOTICE_PREFIX} from "./snotice";
 import {tagPrefix} from "./wire";
 
 export const LABELED_RESPONSE_CAP = "labeled-response";
@@ -45,7 +46,28 @@ export const LABELED_RESPONSE_CAP = "labeled-response";
 /** How long a request waits for the end of its answer. */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
-export type ReplyOutcome = "batch" | "lines" | "ack" | "timeout" | "closed";
+/**
+ * How an answer ended. `toolong`: the line, with its label, is over
+ * `MAX_LINE_BYTES` and was never sent — the connection is fine, the line is
+ * not (a long reason in a non-Latin script, a pasted mask).
+ */
+export type ReplyOutcome = "batch" | "lines" | "ack" | "timeout" | "closed" | "toolong";
+
+/**
+ * Room kept for the tag a labeled line goes out with (`@label=r12345 `,
+ * `@label=svc12345 `): generous, so a check made before sending still holds
+ * after a few thousand requests.
+ */
+const LABEL_RESERVE_BYTES = utf8ByteLength("@label=svc999999 ");
+
+/**
+ * Whether `line` (no tags, no CRLF) can go out as a labeled request or a
+ * quiet line: its UTF-8 bytes plus the label's room are within
+ * `MAX_LINE_BYTES`. What a dialog asks before it offers to send.
+ */
+export function requestLineFits(line: string): boolean {
+	return utf8ByteLength(line) + LABEL_RESERVE_BYTES <= MAX_LINE_BYTES;
+}
 
 export interface ReplyUnit {
 	/** Every line of the answer, in arrival order (a batch's contents, unwrapped). */
@@ -95,7 +117,9 @@ export function canRequest(client: IrcClient): boolean {
 
 /**
  * Send `line` labeled and resolve with its whole answer. Never rejects: a
- * line that cannot be sent resolves at once with outcome `closed`, a socket
+ * line over `MAX_LINE_BYTES` with its label resolves at once with outcome
+ * `toolong` (nothing sent, nothing in the lobby), one that cannot be sent
+ * for any other reason with `closed`, a socket
  * that dies first with what had arrived, a server that never finishes with
  * `timeout`.
  */
@@ -110,6 +134,11 @@ export function request(
 	return new Promise((resolve) => {
 		if (!canRequest(client)) {
 			resolve({lines: [], outcome: "closed"});
+			return;
+		}
+
+		if (utf8ByteLength(`${tagPrefix({label})}${line}`) > MAX_LINE_BYTES) {
+			resolve({lines: [], outcome: "toolong"});
 			return;
 		}
 
@@ -208,7 +237,14 @@ export function interceptRequestLine(client: IrcClient, msg: IrcMessage): boolea
 	const fromServer = msg.source !== undefined && msg.source.user === undefined;
 
 	// #119: a server NOTICE to us inside our open labeled batch belongs to it.
-	if (msg.command === "NOTICE" && fromServer && client.isSelf(msg.params[0] ?? "")) {
+	// A real server notice (`*** Notice -- `, the +W "did a /whois on you")
+	// is never part of a reply: it goes on to be routed.
+	if (
+		msg.command === "NOTICE" &&
+		fromServer &&
+		client.isSelf(msg.params[0] ?? "") &&
+		!(msg.params[msg.params.length - 1] ?? "").startsWith(NOTICE_PREFIX)
+	) {
 		const batch = openLabeledBatch(client);
 
 		if (batch) {

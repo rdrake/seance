@@ -26,7 +26,7 @@ import {
 } from "../../client/js/irc/operprefs";
 import {applyModeString, levelOf, parseFeature, parsePrivs} from "../../client/js/irc/oper";
 import {parseLine} from "../../client/js/irc/message";
-import {request, REQUEST_TIMEOUT_MS} from "../../client/js/irc/request";
+import {request, requestLineFits, REQUEST_TIMEOUT_MS} from "../../client/js/irc/request";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
 import {MessageType, SharedMsg} from "../../shared/types/msg";
@@ -238,6 +238,42 @@ describe("oper tools: labeled requests (irc/request.ts)", function () {
 		const unit = await reply;
 		expect(unit.lines.map((m) => m.command)).to.deep.equal(["NOTICE", "NOTICE", "219"]);
 		expect(messages(client.lobby.id)).to.have.length(0);
+	});
+
+	it("leaves a real server notice (a +W whois notice) inside our open batch to be routed", async function () {
+		const {client, transport} = setup();
+		const reply = request(client, "STATS u");
+		const label = lastLabel(transport);
+
+		transport.lines(
+			`@label=${label} :irc.test BATCH +AD labeled-response`,
+			":irc.test NOTICE opr :*** Notice -- bob (b@h) did a /whois on you.",
+			"@batch=AD :irc.test 219 opr u :End of /STATS report",
+			":irc.test BATCH -AD"
+		);
+
+		const unit = await reply;
+		expect(unit.lines.map((m) => m.command)).to.deep.equal(["219"]);
+		expect(
+			messages(client.lobby.id).map((m) => m.text),
+			"routed, not swallowed"
+		).to.satisfy((texts: string[]) => texts.some((t) => t.includes("bob")));
+	});
+
+	it("resolves `toolong` and sends nothing for a line over MAX_LINE_BYTES", async function () {
+		const {client, transport} = setup();
+		const sent = transport.sent.length;
+		// 200 three-byte characters: 250 characters' worth of a reason field is
+		// well within it, its bytes are not.
+		const line = `KILL bob :${"現".repeat(200)}`;
+
+		expect(requestLineFits(line)).to.equal(false);
+		expect(requestLineFits("KILL bob :spam")).to.equal(true);
+
+		const unit = await request(client, line);
+		expect(unit.outcome).to.equal("toolong");
+		expect(transport.sent.length, "nothing sent").to.equal(sent);
+		expect(messages(client.lobby.id), "no lobby error").to.have.length(0);
 	});
 
 	it("collects an untagged reply it named and resolves on the ACK (evilnet/nefarious2#120)", async function () {
