@@ -4321,8 +4321,9 @@ button.snotice-badge:focus-visible {
 	font-size: 0.875em;
 }
 
-/* On a phone the card is the page, like the settings modal. */
-@media (max-width: 768px) {
+/* On a phone the card is the page, like the settings modal. The phone
+ * layout's own list (PHONE_LAYOUT_QUERY), so a landscape phone counts. */
+@media (max-width: 768px), (max-height: 500px) and (hover: none) and (pointer: coarse) {
 	#oper-investigate-overlay {
 		padding: 0;
 	}
@@ -4581,8 +4582,9 @@ button.snotice-badge:focus-visible {
 	font-size: 0.875em;
 }
 
-/* On a phone the builder is the page, and a row wraps its value under the label. */
-@media (max-width: 768px) {
+/* On a phone the builder is the page, and a row wraps its value under the
+ * label: the phone layout's list, so a landscape phone gets one column too. */
+@media (max-width: 768px), (max-height: 500px) and (hover: none) and (pointer: coarse) {
 	#oper-alert-overlay {
 		padding: 0;
 	}
