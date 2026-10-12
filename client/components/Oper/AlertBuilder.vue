@@ -63,7 +63,8 @@
 									:disabled="tooLow(r)"
 									:title="tooLow(r) ? `needs O3 level ${r.level}` : undefined"
 								>
-									{{ r.label }} · {{ r.id }} · level {{ r.level
+									{{ r.label }} · {{ r.id }} ·
+									{{ tooLow(r) ? "needs O3 level" : "level" }} {{ r.level
 									}}{{ r.needs ? ` · needs ${r.needs}` : "" }}
 								</option>
 							</select>
@@ -88,6 +89,7 @@
 								:data-key="row.key"
 							>
 								<input
+									:id="`oper-alert-on-${row.id}`"
 									v-model="row.on"
 									v-switch
 									class="oper-alert-switch"
@@ -96,7 +98,12 @@
 									:aria-label="`Use ${labelOf(row.key)}`"
 									:aria-checked="row.on"
 								/>
-								<span class="oper-alert-row-label" :title="row.key">
+								<!-- A label, so the words toggle the row as the switch does. -->
+								<label
+									class="oper-alert-row-label"
+									:for="`oper-alert-on-${row.id}`"
+									:title="row.key"
+								>
 									{{ labelOf(row.key) }}
 									<span
 										v-if="wide(row)"
@@ -104,7 +111,10 @@
 										:title="`Wide on its own: ${wide(row)}`"
 										>wide</span
 									>
-								</span>
+									<span v-if="wide(row)" class="oper-touch-hint"
+										>Wide on its own: {{ wide(row) }}</span
+									>
+								</label>
 								<input
 									v-model="row.value"
 									class="input oper-mono oper-alert-value"

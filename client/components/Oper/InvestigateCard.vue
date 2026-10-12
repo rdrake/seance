@@ -69,6 +69,7 @@
 									<time
 										v-if="model.createdAt !== undefined"
 										:title="absolute(model.createdAt)"
+										:data-abs="absolute(model.createdAt)"
 										>{{ relative(model.createdAt) }}</time
 									>
 									<span v-else class="oper-muted">{{

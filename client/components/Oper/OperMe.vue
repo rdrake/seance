@@ -18,9 +18,12 @@
 			<p v-if="!network.oper?.privsKnown" class="oper-muted">Not reported yet.</p>
 			<p v-else-if="!privs.length" class="oper-muted">None.</p>
 			<p v-else class="oper-chips oper-privs">
-				<span v-for="p in privs" :key="p" class="oper-chip-static" :title="privHelp(p)">{{
-					p
-				}}</span>
+				<span v-for="p in privs" :key="p" class="oper-priv"
+					><span class="oper-chip-static" :title="privHelp(p)">{{ p }}</span
+					><span v-if="privHelp(p) !== p" class="oper-touch-hint" aria-hidden="true">{{
+						privHelp(p)
+					}}</span></span
+				>
 			</p>
 		</details>
 
@@ -39,6 +42,7 @@
 					<span class="oper-umode-text">
 						<span class="oper-umode-label">{{ m.label }}</span>
 						<span class="sr-only">. {{ m.description }}</span>
+						<span class="oper-touch-hint" aria-hidden="true">{{ m.description }}</span>
 						<span v-if="!allowed(m)" class="oper-umode-needs">needs {{ m.priv }}</span>
 					</span>
 				</label>

@@ -1,5 +1,16 @@
 <template>
 	<div class="oper-alerts">
+		<!-- What the three choices mean, said on a touchscreen where the
+		     buttons' tooltips never show. -->
+		<p class="oper-touch-hint oper-route-legend">
+			<template v-for="pos in POSITIONS" :key="pos.route">
+				<span class="oper-route-legend-item"
+					><strong>{{ pos.label }}</strong
+					>: {{ pos.title.toLowerCase() }}.</span
+				>
+				{{ " " }}
+			</template>
+		</p>
 		<section v-for="section in SECTIONS" :key="section.id" class="oper-alerts-section">
 			<h2>{{ section.label }}</h2>
 			<ul class="oper-lines">

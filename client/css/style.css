@@ -3562,6 +3562,61 @@ button.snotice-badge:focus-visible {
 	background: color-mix(in srgb, currentcolor 12%, transparent);
 }
 
+/* What a tooltip says, said where a finger cannot hover (`data-input` on
+ * <html>, helpers/inputModality.ts — the last pointer, not the device): the
+ * routes' meanings, the privileges and user modes in words, a "wide"
+ * criterion's reason, and a relative time's absolute one. Hidden while the
+ * last pointer was a mouse, which has the tooltips. */
+.oper-touch-hint {
+	display: none;
+}
+
+.oper-priv {
+	display: contents;
+}
+
+:where(html[data-input="touch"]) .oper-touch-hint {
+	display: block;
+	color: var(--body-color-muted);
+	font-size: 0.8125em;
+	font-weight: normal;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+
+:where(html[data-input="touch"]) .oper-route-legend {
+	margin: 0 0 0.75rem;
+}
+
+:where(html[data-input="touch"]) .oper-route-legend-item {
+	display: block;
+}
+
+:where(html[data-input="touch"]) .oper-privs {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0.5rem;
+}
+
+:where(html[data-input="touch"]) .oper-priv {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.15rem 0.5rem;
+}
+
+:where(html[data-input="touch"]) .oper-priv .oper-touch-hint {
+	flex: 1 1 12rem;
+}
+
+:where(html[data-input="touch"]) time[data-abs]::after {
+	content: " · " attr(data-abs);
+	color: var(--body-color-muted);
+	font-size: 0.875em;
+}
+
 /* A segmented control: a row of buttons sharing one border, the pressed
  * one filled (aria-pressed for a toggle group, aria-checked for a
  * radiogroup). */
@@ -4455,6 +4510,7 @@ button.snotice-badge:focus-visible {
 .oper-alert-row-label {
 	min-width: 0;
 	overflow-wrap: anywhere;
+	cursor: pointer;
 }
 
 .oper-wide {
