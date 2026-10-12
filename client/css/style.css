@@ -5533,6 +5533,7 @@ html[data-shell="native"] #footer {
 	 * bands, which are not the page's to dim) — the side ones too, which are
 	 * the notch's in landscape. */
 	html[data-shell="native"] #settings.window,
+	html[data-shell="native"] #oper.window,
 	html[data-shell="native"] #sidebar-overlay {
 		top: var(--inset-top);
 		bottom: var(--inset-outer-bottom);
@@ -5542,6 +5543,13 @@ html[data-shell="native"] #footer {
 		/* `.window` is `height: 100%`, which with a moved top runs past the
 		 * bottom edge by the same amount; the two pinned edges size it. */
 		height: auto;
+	}
+
+	/* The oper cards and the alert builder are fixed over the whole screen
+	 * and are the page on a phone, so their ✕ sat under the clock too. */
+	html[data-shell="native"] #oper-investigate-overlay,
+	html[data-shell="native"] #oper-alert-overlay {
+		padding: var(--inset-top) var(--inset-right) var(--inset-outer-bottom) var(--inset-left);
 	}
 
 	#sidebar-overlay {
