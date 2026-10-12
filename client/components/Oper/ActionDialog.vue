@@ -336,6 +336,9 @@ export default defineComponent({
 		// The close a moment after a success: cleared on open and close, so a
 		// late one never closes the next dialog opened.
 		let closeTimer: ReturnType<typeof setTimeout> | undefined;
+		/** Bumped on every open and close: an answer to an earlier dialog's
+		 * submit finds it changed and leaves this one alone. */
+		let generation = 0;
 
 		const network = computed(() =>
 			request.value ? store.getters.findNetwork(request.value.network) : undefined
@@ -516,6 +519,7 @@ export default defineComponent({
 
 		const open = (incoming: OperActionRequest) => {
 			clearTimeout(closeTimer);
+			generation++;
 			request.value = incoming;
 			reset();
 
@@ -530,6 +534,7 @@ export default defineComponent({
 		};
 
 		const close = () => {
+			generation++;
 			request.value = null;
 			clearTimeout(previewTimer);
 			clearTimeout(closeTimer);
@@ -632,9 +637,15 @@ export default defineComponent({
 
 			busy.value = true;
 			sendProblem.value = "";
+			const asked = generation;
 
 			if (r.action === "kill") {
 				const reply = await operRequest(n.uuid, outgoingLine.value);
+
+				if (asked !== generation) {
+					return;
+				}
+
 				busy.value = false;
 				const error = errorText(reply.lines, reply.outcome);
 
@@ -658,6 +669,11 @@ export default defineComponent({
 					seconds: seconds.value ?? 0,
 					reason: reason.value.trim(),
 				});
+
+				if (asked !== generation) {
+					return;
+				}
+
 				busy.value = false;
 
 				switch (reply.outcome) {
@@ -679,6 +695,11 @@ export default defineComponent({
 			}
 
 			const reply = await operRequest(n.uuid, outgoingLine.value);
+
+			if (asked !== generation) {
+				return;
+			}
+
 			const error = errorText(reply.lines, reply.outcome);
 
 			if (error) {
@@ -690,6 +711,11 @@ export default defineComponent({
 			// Silence means it worked; listing it back says so for certain.
 			const query = `${type.toUpperCase()} ${normaliseMask(type, mask.value)}`;
 			const check = await operRequest(n.uuid, query, {end: LIST_END[type]});
+
+			if (asked !== generation) {
+				return;
+			}
+
 			busy.value = false;
 			const found = check.lines.some(
 				(msg) => msg.command === (type === "zline" ? "548" : "280")

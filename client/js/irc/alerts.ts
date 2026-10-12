@@ -144,7 +144,7 @@ export async function opersAmong(
 	});
 	const reply = await request(client, line, {end: ["315"]});
 
-	if (reply.outcome === "closed" || reply.outcome === "timeout") {
+	if (reply.outcome === "closed" || reply.outcome === "timeout" || reply.outcome === "toolong") {
 		return undefined;
 	}
 

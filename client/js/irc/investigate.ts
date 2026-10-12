@@ -242,6 +242,11 @@ class Pacer {
 	}
 }
 
+const FAILED_NOTES = {
+	closed: "the connection is down",
+	timeout: "no answer",
+	toolong: "too long to send",
+} as const;
 const pacers = new WeakMap<IrcClient, Pacer>();
 
 function pacerOf(client: IrcClient): Pacer {
@@ -449,10 +454,13 @@ export class Investigation {
 
 				this.raw.push(...reply.lines.map((msg) => msg.raw));
 
-				if (reply.outcome === "closed" || reply.outcome === "timeout") {
+				if (
+					reply.outcome === "closed" ||
+					reply.outcome === "timeout" ||
+					reply.outcome === "toolong"
+				) {
 					this.sources[source] = "failed";
-					this.notes[source] =
-						reply.outcome === "closed" ? "the connection is down" : "no answer";
+					this.notes[source] = FAILED_NOTES[reply.outcome];
 				} else {
 					const error = errorText(reply.lines);
 

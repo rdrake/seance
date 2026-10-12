@@ -94,8 +94,8 @@ function inOpenOverlay(el: Element): boolean {
  * from the whole pane. */
 const PANE = "#chat .chat, .window, #viewport";
 
-/** Whether `el` or an ancestor inside its pane scrolls sideways and has something to scroll. */
-function inSidewaysScroller(el: Element): boolean {
+/** `el` or the nearest ancestor inside its pane that scrolls sideways and has something to scroll. */
+function sidewaysScroller(el: Element): Element | null {
 	for (
 		let node: Element | null = el;
 		node && node !== document.body && !node.matches(PANE);
@@ -105,12 +105,30 @@ function inSidewaysScroller(el: Element): boolean {
 			const overflowX = window.getComputedStyle(node).overflowX;
 
 			if (overflowX === "auto" || overflowX === "scroll") {
-				return true;
+				return node;
 			}
 		}
 	}
 
-	return false;
+	return null;
+}
+
+/**
+ * Whether a swipe starting on `el` is the scroll of a sideways scroller
+ * under it: only when that scroller can still move the way the swipe goes —
+ * right to open (it is scrolled away from its start), left to close (it is
+ * short of its end). One resting at its start gives an opening swipe nothing.
+ */
+function scrollerTakesSwipe(el: Element, opening: boolean): boolean {
+	const scroller = sidewaysScroller(el);
+
+	if (!scroller) {
+		return false;
+	}
+
+	return opening
+		? scroller.scrollLeft > 0
+		: scroller.scrollLeft < scroller.scrollWidth - scroller.clientWidth - 1;
 }
 
 export default defineComponent({
@@ -256,6 +274,12 @@ export default defineComponent({
 				return;
 			}
 
+			// A second finger ends a drag in flight, wherever it lands.
+			if (e.touches.length !== 1) {
+				onTouchEnd();
+				return;
+			}
+
 			// Dragging a selection handle is a horizontal drag too; the swipe
 			// stands down while there is a selection to protect (a tap
 			// collapses it).
@@ -279,17 +303,12 @@ export default defineComponent({
 			// nothing behind an open dialog or card is the sidebar's to move.
 			if (
 				target instanceof Element &&
-				(inOpenOverlay(target) || inSidewaysScroller(target))
+				(inOpenOverlay(target) || scrollerTakesSwipe(target, !store.state.sidebarOpen))
 			) {
 				return;
 			}
 
 			touchStartPos.value = touchCurPos.value = e.touches.item(0);
-
-			if (e.touches.length !== 1) {
-				onTouchEnd();
-				return;
-			}
 
 			const styles = window.getComputedStyle(sidebar.value);
 

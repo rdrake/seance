@@ -120,12 +120,15 @@ export default defineComponent({
 			// viewport on touch devices): `innerHeight` still counts the part
 			// under iOS's keyboard. The menu is capped to the band's height in
 			// style.css and scrolls, so clamping its top to 0 keeps it whole.
+			// In the native shell the container starts below the status bar
+			// (style.css), so page coordinates are taken into its own.
 			const container = contextMenu.value.parentElement;
+			const band = container?.getBoundingClientRect();
 			const bandWidth = container?.clientWidth || window.innerWidth;
 			const bandHeight = container?.clientHeight || window.innerHeight;
 			const fit = (offset: {left: number; top: number}) => ({
-				left: Math.max(0, Math.min(offset.left, bandWidth - menuWidth)),
-				top: Math.max(0, Math.min(offset.top, bandHeight - menuHeight)),
+				left: Math.max(0, Math.min(offset.left - (band?.left ?? 0), bandWidth - menuWidth)),
+				top: Math.max(0, Math.min(offset.top - (band?.top ?? 0), bandHeight - menuHeight)),
 			});
 
 			if (element && element.classList.contains("menu")) {

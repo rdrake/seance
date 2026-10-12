@@ -106,6 +106,13 @@ interface PendingRequest {
 interface Registry {
 	next: number;
 	pending: PendingRequest[];
+	/**
+	 * The last unlabeled request's answer: an unlabeled answer carries
+	 * nothing to tell two apart, so they go out one at a time.
+	 */
+	unlabeledTail: Promise<unknown>;
+	/** Unlabeled requests sent or waiting to be. */
+	unlabeledOpen: number;
 }
 
 const registries = new WeakMap<IrcClient, Registry>();
@@ -114,7 +121,7 @@ function registryOf(client: IrcClient): Registry {
 	let registry = registries.get(client);
 
 	if (!registry) {
-		registry = {next: 0, pending: []};
+		registry = {next: 0, pending: [], unlabeledTail: Promise.resolve(), unlabeledOpen: 0};
 		registries.set(client, registry);
 	}
 
@@ -139,6 +146,21 @@ export function request(
 	line: string,
 	opts: RequestOptions = {}
 ): Promise<ReplyUnit> {
+	if (!opts.unlabeled) {
+		return send(client, line, opts);
+	}
+
+	const registry = registryOf(client);
+	const answer =
+		registry.unlabeledOpen > 0
+			? registry.unlabeledTail.then(() => send(client, line, opts))
+			: send(client, line, opts);
+	registry.unlabeledOpen++;
+	registry.unlabeledTail = answer.finally(() => registry.unlabeledOpen--);
+	return answer;
+}
+
+function send(client: IrcClient, line: string, opts: RequestOptions): Promise<ReplyUnit> {
 	const registry = registryOf(client);
 	const label = `r${++registry.next}`;
 
@@ -193,6 +215,20 @@ function byLabel(client: IrcClient, label: string | undefined): PendingRequest |
 /** An error numeric or a standard-reply FAIL: always the end of an answer. */
 function isError(msg: IrcMessage): boolean {
 	return isErrorNumeric(msg.command) || msg.command === "FAIL";
+}
+
+/**
+ * An unlabeled error naming a forwarded request's command: the far server
+ * refused it (517 disabled, 461, no privilege there), and nothing else
+ * would end the wait.
+ */
+function refusesCommand(entry: PendingRequest, msg: IrcMessage): boolean {
+	if (!entry.opts.unlabeled || !isError(msg)) {
+		return false;
+	}
+
+	const command = entry.line.split(" ")[0].toUpperCase();
+	return msg.params.some((param) => param.toUpperCase() === command);
 }
 
 /** Our open labeled batch, if one is open (the newest). */
@@ -270,12 +306,14 @@ export function interceptRequestLine(client: IrcClient, msg: IrcMessage): boolea
 
 	// A forwarded command's answer, unlabeled, up to its end numeric.
 	if (fromServer) {
-		const forwarded = registry.pending.find((e) => e.opts.unlabeled?.includes(msg.command));
+		const forwarded = registry.pending.find(
+			(e) => e.opts.unlabeled?.includes(msg.command) || refusesCommand(e, msg)
+		);
 
 		if (forwarded) {
 			forwarded.lines.push(msg);
 
-			if (forwarded.opts.end?.includes(msg.command)) {
+			if (forwarded.opts.end?.includes(msg.command) || isError(msg)) {
 				finish(client, forwarded, "lines");
 			}
 

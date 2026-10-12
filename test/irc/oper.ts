@@ -853,6 +853,59 @@ describe("oper tools: commands (irc/commands/oper.ts)", function () {
 		expect(msgs[0].report!.raw!.join("\n")).to.include("Nick:: bob (ACAAB)");
 	});
 
+	it("a remote /check the far server refuses ends on its unlabeled error, not the timeout", async function () {
+		const {client, transport} = setup();
+		const chan = client.findChannel("#seance")!;
+
+		dispatchInput(client, chan, "/check bob bob");
+		const label = lastLabel(transport);
+		transport.lines(
+			`@label=${label} :irc.test ACK`,
+			":hub.test 517 opr CHECK :Command disabled"
+		);
+		await flush();
+
+		const msgs = messages(chan.id);
+		expect(msgs, "one card, the refusal not left raw in the lobby").to.have.length(1);
+		expect(msgs[0].type).to.equal(MessageType.REPORT);
+		expect(msgs[0].report!.raw!.join("\n")).to.include("Command disabled");
+	});
+
+	it("two remote /checks go out one at a time, so their unlabeled answers stay apart", async function () {
+		const {client, transport} = setup();
+		const chan = client.findChannel("#seance")!;
+
+		dispatchInput(client, chan, "/check bob bob");
+		dispatchInput(client, chan, "/check carol carol");
+		await flush();
+		const first = lastLabel(transport);
+		expect(
+			transport.sent.filter((l) => l.includes("CHECK")),
+			"the second waits"
+		).to.have.length(1);
+
+		transport.lines(
+			`@label=${first} :irc.test ACK`,
+			":hub.test 286 opr :Information for user bob",
+			":hub.test 291 opr : "
+		);
+		await flush();
+		const second = lastLabel(transport);
+		expect(transport.sent.at(-1)).to.equal(`@label=${second} CHECK carol carol`);
+
+		transport.lines(
+			`@label=${second} :irc.test ACK`,
+			":hub.test 286 opr :Information for user carol",
+			":hub.test 291 opr : "
+		);
+		await flush();
+
+		const raws = messages(chan.id).map((m) => m.report!.raw!.join("\n"));
+		expect(raws).to.have.length(2);
+		expect(raws[0]).to.include("bob").and.not.include("carol");
+		expect(raws[1]).to.include("carol").and.not.include("bob");
+	});
+
 	it("a local /check with a flag is not taken for the remote form", function () {
 		expect(isRemoteCheck(["#seance", "-o"])).to.equal(false);
 		expect(isRemoteCheck(["bob"])).to.equal(false);

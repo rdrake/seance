@@ -80,8 +80,10 @@
 	 * chosen for a while, a "wide" criterion): amber pulled a third of the
 	 * way toward the text colour, so it darkens on a light theme and lightens
 	 * on a dark one and holds 4.5:1 as small text on both. A theme may set
-	 * its own. */
-	--oper-amber: color-mix(in oklab, #c7841a 65%, var(--body-color));
+	 * its own in --oper-amber-theme. Mixed again on the oper surfaces below,
+	 * since a theme can change --body-color inside a window (Zelenzy) and a
+	 * custom property's var() is resolved where it is declared. */
+	--oper-amber: var(--oper-amber-theme, color-mix(in oklab, #c7841a 65%, var(--body-color)));
 
 	/* Color the sidebar channel icon pulses to while someone is typing there */
 	--channel-typing-color: #84ce88;
@@ -113,6 +115,13 @@
 	/* #status-bar-tint's height, and the room the sidebar leaves for it. In px:
 	 * it answers to iOS's sampler, not to the UI scale. */
 	--status-bar-tint-height: 8px;
+}
+
+.window,
+.oper-investigate,
+.oper-alert-builder,
+#oper-action-overlay {
+	--oper-amber: var(--oper-amber-theme, color-mix(in oklab, #c7841a 65%, var(--body-color)));
 }
 
 /* The font-size setting's scale (client/js/helpers/fontSize.ts); "medium" is
@@ -3665,8 +3674,8 @@ button.snotice-badge:focus-visible {
 .oper-seg button[aria-checked="true"].tmp {
 	background: var(--oper-amber);
 
-	/* The amber holds 4.5:1 against the window in every theme; the
-	 * button text colour does not hold against the amber. */
+	/* The amber is chosen against the window colour; the button text
+	 * colour does not hold against it. */
 	color: var(--window-bg-color);
 }
 
@@ -4692,19 +4701,13 @@ button.snotice-badge:focus-visible {
 	position: relative;
 }
 
+/* The hit area grows sideways only: the text column clips (the Zalgo
+ * guard), and reaching into the rows around would take taps meant for
+ * their nicks and links. */
 :where(html[data-input="touch"]) button.snotice-badge::after {
 	content: "";
 	position: absolute;
-	inset: -1.1em -0.5em;
-}
-
-/* The text column clips (the Zalgo guard), which cut the hit area to the
- * line. A clip with a margin lets it reach into the rows around; where
- * overflow-clip-margin is unknown (Safari) the area stops at the line. */
-:where(html[data-input="touch"]) #chat .msg[data-type="snotice"] .content,
-:where(html[data-input="touch"]) #chat .msg[data-type="wallops"] .content {
-	overflow: clip;
-	overflow-clip-margin: 0.75rem;
+	inset: 0 -0.5em;
 }
 
 :where(html[data-input="touch"]) .oper-report-actions {
@@ -5696,6 +5699,17 @@ html[data-shell="native"] #footer {
 
 		/* `.window` is `height: 100%`, which with a moved top runs past the
 		 * bottom edge by the same amount; the two pinned edges size it. */
+		height: auto;
+	}
+
+	/* The context menu's band too: a long menu clamped to the top of the
+	 * band would otherwise start under the clock. */
+	html[data-shell="native"] #context-menu-container {
+		top: var(--inset-top);
+		bottom: var(--inset-outer-bottom);
+		left: var(--inset-left);
+		right: var(--inset-right);
+		width: auto;
 		height: auto;
 	}
 
