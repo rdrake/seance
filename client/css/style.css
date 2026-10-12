@@ -3664,6 +3664,10 @@ button.snotice-badge:focus-visible {
 
 .oper-seg button[aria-checked="true"].tmp {
 	background: var(--oper-amber);
+
+	/* The amber holds 4.5:1 against the window in every theme; the
+	 * button text colour does not hold against the amber. */
+	color: var(--window-bg-color);
 }
 
 /* A folded row (`<details>`): a FontAwesome caret instead of the browser's
