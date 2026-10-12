@@ -4,6 +4,7 @@ import socket from "../../client/js/socket";
 import {IrcClient} from "../../client/js/irc/client";
 import {IdAllocator} from "../../client/js/irc/ids";
 import {dispatchInput} from "../../client/js/irc/commands";
+import {isRemoteCheck} from "../../client/js/irc/commands/oper";
 import {
 	LoggedNotice,
 	NoticeLog,
@@ -823,6 +824,39 @@ describe("oper tools: commands (irc/commands/oper.ts)", function () {
 		const [msg] = messages(chan.id);
 		expect(msg.type).to.equal(MessageType.REPORT);
 		expect(msg.report!.error).to.be.a("string").and.not.equal("");
+	});
+
+	it("a remote /check waits past the ACK and collects the unlabeled answer up to 291", async function () {
+		const {client, transport} = setup();
+		const chan = client.findChannel("#seance")!;
+
+		dispatchInput(client, chan, "/check bob bob");
+		const label = lastLabel(transport);
+		expect(transport.sent.at(-1)).to.equal(`@label=${label} CHECK bob bob`);
+
+		transport.lines(
+			`@label=${label} :irc.test ACK`,
+			":hub.test 290 opr : ",
+			":hub.test 286 opr :Information for user bob",
+			":hub.test 290 opr : ",
+			":hub.test 290 opr :           Nick:: bob (ACAAB)",
+			":hub.test 290 opr :  User/Hostmask:: b@198.51.100.4",
+			":hub.test 291 opr : "
+		);
+		await flush();
+
+		const msgs = messages(chan.id);
+		expect(msgs, "one card, no raw lines").to.have.length(1);
+		expect(msgs[0].type).to.equal(MessageType.REPORT);
+		expect(msgs[0].report!.error).to.equal(undefined);
+		expect(msgs[0].report!.raw!.join("\n")).to.include("Nick:: bob (ACAAB)");
+	});
+
+	it("a local /check with a flag is not taken for the remote form", function () {
+		expect(isRemoteCheck(["#seance", "-o"])).to.equal(false);
+		expect(isRemoteCheck(["bob"])).to.equal(false);
+		expect(isRemoteCheck(["bob", "bob"])).to.equal(true);
+		expect(isRemoteCheck(["hub.test", "bob", "-o"])).to.equal(true);
 	});
 
 	it("/privs shows the privileges as chips and keeps our own", async function () {

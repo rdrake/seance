@@ -17,6 +17,10 @@
  * - **`ACK`**: the command produced nothing it would label (KILL, a GLINE
  *   that worked). Also how a reply sent *without* the label ends — see below.
  *
+ * A command the server forwards without the label (a remote CHECK) is
+ * answered locally by a bare `ACK` and later by unlabeled lines; a request
+ * that names their numerics in `unlabeled` waits past the ACK for them.
+ *
  * Two server bugs are tolerated here, because the client has to work with the
  * server as it is (evilnet/nefarious2#119, #120):
  *
@@ -80,6 +84,13 @@ export interface RequestOptions {
 	end?: string[];
 	/** Numerics the server sends without the label (#120): 270, 302, 303, 340. */
 	untagged?: string[];
+	/**
+	 * A command the server forwards without keeping the label (a remote
+	 * CHECK: not in `forwarded_label.c`'s table). The local `ACK` then says
+	 * nothing about the answer: the request keeps waiting, collects untagged
+	 * server lines with these numerics, and ends on one of `end`.
+	 */
+	unlabeled?: string[];
 	timeoutMs?: number;
 }
 
@@ -216,7 +227,11 @@ export function interceptRequestLine(client: IrcClient, msg: IrcMessage): boolea
 
 	if (entry) {
 		if (msg.command === "ACK") {
-			finish(client, entry, "ack");
+			// A forwarded command's answer is still on its way, unlabeled.
+			if (!entry.opts.unlabeled) {
+				finish(client, entry, "ack");
+			}
+
 			return true;
 		}
 
@@ -249,6 +264,21 @@ export function interceptRequestLine(client: IrcClient, msg: IrcMessage): boolea
 
 		if (batch) {
 			batch.messages.push(msg);
+			return true;
+		}
+	}
+
+	// A forwarded command's answer, unlabeled, up to its end numeric.
+	if (fromServer) {
+		const forwarded = registry.pending.find((e) => e.opts.unlabeled?.includes(msg.command));
+
+		if (forwarded) {
+			forwarded.lines.push(msg);
+
+			if (forwarded.opts.end?.includes(msg.command)) {
+				finish(client, forwarded, "lines");
+			}
+
 			return true;
 		}
 	}
