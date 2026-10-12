@@ -1410,19 +1410,31 @@ the same box, glyph size and weight as the gear and the plus beside it. */
 first, and below ~11rem of status line the boxes and gaps tighten rather
 than letting the last tool clip. Only with the shield there — four tools
 keep their spacing. The sidebar is `7rem + 108px` wide, so this is the
-large font steps (docs/projects/oper-tools.md, "Room for it"). */
+large font steps (docs/projects/oper-tools.md, "Room for it"). A finger
+(`data-input="touch"`) keeps the full boxes and gaps: the nick gives way
+entirely first, then the tools wrap to a second line rather than shrink. */
 /* stylelint-disable-next-line at-rule-no-unknown */
 @container lobby-status (max-width: 11rem) {
-	.channel-list-item .lobby-tools:has(.oper-panel) {
+	:where(html:not([data-input="touch"])) .lobby-tools:has(.oper-panel) {
 		gap: 0.125rem;
 	}
 
-	.channel-list-item .lobby-tools:has(.oper-panel) .connection-status-icon,
-	.channel-list-item .lobby-tools:has(.oper-panel) .notify-status-icon,
-	.channel-list-item .lobby-tools:has(.oper-panel) .edit-network,
-	.channel-list-item .lobby-tools:has(.oper-panel) .add-channel,
-	.channel-list-item .lobby-tools:has(.oper-panel) .oper-panel {
+	:where(html:not([data-input="touch"])) .lobby-tools:has(.oper-panel) .connection-status-icon,
+	:where(html:not([data-input="touch"])) .lobby-tools:has(.oper-panel) .notify-status-icon,
+	:where(html:not([data-input="touch"])) .lobby-tools:has(.oper-panel) .edit-network,
+	:where(html:not([data-input="touch"])) .lobby-tools:has(.oper-panel) .add-channel,
+	:where(html:not([data-input="touch"])) .lobby-tools:has(.oper-panel) .oper-panel {
 		width: 1.25rem;
+	}
+
+	:where(html[data-input="touch"]) .lobby-tools:has(.oper-panel) {
+		flex-shrink: 1;
+		flex-wrap: wrap;
+		row-gap: 0.25rem;
+	}
+
+	:where(html[data-input="touch"]) .lobby-status:has(.oper-panel) .lobby-nick {
+		flex-shrink: 1000;
 	}
 }
 
