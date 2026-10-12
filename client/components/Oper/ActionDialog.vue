@@ -264,6 +264,7 @@ import {
 } from "../../js/irc/profiles/nefarious/bans";
 import {profileById} from "../../js/irc/profiles";
 import {servicesProfileFor} from "../../js/irc/services/index";
+import {hasVirtualKeyboard} from "../../js/helpers/device";
 import {lineBudget, lineTooLongText} from "../../js/helpers/operLine";
 import {errorOf} from "../../js/irc/profiles/report";
 import type {IrcMessage} from "../../js/irc/message";
@@ -510,7 +511,10 @@ export default defineComponent({
 				void lookUp(incoming.nick);
 			}
 
-			void nextTick(() => firstField.value?.focus());
+			// Not on a touch phone: the keyboard would come up over the buttons.
+			if (!hasVirtualKeyboard()) {
+				void nextTick(() => firstField.value?.focus());
+			}
 		};
 
 		const close = () => {
