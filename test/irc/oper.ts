@@ -504,6 +504,25 @@ describe("oper tools: oper state (irc/oper.ts)", function () {
 		).to.equal(true);
 	});
 
+	it("forgets it was opered when the registration's MODE shows it is not", async function () {
+		prefsStore.set(OPER_PREFS_KEY, JSON.stringify({u4: {wasOper: true}}));
+		const {client, transport} = setup({uuid: "u4"});
+
+		reregister(transport);
+		const query = transport.sent.find((l) => / MODE opr$/.test(l));
+		transport.line(`${/^(@label=\S+) /.exec(query!)![1]} :irc.test 221 opr +ix`);
+		await flush();
+		expect(client.oper.level).to.equal("none");
+		expect(getOperPrefs("u4").wasOper).to.equal(undefined);
+
+		transport.sent = [];
+		reregister(transport);
+		expect(
+			transport.sent.some((l) => / MODE opr$/.test(l)),
+			"the next registration asks nothing"
+		).to.equal(false);
+	});
+
 	it("a network that was never opered asks nothing on registration", function () {
 		const {transport} = setup({uuid: "u2"});
 		reregister(transport);
