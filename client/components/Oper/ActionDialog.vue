@@ -603,6 +603,10 @@ export default defineComponent({
 				return "Not sent: the connection is down.";
 			}
 
+			if (outcome === "toolong") {
+				return "Not sent: the line is too long. Shorten the reason.";
+			}
+
 			return undefined;
 		};
 
