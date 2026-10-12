@@ -8,6 +8,7 @@ import {isRemoteCheck} from "../../client/js/irc/commands/oper";
 import {
 	LoggedNotice,
 	NoticeLog,
+	transactOn,
 	trim,
 	MAX_AGE_MS,
 	MAX_ENTRIES,
@@ -897,6 +898,55 @@ describe("oper tools: the notice log (irc/noticelog.ts)", function () {
 		type: "snotice",
 		text: `t${time}`,
 		snotice: {kind, category: "OLDSNO", fields: {}, route: "network"},
+	});
+
+	/** A stand-in IDBDatabase whose one transaction the test ends by hand. */
+	function fakeDb(opts: {throwOnTransaction?: boolean} = {}) {
+		const tx: Record<string, unknown> = {
+			error: null,
+			objectStore: () => ({put: () => ({})}),
+		};
+		const db = {
+			closed: 0,
+			close() {
+				db.closed++;
+			},
+			transaction() {
+				if (opts.throwOnTransaction) {
+					throw new DOMException("closing", "InvalidStateError");
+				}
+
+				return tx;
+			},
+		};
+		return {db: db as unknown as IDBDatabase & {closed: number}, tx};
+	}
+
+	it("an aborted transaction rejects and closes the database", async function () {
+		const {db, tx} = fakeDb();
+		const done = transactOn(db, "readwrite", (store) => {
+			store.put([], "u1");
+		});
+
+		tx.error = new DOMException("quota", "QuotaExceededError");
+		(tx.onabort as () => void)();
+
+		const error = await done.then(
+			() => undefined,
+			(err: unknown) => err
+		);
+		expect((error as DOMException).name).to.equal("QuotaExceededError");
+		expect(db.closed).to.equal(1);
+	});
+
+	it("a transaction that cannot start rejects and closes the database", async function () {
+		const {db} = fakeDb({throwOnTransaction: true});
+		const error = await transactOn(db, "readonly", () => undefined).then(
+			() => undefined,
+			(err: unknown) => err
+		);
+		expect((error as DOMException).name).to.equal("InvalidStateError");
+		expect(db.closed).to.equal(1);
 	});
 
 	it("keeps the newest entries within a day", function () {
