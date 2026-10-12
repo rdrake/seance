@@ -4665,6 +4665,73 @@ button.snotice-badge:focus-visible {
 	}
 }
 
+/* Touch targets in the oper tools, while the last pointer was a finger
+ * (`data-input`, helpers/inputModality.ts): 2.75rem, 44pt at the medium
+ * step, for every small button, with real gaps between neighbours. The
+ * badge on a notice keeps its size in the line and grows its hit area
+ * instead, a transparent ::after around it. Same specificity as the rules
+ * they follow, so they win by coming later; the mouse keeps the compact
+ * sizes. */
+:where(html[data-input="touch"]) button.snotice-badge {
+	position: relative;
+}
+
+:where(html[data-input="touch"]) button.snotice-badge::after {
+	content: "";
+	position: absolute;
+	inset: -1.1em -0.5em;
+}
+
+/* The text column clips (the Zalgo guard), which cut the hit area to the
+ * line. A clip with a margin lets it reach into the rows around; where
+ * overflow-clip-margin is unknown (Safari) the area stops at the line. */
+:where(html[data-input="touch"]) #chat .msg[data-type="snotice"] .content,
+:where(html[data-input="touch"]) #chat .msg[data-type="wallops"] .content {
+	overflow: clip;
+	overflow-clip-margin: 0.75rem;
+}
+
+:where(html[data-input="touch"]) .oper-report-actions {
+	gap: 0.5rem;
+}
+
+:where(html[data-input="touch"]) #chat .oper-report-btn {
+	width: 2.75rem;
+	height: 2.75rem;
+}
+
+/* Refresh sits apart from the toggles beside it: a missed tap re-runs
+ * the command. */
+:where(html[data-input="touch"]) #chat .oper-report-refresh {
+	margin-right: 0.5rem;
+}
+
+:where(html[data-input="touch"]) .oper-users-sort .input,
+:where(html[data-input="touch"]) .oper-seg button,
+:where(html[data-input="touch"]) .oper-alert-remove,
+:where(html[data-input="touch"]) #oper .btn-small,
+:where(html[data-input="touch"]) #oper-investigate-overlay .btn-small,
+:where(html[data-input="touch"]) #oper-alert-overlay .btn-small,
+:where(html[data-input="touch"]) #oper-action-dialog .btn,
+:where(html[data-input="touch"]) #oper-action-dialog .oper-chip {
+	min-height: 2.75rem;
+	min-width: 2.75rem;
+}
+
+:where(html[data-input="touch"]) .oper-alert-remove {
+	width: 2.75rem;
+	height: 2.75rem;
+}
+
+:where(html[data-input="touch"]) .oper-alert-row {
+	column-gap: 0.75rem;
+}
+
+:where(html[data-input="touch"]) .oper-investigate-actions,
+:where(html[data-input="touch"]) .oper-alert-actions {
+	gap: 0.5rem;
+}
+
 .changelog-text {
 	line-height: 1.5;
 }
