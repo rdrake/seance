@@ -4875,6 +4875,15 @@ html[data-shell="native"] #footer {
 	outline: 0;
 }
 
+/* A long menu (a nick's oper actions at a large font step) on a short
+ * screen scrolls rather than running off the top; ContextMenu.vue clamps
+ * its top to the band. */
+#context-menu {
+	max-height: 100%;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
 .context-menu-divider {
 	height: 1px;
 	margin: 6px 0;

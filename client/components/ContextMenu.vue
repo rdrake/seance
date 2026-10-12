@@ -116,24 +116,26 @@ export default defineComponent({
 			const menuWidth = contextMenu.value?.offsetWidth;
 			const menuHeight = contextMenu.value?.offsetHeight;
 
+			// The container is the visible band (#viewport, sized to the visual
+			// viewport on touch devices): `innerHeight` still counts the part
+			// under iOS's keyboard. The menu is capped to the band's height in
+			// style.css and scrolls, so clamping its top to 0 keeps it whole.
+			const container = contextMenu.value.parentElement;
+			const bandWidth = container?.clientWidth || window.innerWidth;
+			const bandHeight = container?.clientHeight || window.innerHeight;
+			const fit = (offset: {left: number; top: number}) => ({
+				left: Math.max(0, Math.min(offset.left, bandWidth - menuWidth)),
+				top: Math.max(0, Math.min(offset.top, bandHeight - menuHeight)),
+			});
+
 			if (element && element.classList.contains("menu")) {
-				return {
+				return fit({
 					left: element.getBoundingClientRect().left - (menuWidth - element.offsetWidth),
 					top: element.getBoundingClientRect().top + element.offsetHeight,
-				};
+				});
 			}
 
-			const offset = {left: event.pageX, top: event.pageY};
-
-			if (window.innerWidth - offset.left < menuWidth) {
-				offset.left = window.innerWidth - menuWidth;
-			}
-
-			if (window.innerHeight - offset.top < menuHeight) {
-				offset.top = window.innerHeight - menuHeight;
-			}
-
-			return offset;
+			return fit({left: event.pageX, top: event.pageY});
 		};
 
 		const hoverItem = (id: number) => {
