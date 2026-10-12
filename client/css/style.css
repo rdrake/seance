@@ -3950,7 +3950,10 @@ button.snotice-badge:focus-visible {
  * room, one with tabs under 40rem. A value shared with the compared user,
  * or with most of a channel's users, is tinted (`same`). */
 #oper-investigate-overlay {
-	position: fixed;
+	/* Absolute in #viewport, not fixed: fixed measures against the layout
+	 * viewport, which iOS does not shrink for the keyboard, so the footer
+	 * sat under it. #viewport is the visible band (see #sidebar-overlay). */
+	position: absolute;
 	top: 0;
 	bottom: 0;
 	left: 0;
@@ -4340,7 +4343,7 @@ button.snotice-badge:focus-visible {
  * phone. The criteria are rows: a switch, the criterion in words, its
  * value in monospace, a "wide" tag in amber, ✕. */
 #oper-alert-overlay {
-	position: fixed;
+	position: absolute; /* in #viewport, above the keyboard; see #oper-investigate-overlay */
 	top: 0;
 	bottom: 0;
 	left: 0;
@@ -5531,10 +5534,15 @@ html[data-shell="native"] #footer {
 	 * title sat under the clock and its Done button under Android's buttons.
 	 * Both start at the insets instead (the dimmer would only dim the bars'
 	 * bands, which are not the page's to dim) — the side ones too, which are
-	 * the notch's in landscape. */
+	 * the notch's in landscape. The oper cards, the alert builder and the
+	 * kill/ban dialog are absolute in #viewport too, and their ✕ and buttons
+	 * sat under the clock and the home indicator the same way. */
 	html[data-shell="native"] #settings.window,
 	html[data-shell="native"] #oper.window,
-	html[data-shell="native"] #sidebar-overlay {
+	html[data-shell="native"] #sidebar-overlay,
+	html[data-shell="native"] #oper-investigate-overlay,
+	html[data-shell="native"] #oper-alert-overlay,
+	html[data-shell="native"] #oper-action-overlay {
 		top: var(--inset-top);
 		bottom: var(--inset-outer-bottom);
 		left: var(--inset-left);
@@ -5543,13 +5551,6 @@ html[data-shell="native"] #footer {
 		/* `.window` is `height: 100%`, which with a moved top runs past the
 		 * bottom edge by the same amount; the two pinned edges size it. */
 		height: auto;
-	}
-
-	/* The oper cards and the alert builder are fixed over the whole screen
-	 * and are the page on a phone, so their ✕ sat under the clock too. */
-	html[data-shell="native"] #oper-investigate-overlay,
-	html[data-shell="native"] #oper-alert-overlay {
-		padding: var(--inset-top) var(--inset-right) var(--inset-outer-bottom) var(--inset-left);
 	}
 
 	#sidebar-overlay {
@@ -5802,6 +5803,13 @@ html[data-shell="native"] #footer {
 	transition: opacity 0.2s, visibility 0.2s;
 	z-index: 999;
 	user-select: none;
+}
+
+/* The oper dialog holds text fields: absolute in #viewport, the visible
+ * band, so iOS's keyboard does not cover its buttons (fixed measures
+ * against the layout viewport, which iOS never shrinks). */
+#oper-action-overlay {
+	position: absolute;
 }
 
 #confirm-dialog-overlay.opened,

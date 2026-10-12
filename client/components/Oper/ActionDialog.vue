@@ -147,11 +147,20 @@
 	border-radius: 5px;
 	width: min(32rem, calc(100vw - 1.5rem));
 	max-height: calc(100% - 1.5rem);
-	overflow-y: auto;
+
+	/* The body scrolls, the buttons stay: with the keyboard up the dialog
+	 * is a short band and Cancel / the submit must not scroll away. */
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 	user-select: text;
 }
 
 #oper-action-dialog .oper-action-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 	padding: 1rem;
 	display: flex;
 	flex-direction: column;
@@ -229,6 +238,7 @@
 }
 
 #oper-action-dialog .oper-action-buttons {
+	flex-shrink: 0;
 	display: flex;
 	justify-content: flex-end;
 	gap: 0.6rem;
