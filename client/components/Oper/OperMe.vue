@@ -132,7 +132,7 @@
 </style>
 
 <script lang="ts">
-import {computed, defineComponent, onUnmounted, PropType, ref, watch} from "vue";
+import {computed, defineComponent, onUnmounted, PropType, reactive, watch} from "vue";
 import type {ClientNetwork} from "../../js/types";
 import socket from "../../js/socket";
 import {hasPriv} from "../../js/helpers/operMenu";
@@ -269,19 +269,17 @@ export default defineComponent({
 		const allowed = (m: UserMode) => !m.priv || hasPriv(props.network, m.priv);
 
 		// A switch shows what was asked until the server's MODE line agrees
-		// or 4 s pass without one (a refusal), then the real mode again.
-		const switchesChanged = ref(0);
-		const pending = new PendingSwitches(4000, () => switchesChanged.value++);
+		// or 4 s (plus the fake lag of the taps queued ahead) pass without
+		// one (a refusal), then the real mode again. Reactive, so a request
+		// settling re-renders the switch.
+		const pending = reactive(new PendingSwitches(4000));
 		watch(
 			() => props.network.oper?.umodes ?? "",
 			() => pending.reconcile(has)
 		);
 		onUnmounted(() => pending.dispose());
 
-		const shown = (letter: string) => {
-			void switchesChanged.value; // re-render when a request settles
-			return pending.shown(letter, has(letter));
-		};
+		const shown = (letter: string) => pending.shown(letter, has(letter));
 
 		const set = (letter: string, on: boolean) => {
 			pending.request(letter, on);

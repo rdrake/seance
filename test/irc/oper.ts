@@ -28,7 +28,8 @@ import {
 } from "../../client/js/irc/operprefs";
 import {applyModeString, levelOf, parseFeature, parsePrivs} from "../../client/js/irc/oper";
 import {parseLine} from "../../client/js/irc/message";
-import {request, requestLineFits, REQUEST_TIMEOUT_MS} from "../../client/js/irc/request";
+import {isFailedOutcome, request, REQUEST_TIMEOUT_MS} from "../../client/js/irc/request";
+import {lineBudget} from "../../client/js/helpers/operLine";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
 import {MessageType, SharedMsg} from "../../shared/types/msg";
@@ -269,11 +270,14 @@ describe("oper tools: labeled requests (irc/request.ts)", function () {
 		// well within it, its bytes are not.
 		const line = `KILL bob :${"現".repeat(200)}`;
 
-		expect(requestLineFits(line)).to.equal(false);
-		expect(requestLineFits("KILL bob :spam")).to.equal(true);
+		// The dialog's budget agrees with what request() refuses.
+		expect(lineBudget(line).over).to.be.above(0);
+		expect(lineBudget("KILL bob :spam").over).to.equal(0);
 
 		const unit = await request(client, line);
 		expect(unit.outcome).to.equal("toolong");
+		expect(isFailedOutcome(unit.outcome)).to.equal(true);
+		expect(isFailedOutcome("ack")).to.equal(false);
 		expect(transport.sent.length, "nothing sent").to.equal(sent);
 		expect(messages(client.lobby.id), "no lobby error").to.have.length(0);
 	});

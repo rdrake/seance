@@ -335,6 +335,23 @@ describe("the alert builder's wire side (irc/alerts.ts, services/x3/alerts.ts)",
 		expect(shown()).to.deep.equal([]);
 	});
 
+	it("reports a command over the line cap as too long, not as a dead connection", async function () {
+		const {client, transport} = setup();
+		// 200 three-byte characters: well within a reason field, not within 500 bytes.
+		const command = `addalert x notice expire 1w authed no reason ${"現".repeat(200)}`;
+		const result = await addAlert(client, command);
+
+		expect(result).to.deep.equal({kind: "toolong"});
+		expect(describeFailure(client, result)).to.match(/^Not sent: the command is too long/);
+		expect(transport.sent, "nothing sent").to.deep.equal([]);
+		expect(shown(), "no error in the lobby").to.deep.equal([]);
+
+		// No watcher was left waiting: the next lookup gets O3's answer.
+		const add = addAlert(client, "addalert y notice reason r");
+		notice(transport, "O3", `Added alert named ${B}y${B}.`);
+		expect((await add).kind).to.equal("reply");
+	});
+
 	it("removes an alert, and replaces one as delete then add", async function () {
 		const {client, transport} = setup();
 		const del = delAlert(client, "seance-bots");

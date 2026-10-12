@@ -121,7 +121,9 @@ export default defineComponent({
 			// under iOS's keyboard. The menu is capped to the band's height in
 			// style.css and scrolls, so clamping its top to 0 keeps it whole.
 			// In the native shell the container starts below the status bar
-			// (style.css), so page coordinates are taken into its own.
+			// (style.css), so viewport coordinates are taken into its own —
+			// `clientX/Y`, which match `getBoundingClientRect()`; `pageX/Y` are
+			// off by the scroll while iOS scrolls the page for the keyboard.
 			const container = contextMenu.value.parentElement;
 			const band = container?.getBoundingClientRect();
 			const bandWidth = container?.clientWidth || window.innerWidth;
@@ -138,7 +140,7 @@ export default defineComponent({
 				});
 			}
 
-			return fit({left: event.pageX, top: event.pageY});
+			return fit({left: event.clientX, top: event.clientY});
 		};
 
 		const hoverItem = (id: number) => {

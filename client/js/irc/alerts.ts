@@ -13,7 +13,7 @@
 import type {IrcClient} from "./client";
 import {formatLine} from "./message";
 import {sendQuiet} from "./quiet";
-import {canRequest, request} from "./request";
+import {canRequest, isFailedOutcome, request} from "./request";
 import {collectServiceReply, type ServiceAnswer} from "./services";
 import {servicesProfileFor} from "./services/index";
 import type {
@@ -27,7 +27,7 @@ import type {
 /** What a lookup came to: the parsed value (undefined when the bot said "no such thing") or why there is none. */
 export type LookupResult<T> =
 	| {kind: "reply"; value: T | undefined; lines: string[]}
-	| {kind: "missing" | "timeout" | "closed" | "unavailable"};
+	| {kind: "missing" | "timeout" | "closed" | "toolong" | "unavailable"};
 
 /** The lookups and the oper bot of a network with a package set up, or undefined. */
 function lookupsOf(client: IrcClient): {lookups: ServicesLookups; bot: string} | undefined {
@@ -53,13 +53,17 @@ async function ask<T>(client: IrcClient, lookup: ServiceLookup<T>): Promise<Look
 		return {kind: "unavailable"};
 	}
 
-	const reply = collectServiceReply(client, bot, {accept: (text) => lookup.accept(text)});
+	// Sent first, then watched: a line that was never sent leaves no watcher
+	// waiting, and nothing the bot says can arrive before this task yields.
+	const sent = sendQuiet(client, lookup.command(bot));
 
-	if (!sendQuiet(client, lookup.command(bot))) {
-		return {kind: "closed"};
+	if (sent !== "sent") {
+		return {kind: sent};
 	}
 
-	const answer: ServiceAnswer<string[]> = await reply;
+	const answer: ServiceAnswer<string[]> = await collectServiceReply(client, bot, {
+		accept: (text) => lookup.accept(text),
+	});
 
 	if (answer.kind !== "reply") {
 		return {kind: answer.kind};
@@ -144,7 +148,7 @@ export async function opersAmong(
 	});
 	const reply = await request(client, line, {end: ["315"]});
 
-	if (reply.outcome === "closed" || reply.outcome === "timeout" || reply.outcome === "toolong") {
+	if (isFailedOutcome(reply.outcome)) {
 		return undefined;
 	}
 
@@ -209,6 +213,8 @@ export function describeFailure(client: IrcClient, result: LookupResult<unknown>
 			return `${bot} did not answer.`;
 		case "closed":
 			return "The connection is down.";
+		case "toolong":
+			return "Not sent: the command is too long. Shorten the reason or the criteria.";
 		case "unavailable":
 			return "No oper service is set up for this network.";
 		default:

@@ -5,15 +5,13 @@ import {PendingSwitches} from "../../client/js/helpers/pendingSwitches";
 describe("pending switches (helpers/pendingSwitches.ts)", function () {
 	let clock: sinon.SinonFakeTimers;
 	let umodes: string;
-	let changes: number;
 	let switches: PendingSwitches;
 	const has = (letter: string) => umodes.includes(letter);
 
 	beforeEach(function () {
 		clock = sinon.useFakeTimers();
 		umodes = "o";
-		changes = 0;
-		switches = new PendingSwitches(4000, () => changes++);
+		switches = new PendingSwitches(4000);
 	});
 
 	afterEach(function () {
@@ -28,7 +26,6 @@ describe("pending switches (helpers/pendingSwitches.ts)", function () {
 
 	it("holds the asked-for state until the server's MODE matches it", function () {
 		switches.request("I", true);
-		expect(changes).to.equal(1);
 		expect(switches.shown("I", has("I"))).to.equal(true);
 		umodes = "oI";
 		switches.reconcile(has);
@@ -43,7 +40,6 @@ describe("pending switches (helpers/pendingSwitches.ts)", function () {
 		expect(switches.shown("I", has("I"))).to.equal(true);
 		clock.tick(1);
 		expect(switches.shown("I", has("I"))).to.equal(false);
-		expect(changes).to.equal(2);
 	});
 
 	it("keeps waiting through an unrelated mode change", function () {
@@ -51,7 +47,6 @@ describe("pending switches (helpers/pendingSwitches.ts)", function () {
 		umodes = "ow";
 		switches.reconcile(has);
 		expect(switches.isPending("I")).to.equal(true);
-		expect(changes).to.equal(1);
 	});
 
 	it("works for switching a mode off", function () {
@@ -70,5 +65,41 @@ describe("pending switches (helpers/pendingSwitches.ts)", function () {
 		expect(switches.shown("I", true)).to.equal(false);
 		clock.tick(1000);
 		expect(switches.isPending("I")).to.equal(false);
+	});
+
+	it("waits longer for a tap queued behind others: the server answers in order, ~2 s each", function () {
+		switches.request("I", true);
+		switches.request("w", true);
+		switches.request("g", true);
+
+		// 4 s, then 2 s more for each tap ahead: 4, 6 and 8 s.
+		clock.tick(4000);
+		expect(switches.isPending("I")).to.equal(false);
+		expect(switches.isPending("w")).to.equal(true);
+		clock.tick(2000);
+		expect(switches.isPending("w")).to.equal(false);
+		// The third MODE comes ~6 s after its tap: still held then.
+		expect(switches.shown("g", has("g"))).to.equal(true);
+
+		umodes = "og";
+		switches.reconcile(has);
+		expect(switches.isPending("g")).to.equal(false);
+		expect(switches.shown("g", has("g"))).to.equal(true);
+	});
+
+	it("re-renders a Vue reader when a request settles (wrapped in reactive)", async function () {
+		const {reactive, effect} = await import("@vue/reactivity");
+		const live = reactive(new PendingSwitches(4000));
+		let seen: boolean[] = [];
+		const runner = effect(() => {
+			seen.push(live.shown("I", has("I")));
+		});
+
+		live.request("I", true);
+		clock.tick(4000);
+		expect(seen).to.deep.equal([false, true, false]);
+		runner.effect.stop();
+		live.dispose();
+		seen = [];
 	});
 });

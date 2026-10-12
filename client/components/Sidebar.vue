@@ -158,6 +158,11 @@ export default defineComponent({
 			store.commit("sidebarOpen", state);
 		};
 
+		/** Owns the <body> listeners of the drag in flight. */
+		let drag: AbortController | undefined;
+		/** Where the drag in flight started, for the sideways-scroller check. */
+		let dragTarget: Element | null = null;
+
 		const onTouchMove = (e: TouchEvent) => {
 			const touch = (touchCurPos.value = e.touches.item(0));
 
@@ -186,6 +191,16 @@ export default defineComponent({
 				const devicePixelRatio = window.devicePixelRatio || 2;
 
 				if (Math.abs(distX) > devicePixelRatio) {
+					// A sideways swipe in something that scrolls sideways (an
+					// oper report's table, its raw lines, a code block) is that
+					// scroll. Asked here, once the gesture is known to be
+					// horizontal, not on every touchstart: the walk reads layout.
+					if (dragTarget && scrollerTakesSwipe(dragTarget, !store.state.sidebarOpen)) {
+						// eslint-disable-next-line no-use-before-define
+						endDrag(false);
+						return;
+					}
+
 					store.commit("sidebarDragging", true);
 					menuIsMoving.value = true;
 				}
@@ -215,9 +230,6 @@ export default defineComponent({
 			}
 		};
 
-		/** Owns the <body> listeners of the drag in flight. */
-		let drag: AbortController | undefined;
-
 		/**
 		 * End the drag and put everything back. `settled` is false when the
 		 * system took the touches (`touchcancel`): no toggle for a gesture
@@ -243,6 +255,7 @@ export default defineComponent({
 
 			drag?.abort();
 			drag = undefined;
+			dragTarget = null;
 
 			store.commit("sidebarDragging", false);
 
@@ -274,9 +287,10 @@ export default defineComponent({
 				return;
 			}
 
-			// A second finger ends a drag in flight, wherever it lands.
+			// A second finger (a pinch, a two-finger swipe) cancels a drag in
+			// flight, wherever it lands: nothing toggles.
 			if (e.touches.length !== 1) {
-				onTouchEnd();
+				endDrag(false);
 				return;
 			}
 
@@ -298,16 +312,12 @@ export default defineComponent({
 				return;
 			}
 
-			// A sideways swipe in something that scrolls sideways (an oper
-			// report's table, its raw lines, a code block) is that scroll, and
-			// nothing behind an open dialog or card is the sidebar's to move.
-			if (
-				target instanceof Element &&
-				(inOpenOverlay(target) || scrollerTakesSwipe(target, !store.state.sidebarOpen))
-			) {
+			// Nothing behind an open dialog or card is the sidebar's to move.
+			if (target instanceof Element && inOpenOverlay(target)) {
 				return;
 			}
 
+			dragTarget = target instanceof Element ? target : null;
 			touchStartPos.value = touchCurPos.value = e.touches.item(0);
 
 			const styles = window.getComputedStyle(sidebar.value);

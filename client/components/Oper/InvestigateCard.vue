@@ -906,10 +906,18 @@ export default defineComponent({
 		// or another stacked over it — and put back when the editor next opens
 		// for the same note. Saving on Back would keep a half-typed note the
 		// oper never chose to keep; Cancel is the way to throw one away.
-		let editingFor: {network: string; key: string} | undefined;
-		// Keyed by network uuid and note key; for this page only.
+		//
+		// A draft is kept under the card it was written on (network, kind,
+		// target), not under its note key: a user card's key moves from the
+		// nick to the IP or the account as the lookups answer, and a draft
+		// filed under the old key would never be found again.
+		let editingFor: {card: string; investigation: Investigation} | undefined;
+		// Keyed by card; for this page only.
 		const setAside = new Map<string, string>();
 		let discardDraft = false;
+
+		const cardKey = (request: InvestigateRequest) =>
+			`${request.network} ${request.kind} ${request.target}`;
 
 		watch(editingNote, (editing, was) => {
 			if (!was || editing) {
@@ -918,12 +926,10 @@ export default defineComponent({
 
 			const target = editingFor;
 
-			if (
-				!discardDraft &&
-				target &&
-				noteDraft.value !== getNote(target.network, target.key)
-			) {
-				setAside.set(`${target.network} ${target.key}`, noteDraft.value);
+			// Compared with that card's note as it stands now, under the key
+			// it has now (the card may already be closed or covered).
+			if (!discardDraft && target && noteDraft.value !== target.investigation.note) {
+				setAside.set(target.card, noteDraft.value);
 			}
 
 			discardDraft = false;
@@ -931,11 +937,14 @@ export default defineComponent({
 		});
 
 		const editNote = () => {
-			const uuid = top.value?.request.network ?? "";
-			const key = noteKey.value;
-			const kept = setAside.get(`${uuid} ${key}`);
-			setAside.delete(`${uuid} ${key}`);
-			editingFor = {network: uuid, key};
+			if (!top.value) {
+				return;
+			}
+
+			const card = cardKey(top.value.request);
+			const kept = setAside.get(card);
+			setAside.delete(card);
+			editingFor = {card, investigation: top.value.investigation};
 			discardDraft = false;
 			noteDraft.value = kept ?? note.value;
 			editingNote.value = true;

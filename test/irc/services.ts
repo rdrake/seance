@@ -351,6 +351,16 @@ describe("services support: a bot's reply (irc/services.ts awaitServiceReply)", 
 			text: "O3 is not online (no such nick).",
 		});
 
+		// Over the line cap: nothing sent, said so, and no watcher left behind.
+		const long = await servicesBan(client, {
+			type: "gline",
+			mask: "*@h",
+			seconds: 60,
+			reason: "現".repeat(200),
+		});
+		expect(long).to.deep.equal({outcome: "toolong"});
+		expect(transport.sent).to.have.length(3);
+
 		client.setServices(undefined);
 		expect(
 			await servicesBan(client, {type: "shun", mask: "x", seconds: 1, reason: "r"})
@@ -367,7 +377,7 @@ describe("services support: quiet lookups (irc/quiet.ts)", function () {
 		const {client, transport} = setup();
 		const windows = () => client.channels.map((c) => c.name);
 
-		expect(sendQuiet(client, "PRIVMSG O3 :whois alice")).to.equal(true);
+		expect(sendQuiet(client, "PRIVMSG O3 :whois alice")).to.equal("sent");
 		expect(transport.sent).to.deep.equal(["@label=svc1 PRIVMSG O3 :whois alice"]);
 
 		// The echo, labeled as nefarious2 relays it; also an ACK and a batch.

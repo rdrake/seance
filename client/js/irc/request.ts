@@ -57,20 +57,11 @@ export const REQUEST_TIMEOUT_MS = 30_000;
  */
 export type ReplyOutcome = "batch" | "lines" | "ack" | "timeout" | "closed" | "toolong";
 
-/**
- * Room kept for the tag a labeled line goes out with (`@label=r12345 `,
- * `@label=svc12345 `): generous, so a check made before sending still holds
- * after a few thousand requests.
- */
-const LABEL_RESERVE_BYTES = utf8ByteLength("@label=svc999999 ");
+/** The outcomes that mean no answer came: nothing sent, the socket gone, or silence. */
+export type FailedOutcome = "timeout" | "closed" | "toolong";
 
-/**
- * Whether `line` (no tags, no CRLF) can go out as a labeled request or a
- * quiet line: its UTF-8 bytes plus the label's room are within
- * `MAX_LINE_BYTES`. What a dialog asks before it offers to send.
- */
-export function requestLineFits(line: string): boolean {
-	return utf8ByteLength(line) + LABEL_RESERVE_BYTES <= MAX_LINE_BYTES;
+export function isFailedOutcome(outcome: ReplyOutcome): outcome is FailedOutcome {
+	return outcome === "timeout" || outcome === "closed" || outcome === "toolong";
 }
 
 export interface ReplyUnit {

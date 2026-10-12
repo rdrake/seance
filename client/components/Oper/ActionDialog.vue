@@ -686,7 +686,8 @@ export default defineComponent({
 						sendProblem.value = reply.text ?? `${bot} refused it.`;
 						return;
 					case "closed":
-						sendProblem.value = "Not sent: the connection is down.";
+					case "toolong":
+						sendProblem.value = errorText([], reply.outcome) ?? "";
 						return;
 					default:
 						sendProblem.value = `${bot} did not answer.`;
