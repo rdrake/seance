@@ -76,6 +76,13 @@
 	/* Color of the progress bar shown above the input while a file is being uploaded. Defaults to button color */
 	--upload-progressbar-color: var(--button-color);
 
+	/* The oper tools' one colour of their own (an outlying count, a route
+	 * chosen for a while, a "wide" criterion): amber pulled a third of the
+	 * way toward the text colour, so it darkens on a light theme and lightens
+	 * on a dark one and holds 4.5:1 as small text on both. A theme may set
+	 * its own. */
+	--oper-amber: color-mix(in oklab, #c7841a 65%, var(--body-color));
+
 	/* Color the sidebar channel icon pulses to while someone is typing there */
 	--channel-typing-color: #84ce88;
 
@@ -3555,13 +3562,6 @@ button.snotice-badge:focus-visible {
 	background: color-mix(in srgb, currentcolor 12%, transparent);
 }
 
-/* The oper panel's own bits (Oper/OperActivity.vue, OperAlerts.vue,
- * OperMe.vue). Amber is the one colour of its own: an outlying count, a
- * route chosen for a while. */
-#oper {
-	--oper-amber: #c7841a;
-}
-
 /* A segmented control: a row of buttons sharing one border, the pressed
  * one filled (aria-pressed for a toggle group, aria-checked for a
  * radiogroup). */
@@ -3975,8 +3975,6 @@ button.snotice-badge:focus-visible {
 }
 
 .oper-investigate {
-	--oper-amber: #c7841a;
-
 	width: min(60rem, 100%);
 	height: min(50rem, 100%);
 	user-select: text;
@@ -4366,8 +4364,6 @@ button.snotice-badge:focus-visible {
 }
 
 .oper-alert-builder {
-	--oper-amber: #c7841a;
-
 	width: min(46rem, 100%);
 	height: min(44rem, 100%);
 	user-select: text;
@@ -4578,7 +4574,7 @@ button.snotice-badge:focus-visible {
 }
 
 .oper-alert-error {
-	color: #e74c3c;
+	color: var(--error-fg, color-mix(in oklab, #e74c3c 60%, var(--body-color)));
 	font-size: 0.875em;
 }
 

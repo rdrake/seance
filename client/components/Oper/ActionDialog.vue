@@ -141,7 +141,9 @@
 
 <style>
 #oper-action-dialog {
-	background: var(--body-bg-color);
+	/* The window's colour pair, like the cards': --body-bg-color is the
+	 * sidebar's, dark under day's dark-on-light text. */
+	background: var(--window-bg-color);
 	color: var(--body-color);
 	margin: 0.75rem;
 	border-radius: 5px;
@@ -227,7 +229,7 @@
 }
 
 #oper-action-dialog .oper-action-error {
-	color: #e74c3c;
+	color: var(--error-fg, color-mix(in oklab, #e74c3c 60%, var(--body-color)));
 	font-size: 0.875rem;
 	margin: 0.25rem 0 0;
 }
