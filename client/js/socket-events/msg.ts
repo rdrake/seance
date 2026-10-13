@@ -108,9 +108,9 @@ socket.on("msg", function (data) {
 	// worker drops the FCM duplicate the ircd may emit for the same
 	// message while this session is attached-but-idle (FEAT_WEBPUSH_IDLE).
 	// The subset is what the server pushes: PMs and channel mentions. The
-	// Android shell's push service keeps its own ring, fed only while the
-	// user is looking (the shell's page cannot notify by itself) and only
-	// for a network it is subscribed on.
+	// Android shell's push service keeps its own ring, fed here only for a
+	// network it is subscribed on; a message the page alerted about is in it
+	// already (helpers/nativeAlerts.ts shows it through that service).
 	if (
 		!data.msg.self &&
 		data.msg.msgid &&
@@ -174,8 +174,8 @@ function notifyMessage(
 		(store.state.settings.notifyAllMessages && msg.type === MessageType.MESSAGE)
 	) {
 		if (!document.hasFocus() || !activeChannel || activeChannel.channel !== channel) {
-			// The iOS shell has no Notification API: iOS shows the alert and
-			// plays its sound (helpers/nativeAlerts.ts), never the page.
+			// The shells' WebViews have no Notification API: the OS shows the
+			// alert and plays its sound (helpers/nativeAlerts.ts), never the page.
 			const native = nativeAlertsAvailable();
 
 			if (store.state.settings.notification && !native) {
@@ -214,17 +214,35 @@ function notifyMessage(
 					});
 				}
 
+				const timestamp = Date.parse(String(msg.time));
+
 				if (native) {
+					const query = channel.type === ChanType.QUERY;
+					const invite = msg.type === MessageType.INVITE;
 					showNativeAlert({
-						targetId,
+						network: network.uuid,
+						target: invite ? nick : channel.name,
 						title,
 						body,
 						sound: store.state.settings.notification,
+						message: {
+							from: nick,
+							to: query || invite ? network.nick : channel.name,
+							// the wire form, which the shell renders as `* nick …`
+							text: invite
+								? `invited you to ${msg.channel ?? ""}`
+								: msg.type === MessageType.ACTION
+								? `\x01ACTION ${msg.text ?? ""}\x01`
+								: msg.text ?? "",
+							msgid: msg.msgid,
+							time: Number.isFinite(timestamp)
+								? new Date(timestamp).toISOString()
+								: undefined,
+							notice: msg.type === MessageType.NOTICE,
+						},
 					});
 					return;
 				}
-
-				const timestamp = Date.parse(String(msg.time));
 
 				try {
 					if (store.state.hasServiceWorker) {

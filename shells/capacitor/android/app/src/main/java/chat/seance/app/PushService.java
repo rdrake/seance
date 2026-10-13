@@ -114,7 +114,7 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
         if (line != null && line.command.equals("MARKREAD")) {
             markRead(this, network, line.target, line.timestamp);
         } else if (line != null && (line.command.equals("PRIVMSG") || line.command.equals("NOTICE"))) {
-            show(network, line);
+            show(this, network, line, false, false);
         } else {
             // Something the ircd pushed that is not a message this build
             // can read: say so rather than drop it, as the service worker does.
@@ -148,23 +148,32 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
         }
     }
 
-    private void show(String network, PushLine line) {
+    /**
+     * A message line, from a push or from the page (NativePushPlugin `show`:
+     * the page's own alert, in the push's shape, as the web's goes through
+     * the network's push worker). `silent`: shown without sound or
+     * vibration (the page's notification-sound setting is off).
+     * `fromPage`: the seen ring does not apply — the page marks what it
+     * took there, and its `seen` can overtake its own `show` on the bridge;
+     * {@link PushMerge#add} still drops a message a push already shows.
+     */
+    static void show(Context context, String network, PushLine line, boolean silent, boolean fromPage) {
         boolean channel = PushLine.isChannel(line.target);
         String conversation = channel ? line.target : line.nick;
         String key = key(network, conversation);
 
         synchronized (lock) {
-            PushSeen seen = seen(this);
-            if (seen.covers(line)) {
+            PushSeen seen = seen(context);
+            if (!fromPage && seen.covers(line)) {
                 return; // the page showed it, or this service already did
             }
-            PushMerge.Result merged = PushMerge.add(shownEntries(this, key), line, System.currentTimeMillis(), PushMerge.KEEP);
+            PushMerge.Result merged = PushMerge.add(shownEntries(context, key), line, System.currentTimeMillis(), PushMerge.KEEP);
             if (merged.changed) {
                 // A later line of a message already shown grows it in place without a second alert.
-                post(this, network, conversation, merged.entries, !merged.isNew);
+                post(context, network, conversation, merged.entries, !merged.isNew, silent);
             }
             seen.add(PushSeen.seenKey(line));
-            saveSeen(this, seen);
+            saveSeen(context, seen);
         }
     }
 
@@ -246,6 +255,17 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
     }
 
     private static void post(Context context, String network, String conversation, List<PushMerge.Entry> entries, boolean quiet) {
+        post(context, network, conversation, entries, quiet, false);
+    }
+
+    private static void post(
+        Context context,
+        String network,
+        String conversation,
+        List<PushMerge.Entry> entries,
+        boolean quiet,
+        boolean silent
+    ) {
         boolean channel = PushLine.isChannel(conversation);
         String key = key(network, conversation);
 
@@ -269,6 +289,7 @@ public class PushService extends org.unifiedpush.android.connector.PushService {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setSubText(PushSubscriptions.name(context, network))
             .setOnlyAlertOnce(quiet)
+            .setSilent(silent)
             .addExtras(extras);
 
         NotificationManagerCompat manager = NotificationManagerCompat.from(context);

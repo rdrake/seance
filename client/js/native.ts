@@ -4,7 +4,7 @@
 // imports nothing and is what the leaf helpers (haptics, keepAlive, appBadge,
 // viewport) talk to; this file is free to pull in the store and the router.
 
-import {leavePage, onStandalonePage, openTarget, switchToChannel} from "./router";
+import {leavePage, onStandalonePage, openTarget} from "./router";
 import {closeOpenImage} from "./helpers/imageViewer";
 import {followSystemTextSize} from "./helpers/systemTextSize";
 import {reconnectAll} from "./irc/manager";
@@ -138,14 +138,8 @@ export function installNativeHooks(): void {
 	});
 
 	// iOS: a tapped message notification (helpers/nativeAlerts.ts) opens
-	// its conversation, as a web notification's click does.
-	onNativeAlertTap((targetId) => {
-		const target = store.getters.findChannel(targetId);
-
-		if (target) {
-			switchToChannel(target.channel);
-		}
-	});
+	// its conversation, as Android's above.
+	onNativeAlertTap((network, target) => openTarget(network, target));
 
 	launchUrl = nativeCall<{url?: string}>("App", "getLaunchUrl").then((result) => {
 		const href = result?.url || null;

@@ -125,7 +125,9 @@
 		</div>
 		<div>
 			<div class="opt">
-				<button id="play" @click.prevent="playNotification">Play sound</button>
+				<button id="play" @click.prevent="playNotification">
+					{{ nativeShell ? "Send a test notification" : "Play sound" }}
+				</button>
 			</div>
 		</div>
 
@@ -216,6 +218,7 @@ import {defineComponent, onMounted} from "vue";
 import {useStore} from "../../js/store";
 import webpush from "../../js/webpush";
 import {isAndroidShell} from "../../js/helpers/capacitor";
+import {nativeAlertsAvailable, showNativeAlert} from "../../js/helpers/nativeAlerts";
 
 export default defineComponent({
 	name: "NotificationSettings",
@@ -230,7 +233,27 @@ export default defineComponent({
 			webpush.refresh();
 		});
 
+		const nativeShell = nativeAlertsAvailable();
+
 		const playNotification = () => {
+			// The shells' sound is the OS's, played with a notification.
+			if (nativeShell) {
+				showNativeAlert({
+					network: "",
+					target: "#test",
+					title: "Test",
+					body: "This is how a message notification looks and sounds.",
+					sound: true,
+					message: {
+						from: "Test",
+						to: "#test",
+						text: "This is how a message notification looks and sounds.",
+						notice: false,
+					},
+				});
+				return;
+			}
+
 			const pop = new Audio();
 			pop.src = "audio/pop.wav";
 
@@ -242,6 +265,7 @@ export default defineComponent({
 			store,
 			androidShell: isAndroidShell(),
 			playNotification,
+			nativeShell,
 			snooze,
 		};
 	},

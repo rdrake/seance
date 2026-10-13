@@ -48,6 +48,11 @@ import org.unifiedpush.android.connector.UnifiedPush;
  * - `unsubscribe({network})`, `clear({network?, target?})`.
  * - `seen({msgid})`: the page took this message while the user was looking
  *   at it; its push shows nothing ({@link PushSeen}).
+ * - `show({network, line, silent})`: the page's own alert for a message, as
+ *   an IRC line in the push's shape, posted as a push would be (any
+ *   network, subscribed or not) — the WebView has no Notification API.
+ * - `askPermission()`: `{permission}`, asking for POST_NOTIFICATIONS on 13+
+ *   while it is undecided.
  * - `takeTap()` / event `tap`: `{network, target}` of a tapped notification.
  * - event `endpoint`: `{network}` — the distributor changed or dropped a
  *   network's endpoint on its own; the page re-reads and re-registers.
@@ -402,6 +407,39 @@ public class NativePushPlugin extends Plugin {
             PushService.recordSeen(getContext(), msgid);
         }
         call.resolve();
+    }
+
+    @PluginMethod
+    public void show(PluginCall call) {
+        String network = call.getString("network");
+        String line = call.getString("line");
+        PushLine parsed = line != null ? PushLine.parse(line) : null;
+        if (network == null || parsed == null) {
+            call.reject("network and line are required", "failed");
+            return;
+        }
+        PushService.show(getContext(), network, parsed, call.getBoolean("silent", false), true);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void askPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !"prompt".equals(permission())) {
+            call.resolve(permissionResult());
+            return;
+        }
+        requestPermissionForAlias("notifications", call, "askAnswered");
+    }
+
+    @PermissionCallback
+    private void askAnswered(PluginCall call) {
+        new Waiting(call, getBridge()).resolve(permissionResult());
+    }
+
+    private JSObject permissionResult() {
+        JSObject result = new JSObject();
+        result.put("permission", permission());
+        return result;
     }
 
     @PluginMethod

@@ -10,6 +10,7 @@ import {SettingsState} from "./settings";
 import {SharedConfiguration, LockedSharedConfiguration} from "../../shared/types/config";
 import {BrandingConfig, DEFAULT_BRANDING, brandingString} from "./branding";
 import type {UploadProgress} from "./upload";
+import {nativeAlertsAvailable} from "./helpers/nativeAlerts";
 
 enum DesktopNotificationState {
 	Unsupported = "unsupported",
@@ -19,7 +20,11 @@ enum DesktopNotificationState {
 }
 
 function detectDesktopNotificationState(): DesktopNotificationState {
-	if (!("Notification" in window)) {
+	// The shells notify through the OS (helpers/nativeAlerts.ts), whose
+	// own settings say whether they may.
+	if (nativeAlertsAvailable()) {
+		return DesktopNotificationState.Granted;
+	} else if (!("Notification" in window)) {
 		return DesktopNotificationState.Unsupported;
 	} else if (Notification.permission === DesktopNotificationState.Granted) {
 		return DesktopNotificationState.Granted;
