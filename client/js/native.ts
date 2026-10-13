@@ -4,7 +4,7 @@
 // imports nothing and is what the leaf helpers (haptics, keepAlive, appBadge,
 // viewport) talk to; this file is free to pull in the store and the router.
 
-import {leavePage, onStandalonePage, openTarget} from "./router";
+import {leavePage, onStandalonePage, openTarget, switchToChannel} from "./router";
 import {closeOpenImage} from "./helpers/imageViewer";
 import {followSystemTextSize} from "./helpers/systemTextSize";
 import {reconnectAll} from "./irc/manager";
@@ -19,6 +19,7 @@ import {
 } from "./helpers/capacitor";
 import {emitEscape, topEscapeLayer} from "./helpers/escapeLayer";
 import {onNativePushTap} from "./helpers/nativePush";
+import {onNativeAlertTap} from "./helpers/nativeAlerts";
 import {store} from "./store";
 
 // A link the OS handed the app — `irc:`, `ircs:` or `web+irc:`, the schemes
@@ -133,6 +134,16 @@ export function installNativeHooks(): void {
 	onNativePushTap((network, target) => {
 		if (target) {
 			openTarget(network, target);
+		}
+	});
+
+	// iOS: a tapped message notification (helpers/nativeAlerts.ts) opens
+	// its conversation, as a web notification's click does.
+	onNativeAlertTap((targetId) => {
+		const target = store.getters.findChannel(targetId);
+
+		if (target) {
+			switchToChannel(target.channel);
 		}
 	});
 

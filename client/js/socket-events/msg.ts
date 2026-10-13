@@ -11,6 +11,7 @@ import webpush from "../webpush";
 import {attachMediaPreviews} from "../helpers/messagePreviews";
 import * as saved from "../irc/saved-networks";
 import {insertMessage} from "../helpers/messageUpdates";
+import {nativeAlertsAvailable, showNativeAlert} from "../helpers/nativeAlerts";
 
 let pop;
 
@@ -173,7 +174,11 @@ function notifyMessage(
 		(store.state.settings.notifyAllMessages && msg.type === MessageType.MESSAGE)
 	) {
 		if (!document.hasFocus() || !activeChannel || activeChannel.channel !== channel) {
-			if (store.state.settings.notification) {
+			// The iOS shell has no Notification API: iOS shows the alert and
+			// plays its sound (helpers/nativeAlerts.ts), never the page.
+			const native = nativeAlertsAvailable();
+
+			if (store.state.settings.notification && !native) {
 				try {
 					void Promise.resolve(pop.play()).catch(() => undefined); // autoplay may be blocked
 				} catch (exception) {
@@ -181,7 +186,7 @@ function notifyMessage(
 				}
 			}
 
-			if ("Notification" in window && Notification.permission === "granted") {
+			if (native || ("Notification" in window && Notification.permission === "granted")) {
 				let title: string;
 				let body: string;
 				// TODO: fix msg type and get rid of that conditional
@@ -207,6 +212,16 @@ function notifyMessage(
 					body = notificationText(msg.text ? msg.text : "", {
 						markdown: store.state.settings.markdown,
 					});
+				}
+
+				if (native) {
+					showNativeAlert({
+						targetId,
+						title,
+						body,
+						sound: store.state.settings.notification,
+					});
+					return;
 				}
 
 				const timestamp = Date.parse(String(msg.time));
