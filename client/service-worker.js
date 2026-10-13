@@ -326,6 +326,8 @@ function showPageNotification(event, payload) {
 					icon: "img/icon-192.png",
 					body: payload.body,
 					timestamp: payload.timestamp,
+					// The page's sound setting; the OS plays the sound otherwise.
+					silent: payload.silent === true,
 					data: {
 						kind: "page",
 						network: payload.network,
@@ -1059,7 +1061,7 @@ async function handlePushNow(raw) {
 /** Show (or merge) one message's notification: a pushed PRIVMSG/NOTICE, or
  * a page's message (`checkSeen` false — the page recorded it as seen
  * itself, and is asking for it to be shown). */
-async function showMessage(P, parsed, checkSeen) {
+async function showMessage(P, parsed, checkSeen, silent = false) {
 	const msgid = typeof parsed.tags.msgid === "string" ? parsed.tags.msgid : undefined;
 
 	const line = P.lineIndexOf(parsed.tags);
@@ -1166,7 +1168,9 @@ async function showMessage(P, parsed, checkSeen) {
 
 	await showSafely(title, {
 		tag,
-		renotify: added.isNew,
+		// The two together are a TypeError: a silent one never re-alerts.
+		renotify: added.isNew && !silent,
+		silent,
 		icon: "img/icon-192.png",
 		body,
 		timestamp: time ? Date.parse(time) : undefined,
@@ -1209,7 +1213,8 @@ async function handlePageMessageNow(payload) {
 			target: payload.target,
 			text: typeof m.text === "string" ? m.text : "",
 		},
-		false
+		false,
+		payload.silent === true
 	);
 }
 

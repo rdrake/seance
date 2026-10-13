@@ -12,17 +12,8 @@ import {attachMediaPreviews} from "../helpers/messagePreviews";
 import * as saved from "../irc/saved-networks";
 import {insertMessage} from "../helpers/messageUpdates";
 import {nativeAlertsAvailable, showNativeAlert} from "../helpers/nativeAlerts";
-
-let pop;
-
-try {
-	pop = new Audio();
-	pop.src = "audio/pop.wav";
-} catch (e) {
-	pop = {
-		play() {},
-	};
-}
+import {alertSound, playNotificationSound} from "../helpers/notificationSound";
+import {hasVirtualKeyboard} from "../helpers/device";
 
 socket.on("msg", function (data) {
 	const receivingChannel = store.getters.findChannel(data.chan);
@@ -177,16 +168,22 @@ function notifyMessage(
 			// The shells' WebViews have no Notification API: the OS shows the
 			// alert and plays its sound (helpers/nativeAlerts.ts), never the page.
 			const native = nativeAlertsAvailable();
+			const notifying =
+				native || ("Notification" in window && Notification.permission === "granted");
+			const sound = alertSound({
+				soundOn: store.state.settings.notification,
+				native,
+				notifying,
+				ios: "audioSession" in navigator && hasVirtualKeyboard(),
+				visible: document.visibilityState === "visible",
+			});
 
-			if (store.state.settings.notification && !native) {
-				try {
-					void Promise.resolve(pop.play()).catch(() => undefined); // autoplay may be blocked
-				} catch (exception) {
-					// On mobile, sounds can not be played without user interaction.
-				}
+			if (sound.inPage) {
+				// Autoplay may be blocked: on mobile, without user interaction.
+				void playNotificationSound().catch(() => undefined);
 			}
 
-			if (native || ("Notification" in window && Notification.permission === "granted")) {
+			if (notifying) {
 				let title: string;
 				let body: string;
 				// TODO: fix msg type and get rid of that conditional
@@ -256,6 +253,7 @@ function notifyMessage(
 							timestamp: timestamp,
 							title: title,
 							body: body,
+							silent: sound.silentNotification,
 						};
 
 						// A message the server may also push to this device goes
@@ -303,6 +301,7 @@ function notifyMessage(
 							icon: "img/icon-192.png",
 							body: body,
 							timestamp: timestamp,
+							silent: sound.silentNotification,
 						});
 						notify.addEventListener("click", function () {
 							this.close();

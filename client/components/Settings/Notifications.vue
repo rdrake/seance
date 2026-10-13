@@ -219,6 +219,7 @@ import {useStore} from "../../js/store";
 import webpush from "../../js/webpush";
 import {isAndroidShell} from "../../js/helpers/capacitor";
 import {nativeAlertsAvailable, showNativeAlert} from "../../js/helpers/nativeAlerts";
+import {playNotificationSound} from "../../js/helpers/notificationSound";
 
 export default defineComponent({
 	name: "NotificationSettings",
@@ -254,11 +255,7 @@ export default defineComponent({
 				return;
 			}
 
-			const pop = new Audio();
-			pop.src = "audio/pop.wav";
-
-			// eslint-disable-next-line
-			pop.play();
+			void playNotificationSound().catch(() => undefined);
 		};
 
 		return {

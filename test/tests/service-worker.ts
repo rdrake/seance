@@ -22,6 +22,7 @@ interface Rec {
 	tag: string;
 	title: string;
 	body: string;
+	silent?: boolean;
 	data: {
 		kind?: string;
 		count?: number;
@@ -336,6 +337,11 @@ function makeSW(options: HarnessOptions = {}): SWHarness {
 				);
 			},
 			showNotification(title: string, opts: any): Promise<void> {
+				// As browsers do (Notifications API "show steps").
+				if (opts.renotify && opts.silent) {
+					return Promise.reject(new TypeError("silent and renotify"));
+				}
+
 				// The real Notifications API replaces a same-tag notification
 				// silently rather than showing a second one; mirror that here
 				// so the worker's tag-based merge (no explicit close-then-show)
@@ -352,6 +358,7 @@ function makeSW(options: HarnessOptions = {}): SWHarness {
 					tag: opts.tag || "",
 					title,
 					body: opts.body,
+					silent: opts.silent,
 					data: opts.data,
 					actions: opts.actions,
 					closed: false,
@@ -1609,6 +1616,24 @@ describe("service worker page notifications on a push worker", function () {
 		expect(rec.data.time).to.equal(T);
 		expect(rec.data.messages![0].msgid).to.equal("pm-1");
 		expect(rec.actions!.map((a) => a.action)).to.deep.equal(["markread", "reply"]);
+	});
+
+	it("shows the page's message silently when the page asks, actions kept", async function () {
+		const sw = makeSW({scope: NET_SCOPE});
+
+		await fireMessage(sw, {...pageNote("#seance", "alice", "hush", "pm-s"), silent: true});
+
+		expect(sw.shown).to.have.lengthOf(1);
+		expect(sw.shown[0].silent).to.equal(true);
+		expect(sw.shown[0].actions!.map((a) => a.action)).to.deep.equal(["markread", "reply"]);
+	});
+
+	it("leaves the page's message audible by default", async function () {
+		const sw = makeSW({scope: NET_SCOPE});
+
+		await fireMessage(sw, pageNote("#seance", "alice", "hey", "pm-a"));
+
+		expect(sw.shown[0].silent).to.equal(false);
 	});
 
 	it("a query's notification answers the sender", async function () {
