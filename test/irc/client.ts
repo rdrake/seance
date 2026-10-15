@@ -8,6 +8,7 @@ import {registerBusHandlers} from "../../client/js/irc/bus";
 import {utf8ByteLength} from "../../client/js/irc/message";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
+import {CTCP_REPLY_INTERVAL_MS} from "../../client/js/irc/handlers/privmsg";
 import {ChanState, ChanType} from "../../shared/types/chan";
 import {MessageType, SharedMsg} from "../../shared/types/msg";
 import type {SharedNetwork, SharedNetworkChan} from "../../shared/types/network";
@@ -654,6 +655,30 @@ describe("IrcClient", function () {
 
 			expect(h.sentAfter()).to.deep.equal(["NOTICE bob :\x01VERSION Seance\x01"]);
 			expect(lastMessage(1).type).to.equal(MessageType.CTCP_REQUEST);
+		});
+
+		it("answers one CTCP request per interval, so a burst cannot flood us off", function () {
+			const clock = sinon.useFakeTimers({now: 1_700_000_000_000, toFake: ["Date"]});
+
+			try {
+				const h = setup();
+				joined(h);
+
+				for (let i = 0; i < 5; i++) {
+					h.transport.line(`:bob!bob@host PRIVMSG #seance :\x01PING ${i}\x01`);
+				}
+
+				expect(h.sentAfter()).to.deep.equal(["NOTICE bob :\x01PING 0\x01"]);
+				expect(
+					messages(1).filter((m) => m.type === MessageType.CTCP_REQUEST)
+				).to.have.length(5);
+
+				clock.tick(CTCP_REPLY_INTERVAL_MS);
+				h.transport.line(":bob!bob@host PRIVMSG alice :\x01VERSION\x01");
+				expect(h.sentAfter()).to.deep.equal(["NOTICE bob :\x01VERSION Seance\x01"]);
+			} finally {
+				clock.restore();
+			}
 		});
 	});
 

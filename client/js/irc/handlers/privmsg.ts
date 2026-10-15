@@ -277,6 +277,12 @@ function handleCtcpResponse(client: IrcClient, nick: string, ctcp: Ctcp, time: D
 	);
 }
 
+/** One automatic CTCP reply per network per this long: each reply costs
+ * server-side fake lag, so answering a burst of requests (a channel full of
+ * `PING <450 bytes>`) would flood every Seance user in it off the server. */
+export const CTCP_REPLY_INTERVAL_MS = 2000;
+const lastCtcpReply = new WeakMap<IrcClient, number>();
+
 function handleCtcpRequest(
 	client: IrcClient,
 	msg: IrcMessage,
@@ -292,7 +298,14 @@ function handleCtcpRequest(
 
 	const respond = ctcpResponses[ctcp.command];
 
-	if (respond && nick) {
+	const now = Date.now();
+
+	if (
+		respond &&
+		nick &&
+		now - (lastCtcpReply.get(client) ?? -Infinity) >= CTCP_REPLY_INTERVAL_MS
+	) {
+		lastCtcpReply.set(client, now);
 		const answer = respond(ctcp.arg);
 		const reply = `\x01${ctcp.command}${answer ? ` ${answer}` : ""}\x01`;
 
