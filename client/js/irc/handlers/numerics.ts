@@ -125,14 +125,21 @@ function pushError(client: IrcClient, msg: SharedMsg | Partial<SharedMsg>, chann
 
 /** Pick a fallback nick that still fits NICKLEN. */
 function fallbackNick(client: IrcClient, wanted: string): string {
-	const maxLen = client.isupport.nicklen ?? 30;
-	const candidate = `${wanted}_`;
+	// NICKLEN comes after 001, and nefarious2 cuts an over-long NICK before
+	// it checks it: a 433 for less than we sent is that limit. Without this,
+	// `alice_` cut back to a taken `alice` looped NICK/433 until timeout.
+	const sent = client.nick;
+	const cut = sent.length > wanted.length && sent.startsWith(wanted);
+	const maxLen = client.isupport.nicklen ?? (cut ? wanted.length : 30);
+	const candidate =
+		wanted.length < maxLen ? `${wanted}_` : `${wanted.slice(0, Math.max(1, maxLen - 1))}_`;
 
-	if (candidate.length <= maxLen) {
+	if (candidate !== wanted) {
 		return candidate;
 	}
 
-	return `${wanted.slice(0, Math.max(1, maxLen - 1))}_`;
+	// Already at the limit with the underscore: vary the end instead.
+	return `${wanted.slice(0, Math.max(1, maxLen - 4))}${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
 // ERR_NICKNAMEINUSE / ERR_ERRONEUSNICKNAME: <me> <nick> :<reason>

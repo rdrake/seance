@@ -333,6 +333,28 @@ describe("IrcClient", function () {
 			expect(lastMessage(1).text).to.equal("alice: Nickname is already in use.");
 		});
 
+		it("learns NICKLEN from a nick the server cut back, instead of looping", function () {
+			const h = setup({nick: "abcdefghijklmno"});
+			h.client.connect();
+			h.transport.open();
+			const nicks = () => h.transport.sent.filter((l) => l.startsWith("NICK ")).slice(1);
+
+			// nefarious2 cuts `abcdefghijklmno_` to its 15, which is taken
+			h.transport.line(":irc.test 433 * abcdefghijklmno :Nickname is already in use.");
+			expect(nicks()).to.deep.equal(["NICK abcdefghijklmno_"]);
+			h.transport.line(":irc.test 433 * abcdefghijklmno :Nickname is already in use.");
+			expect(nicks()[1]).to.equal("NICK abcdefghijklmn_");
+
+			// that one is taken too: the end changes, still 15 long
+			h.transport.line(":irc.test 433 * abcdefghijklmn_ :Nickname is already in use.");
+			h.transport.line(
+				`:irc.test 433 * ${h.client.nick.slice(0, 15)} :Nickname is already in use.`
+			);
+			const last = nicks()[nicks().length - 1].slice(5);
+			expect(last).to.match(/^abcdefghijk\d{4}$/);
+			expect(new Set(nicks()).size).to.equal(nicks().length);
+		});
+
 		it("only reports a nick collision after registration", function () {
 			const h = setup();
 			register(h);
