@@ -348,12 +348,30 @@ describe("IrcClient", function () {
 
 			// that one is taken too: the end changes, still 15 long
 			h.transport.line(":irc.test 433 * abcdefghijklmn_ :Nickname is already in use.");
-			h.transport.line(
-				`:irc.test 433 * ${h.client.nick.slice(0, 15)} :Nickname is already in use.`
-			);
-			const last = nicks()[nicks().length - 1].slice(5);
-			expect(last).to.match(/^abcdefghijk\d{4}$/);
-			expect(new Set(nicks()).size).to.equal(nicks().length);
+			expect(nicks()[2]).to.match(/^NICK abcdefghijk\d{4}$/);
+		});
+
+		it("learns NICKLEN from a fallback refused as too long (Ergo)", function () {
+			const h = setup({nick: "abcdefghijklmno"});
+			h.client.connect();
+			h.transport.open();
+			const nicks = () => h.transport.sent.filter((l) => l.startsWith("NICK ")).slice(1);
+
+			h.transport.line(":irc.test 433 * abcdefghijklmno :Nickname is already in use.");
+			expect(nicks()).to.deep.equal(["NICK abcdefghijklmno_"]);
+			h.transport.line(":irc.test 432 * abcdefghijklmno_ :Erroneous Nickname");
+			expect(nicks()[1]).to.equal("NICK abcdefghijklmn_");
+
+			h.transport.line(":irc.test 433 * abcdefghijklmn_ :Nickname is already in use.");
+			expect(nicks()[2]).to.match(/^NICK abcdefghijk\d{4}$/);
+		});
+
+		it("still picks a random nick when the nick asked for is refused", function () {
+			const h = setup({nick: "bad*nick"});
+			h.client.connect();
+			h.transport.open();
+			h.transport.line(":irc.test 432 * bad*nick :Erroneous Nickname");
+			expect(h.client.nick).to.match(/^seance\d{4}$/);
 		});
 
 		it("only reports a nick collision after registration", function () {
