@@ -728,6 +728,40 @@ describe("the user investigation (irc/investigate.ts)", function () {
 		expect(transport.sent).to.have.length(7);
 	});
 
+	it("waits for all three ban lists before asking O3's gtrace", async function () {
+		const {client, transport} = setup();
+		const inv = new Investigation(client, "user", "spamfan2");
+		inv.start();
+		const [checkLine, whoisLine, useripLine] = transport.sent;
+		batchReply(transport, checkLine, CHECK_USER);
+		batchReply(transport, whoisLine, [":irc.test 318 opr spamfan2 :End of /WHOIS list."]);
+		transport.lines(
+			":irc.test 340 opr :spamfan2=+r8821@203.0.113.7",
+			`@label=${labelOf(useripLine)} :irc.test ACK`
+		);
+		await flush();
+
+		// No G-line: that alone is not "the server listed none".
+		clock.tick(PACE_MS);
+		await flush();
+		batchReply(transport, transport.sent[3], [":irc.test 219 opr g :End of /STATS report"]);
+		await flush();
+		expect(inv.sources.gtrace).to.not.equal("asking");
+
+		clock.tick(PACE_MS);
+		await flush();
+		expect(commandOf(transport.sent[4])).to.equal("STATS S");
+		batchReply(transport, transport.sent[4], [
+			":irc.test 542 opr S *@203.0.113.7 1791900000 1791493200 1792000000 + :shush",
+			":irc.test 219 opr S :End of /STATS report",
+		]);
+		clock.tick(PACE_MS);
+		await flush();
+		batchReply(transport, transport.sent[5], [":irc.test 219 opr Z :End of /STATS report"]);
+		await flush();
+		expect(inv.sources.gtrace, "a shun is listed").to.equal("off");
+	});
+
 	it("asks AuthServ about the account once known, and O3's gtrace when the server lists no bans", async function () {
 		const {client, transport} = setup({opered: false});
 		const inv = new Investigation(client, "user", "alice");
