@@ -156,6 +156,12 @@ function checkIp(host: string): MaskCheck | undefined {
 	}
 
 	const v6 = cidr[1].includes(":");
+
+	// Hex letters belong to IPv6 only: `*.cafe.de` is a hostname.
+	if (!v6 && !/^[\d.*?]+$/.test(cidr[1])) {
+		return undefined;
+	}
+
 	const wild = /[*?]/.test(cidr[1]);
 	let bits = cidr[2] === undefined ? (v6 ? 128 : 32) : Number(cidr[2]);
 
