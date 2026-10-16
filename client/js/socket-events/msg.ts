@@ -230,7 +230,9 @@ function notifyMessage(
 							? `\x01ACTION ${msg.text ?? ""}\x01`
 							: msg.text ?? "",
 					msgid: msg.msgid,
-					time: Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined,
+					time: Number.isFinite(timestamp)
+						? new Date(timestamp).toISOString()
+						: undefined,
 					notice: msg.type === MessageType.NOTICE,
 				};
 
