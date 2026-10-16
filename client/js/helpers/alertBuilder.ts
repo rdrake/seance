@@ -285,11 +285,16 @@ export function criterionWord(key: string, value: string): string {
 	return key === "info" || key === "version" ? v.replace(/\s+/g, "?") : v;
 }
 
-/** The criteria text: every row that is on and has a value, `key value` each. */
+/** Keywords that take no value (x3-services.md: "every one but `log`"). */
+const BARE_KEYWORDS = new Set(["log"]);
+
+/** The criteria text: every row that is on and has a value, `key value` each (a bare keyword alone). */
 export function buildCriteria(rows: CriterionRow[]): string {
 	return rows
-		.filter((r) => r.on && r.value.trim() !== "")
-		.map((r) => `${r.key} ${criterionWord(r.key, r.value)}`)
+		.filter((r) => r.on && (BARE_KEYWORDS.has(r.key) || r.value.trim() !== ""))
+		.map((r) =>
+			BARE_KEYWORDS.has(r.key) ? r.key : `${r.key} ${criterionWord(r.key, r.value)}`
+		)
 		.join(" ");
 }
 
@@ -326,7 +331,7 @@ export function buildCommand(form: AlertForm): string {
 
 /**
  * A stored criteria string (`stats alerts`' `Criteria:` line) back into
- * rows and the reason: keywords in pairs, `reason` taking the rest, a
+ * rows and the reason: keywords in pairs (`log` alone), `reason` taking the rest, a
  * keyword the builder does not list kept as typed, every row on.
  */
 export function parseCriteria(text: string): {rows: CriterionRow[]; reason?: string} {
@@ -340,6 +345,11 @@ export function parseCriteria(text: string): {rows: CriterionRow[]; reason?: str
 		if (key === "reason") {
 			reason = words.slice(i + 1).join(" ");
 			break;
+		}
+
+		if (BARE_KEYWORDS.has(key)) {
+			rows.push(newRow(key, ""));
+			continue;
 		}
 
 		const value = words[i + 1];

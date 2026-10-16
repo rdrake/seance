@@ -133,6 +133,27 @@ describe("the alert builder's form (helpers/alertBuilder.ts)", function () {
 		expect(parseCriteria("")).to.deep.equal({rows: []});
 	});
 
+	it("reads `log` as a keyword without a value and writes it back bare", function () {
+		const text = "log nick foo* info bar reason spam";
+		const {rows, reason} = parseCriteria(text);
+
+		expect(rows.map((r) => [r.key, r.value])).to.deep.equal([
+			["log", ""],
+			["nick", "foo*"],
+			["info", "bar"],
+		]);
+		expect(buildCriteria(rows)).to.equal("log nick foo* info bar");
+		expect(
+			buildCommand({
+				name: "x",
+				reaction: "notice",
+				expires: "never",
+				rows,
+				reason: reason ?? "",
+			})
+		).to.equal(`addalert x notice ${text}`);
+	});
+
 	it("builds the form of an existing alert: the nearest expiry option, an unknown reaction as notice", function () {
 		const now = Date.parse("2026-10-11T12:00:00Z");
 		const form = formFromAlert(
