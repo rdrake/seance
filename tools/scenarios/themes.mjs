@@ -34,6 +34,7 @@ const THEMES = [
 	"princess",
 	"princess_",
 	"keeki",
+	"keekiblush",
 	"day",
 	"morning",
 	"ps",
@@ -48,6 +49,7 @@ const OWN_COLOR = {
 	princess: "#f2f7fc",
 	princess_: "#000000",
 	keeki: "#22143a",
+	keekiblush: "#f1d6e4",
 	ps: "#f4f9ff",
 };
 
