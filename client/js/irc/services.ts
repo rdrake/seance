@@ -418,7 +418,7 @@ export function resetServiceReplies(client: IrcClient): void {
 
 /** How a ban asked of the oper service ended (the `services:banned` payload). */
 export interface ServicesBanOutcome {
-	outcome: "ok" | "refused" | "timeout" | "closed";
+	outcome: "ok" | "refused" | "timeout" | "closed" | "toolong";
 	/** The bot's words (ok, refused), or why it could not be asked. */
 	text?: string;
 }
@@ -438,19 +438,21 @@ export async function servicesBan(
 	const services = client.services;
 	const profile = servicesProfileFor(services);
 
-	if (!services || !profile || !services.bots.oper) {
+	if (!services || !profile || !services.bots.oper.trim()) {
 		return {outcome: "closed", text: "No oper service is set up for this network."};
 	}
 
-	const bot = services.bots.oper;
-	const reply = awaitServiceReply(client, bot, (text) => profile.parseBanReply(text));
+	// Trimmed as ActionDialog.vue trims it: the dialog measures this same line.
+	const bot = services.bots.oper.trim();
+	// Sent first, then watched: a line never sent leaves no watcher (and
+	// takes no other lookup's watcher down with it).
+	const sent = sendQuiet(client, profile.banCommand(bot, ban));
 
-	if (!sendQuiet(client, profile.banCommand(bot, ban))) {
-		resetServiceReplies(client);
-		return {outcome: "closed"};
+	if (sent !== "sent") {
+		return {outcome: sent};
 	}
 
-	const answer = await reply;
+	const answer = await awaitServiceReply(client, bot, (text) => profile.parseBanReply(text));
 
 	switch (answer.kind) {
 		case "reply":

@@ -53,7 +53,7 @@
 							<button
 								type="button"
 								class="btn btn-small btn-cancel"
-								@click="editingNote = false"
+								@click="cancelNote"
 							>
 								Cancel
 							</button>
@@ -69,6 +69,7 @@
 									<time
 										v-if="model.createdAt !== undefined"
 										:title="absolute(model.createdAt)"
+										:data-abs="absolute(model.createdAt)"
 										>{{ relative(model.createdAt) }}</time
 									>
 									<span v-else class="oper-muted">{{
@@ -528,6 +529,7 @@ import {
 	onUnmounted,
 	ref,
 	shallowRef,
+	watch,
 } from "vue";
 import eventbus from "../../js/eventbus";
 import socket from "../../js/socket";
@@ -895,8 +897,52 @@ export default defineComponent({
 			});
 		};
 
+		// A note being written is set aside, not lost, when the editor closes
+		// any way but Save or Cancel — Escape, Android's Back, the card closing
+		// or another stacked over it — and put back when the editor next opens
+		// for the same note. Saving on Back would keep a half-typed note the
+		// oper never chose to keep; Cancel is the way to throw one away.
+		//
+		// A draft is kept under the card it was written on (network, kind,
+		// target), not under its note key: a user card's key moves from the
+		// nick to the IP or the account as the lookups answer, and a draft
+		// filed under the old key would never be found again.
+		let editingFor: {card: string; investigation: Investigation} | undefined;
+		// Keyed by card; for this page only.
+		const setAside = new Map<string, string>();
+		let discardDraft = false;
+
+		const cardKey = (request: InvestigateRequest) =>
+			`${request.network} ${request.kind} ${request.target}`;
+
+		watch(editingNote, (editing, was) => {
+			if (!was || editing) {
+				return;
+			}
+
+			const target = editingFor;
+
+			// Compared with that card's note as it stands now, under the key
+			// it has now (the card may already be closed or covered).
+			if (!discardDraft && target && noteDraft.value !== target.investigation.note) {
+				setAside.set(target.card, noteDraft.value);
+			}
+
+			discardDraft = false;
+			editingFor = undefined;
+		});
+
 		const editNote = () => {
-			noteDraft.value = note.value;
+			if (!top.value) {
+				return;
+			}
+
+			const card = cardKey(top.value.request);
+			const kept = setAside.get(card);
+			setAside.delete(card);
+			editingFor = {card, investigation: top.value.investigation};
+			discardDraft = false;
+			noteDraft.value = kept ?? note.value;
 			editingNote.value = true;
 			void nextTick(() => noteField.value?.focus());
 		};
@@ -906,8 +952,14 @@ export default defineComponent({
 				setNote(top.value.request.network, noteKey.value, noteDraft.value);
 			}
 
+			discardDraft = true;
 			editingNote.value = false;
 			readNote();
+		};
+
+		const cancelNote = () => {
+			discardDraft = true;
+			editingNote.value = false;
 		};
 
 		const askCompare = () => {
@@ -1042,6 +1094,7 @@ export default defineComponent({
 			killUser,
 			editNote,
 			saveNote,
+			cancelNote,
 			askCompare,
 			startCompare,
 			endCompare,

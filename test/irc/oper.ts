@@ -4,9 +4,11 @@ import socket from "../../client/js/socket";
 import {IrcClient} from "../../client/js/irc/client";
 import {IdAllocator} from "../../client/js/irc/ids";
 import {dispatchInput} from "../../client/js/irc/commands";
+import {isRemoteCheck} from "../../client/js/irc/commands/oper";
 import {
 	LoggedNotice,
 	NoticeLog,
+	transactOn,
 	trim,
 	MAX_AGE_MS,
 	MAX_ENTRIES,
@@ -29,7 +31,8 @@ import {
 } from "../../client/js/irc/operprefs";
 import {applyModeString, levelOf, parseFeature, parsePrivs} from "../../client/js/irc/oper";
 import {parseLine} from "../../client/js/irc/message";
-import {request, REQUEST_TIMEOUT_MS} from "../../client/js/irc/request";
+import {isFailedOutcome, request, REQUEST_TIMEOUT_MS} from "../../client/js/irc/request";
+import {lineBudget} from "../../client/js/helpers/operLine";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
 import {MessageType, SharedMsg} from "../../shared/types/msg";
@@ -241,6 +244,45 @@ describe("oper tools: labeled requests (irc/request.ts)", function () {
 		const unit = await reply;
 		expect(unit.lines.map((m) => m.command)).to.deep.equal(["NOTICE", "NOTICE", "219"]);
 		expect(messages(client.lobby.id)).to.have.length(0);
+	});
+
+	it("leaves a real server notice (a +W whois notice) inside our open batch to be routed", async function () {
+		const {client, transport} = setup();
+		const reply = request(client, "STATS u");
+		const label = lastLabel(transport);
+
+		transport.lines(
+			`@label=${label} :irc.test BATCH +AD labeled-response`,
+			":irc.test NOTICE opr :*** Notice -- bob (b@h) did a /whois on you.",
+			"@batch=AD :irc.test 219 opr u :End of /STATS report",
+			":irc.test BATCH -AD"
+		);
+
+		const unit = await reply;
+		expect(unit.lines.map((m) => m.command)).to.deep.equal(["219"]);
+		expect(
+			messages(client.lobby.id).map((m) => m.text),
+			"routed, not swallowed"
+		).to.satisfy((texts: string[]) => texts.some((t) => t.includes("bob")));
+	});
+
+	it("resolves `toolong` and sends nothing for a line over MAX_LINE_BYTES", async function () {
+		const {client, transport} = setup();
+		const sent = transport.sent.length;
+		// 200 three-byte characters: 250 characters' worth of a reason field is
+		// well within it, its bytes are not.
+		const line = `KILL bob :${"現".repeat(200)}`;
+
+		// The dialog's budget agrees with what request() refuses.
+		expect(lineBudget(line).over).to.be.above(0);
+		expect(lineBudget("KILL bob :spam").over).to.equal(0);
+
+		const unit = await request(client, line);
+		expect(unit.outcome).to.equal("toolong");
+		expect(isFailedOutcome(unit.outcome)).to.equal(true);
+		expect(isFailedOutcome("ack")).to.equal(false);
+		expect(transport.sent.length, "nothing sent").to.equal(sent);
+		expect(messages(client.lobby.id), "no lobby error").to.have.length(0);
 	});
 
 	it("collects an untagged reply it named and resolves on the ACK (evilnet/nefarious2#120)", async function () {
@@ -469,6 +511,25 @@ describe("oper tools: oper state (irc/oper.ts)", function () {
 			transport.sent.some((l) => l.endsWith(" PRIVS")),
 			"then the oper-up queries"
 		).to.equal(true);
+	});
+
+	it("forgets it was opered when the registration's MODE shows it is not", async function () {
+		prefsStore.set(OPER_PREFS_KEY, JSON.stringify({u4: {wasOper: true}}));
+		const {client, transport} = setup({uuid: "u4"});
+
+		reregister(transport);
+		const query = transport.sent.find((l) => / MODE opr$/.test(l));
+		transport.line(`${/^(@label=\S+) /.exec(query!)![1]} :irc.test 221 opr +ix`);
+		await flush();
+		expect(client.oper.level).to.equal("none");
+		expect(getOperPrefs("u4").wasOper).to.equal(undefined);
+
+		transport.sent = [];
+		reregister(transport);
+		expect(
+			transport.sent.some((l) => / MODE opr$/.test(l)),
+			"the next registration asks nothing"
+		).to.equal(false);
 	});
 
 	it("a network that was never opered asks nothing on registration", function () {
@@ -799,6 +860,92 @@ describe("oper tools: commands (irc/commands/oper.ts)", function () {
 		expect(msg.report!.error).to.be.a("string").and.not.equal("");
 	});
 
+	it("a remote /check waits past the ACK and collects the unlabeled answer up to 291", async function () {
+		const {client, transport} = setup();
+		const chan = client.findChannel("#seance")!;
+
+		dispatchInput(client, chan, "/check bob bob");
+		const label = lastLabel(transport);
+		expect(transport.sent.at(-1)).to.equal(`@label=${label} CHECK bob bob`);
+
+		transport.lines(
+			`@label=${label} :irc.test ACK`,
+			":hub.test 290 opr : ",
+			":hub.test 286 opr :Information for user bob",
+			":hub.test 290 opr : ",
+			":hub.test 290 opr :           Nick:: bob (ACAAB)",
+			":hub.test 290 opr :  User/Hostmask:: b@198.51.100.4",
+			":hub.test 291 opr : "
+		);
+		await flush();
+
+		const msgs = messages(chan.id);
+		expect(msgs, "one card, no raw lines").to.have.length(1);
+		expect(msgs[0].type).to.equal(MessageType.REPORT);
+		expect(msgs[0].report!.error).to.equal(undefined);
+		expect(msgs[0].report!.raw!.join("\n")).to.include("Nick:: bob (ACAAB)");
+	});
+
+	it("a remote /check the far server refuses ends on its unlabeled error, not the timeout", async function () {
+		const {client, transport} = setup();
+		const chan = client.findChannel("#seance")!;
+
+		dispatchInput(client, chan, "/check bob bob");
+		const label = lastLabel(transport);
+		transport.lines(
+			`@label=${label} :irc.test ACK`,
+			":hub.test 517 opr CHECK :Command disabled"
+		);
+		await flush();
+
+		const msgs = messages(chan.id);
+		expect(msgs, "one card, the refusal not left raw in the lobby").to.have.length(1);
+		expect(msgs[0].type).to.equal(MessageType.REPORT);
+		expect(msgs[0].report!.raw!.join("\n")).to.include("Command disabled");
+	});
+
+	it("two remote /checks go out one at a time, so their unlabeled answers stay apart", async function () {
+		const {client, transport} = setup();
+		const chan = client.findChannel("#seance")!;
+
+		dispatchInput(client, chan, "/check bob bob");
+		dispatchInput(client, chan, "/check carol carol");
+		await flush();
+		const first = lastLabel(transport);
+		expect(
+			transport.sent.filter((l) => l.includes("CHECK")),
+			"the second waits"
+		).to.have.length(1);
+
+		transport.lines(
+			`@label=${first} :irc.test ACK`,
+			":hub.test 286 opr :Information for user bob",
+			":hub.test 291 opr : "
+		);
+		await flush();
+		const second = lastLabel(transport);
+		expect(transport.sent.at(-1)).to.equal(`@label=${second} CHECK carol carol`);
+
+		transport.lines(
+			`@label=${second} :irc.test ACK`,
+			":hub.test 286 opr :Information for user carol",
+			":hub.test 291 opr : "
+		);
+		await flush();
+
+		const raws = messages(chan.id).map((m) => m.report!.raw!.join("\n"));
+		expect(raws).to.have.length(2);
+		expect(raws[0]).to.include("bob").and.not.include("carol");
+		expect(raws[1]).to.include("carol").and.not.include("bob");
+	});
+
+	it("a local /check with a flag is not taken for the remote form", function () {
+		expect(isRemoteCheck(["#seance", "-o"])).to.equal(false);
+		expect(isRemoteCheck(["bob"])).to.equal(false);
+		expect(isRemoteCheck(["bob", "bob"])).to.equal(true);
+		expect(isRemoteCheck(["hub.test", "bob", "-o"])).to.equal(true);
+	});
+
 	it("/privs shows the privileges as chips and keeps our own", async function () {
 		const {client, transport} = setup();
 		const chan = client.findChannel("#seance")!;
@@ -837,6 +984,55 @@ describe("oper tools: the notice log (irc/noticelog.ts)", function () {
 		type: "snotice",
 		text: `t${time}`,
 		snotice: {kind, category: "OLDSNO", fields: {}, route: "network"},
+	});
+
+	/** A stand-in IDBDatabase whose one transaction the test ends by hand. */
+	function fakeDb(opts: {throwOnTransaction?: boolean} = {}) {
+		const tx: Record<string, unknown> = {
+			error: null,
+			objectStore: () => ({put: () => ({})}),
+		};
+		const db = {
+			closed: 0,
+			close() {
+				db.closed++;
+			},
+			transaction() {
+				if (opts.throwOnTransaction) {
+					throw new DOMException("closing", "InvalidStateError");
+				}
+
+				return tx;
+			},
+		};
+		return {db: db as unknown as IDBDatabase & {closed: number}, tx};
+	}
+
+	it("an aborted transaction rejects and closes the database", async function () {
+		const {db, tx} = fakeDb();
+		const done = transactOn(db, "readwrite", (store) => {
+			store.put([], "u1");
+		});
+
+		tx.error = new DOMException("quota", "QuotaExceededError");
+		(tx.onabort as () => void)();
+
+		const error = await done.then(
+			() => undefined,
+			(err: unknown) => err
+		);
+		expect((error as DOMException).name).to.equal("QuotaExceededError");
+		expect(db.closed).to.equal(1);
+	});
+
+	it("a transaction that cannot start rejects and closes the database", async function () {
+		const {db} = fakeDb({throwOnTransaction: true});
+		const error = await transactOn(db, "readonly", () => undefined).then(
+			() => undefined,
+			(err: unknown) => err
+		);
+		expect((error as DOMException).name).to.equal("InvalidStateError");
+		expect(db.closed).to.equal(1);
 	});
 
 	it("keeps the newest entries within a day", function () {

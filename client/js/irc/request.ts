@@ -17,6 +17,10 @@
  * - **`ACK`**: the command produced nothing it would label (KILL, a GLINE
  *   that worked). Also how a reply sent *without* the label ends — see below.
  *
+ * A command the server forwards without the label (a remote CHECK) is
+ * answered locally by a bare `ACK` and later by unlabeled lines; a request
+ * that names their numerics in `unlabeled` waits past the ACK for them.
+ *
  * Two server bugs are tolerated here, because the client has to work with the
  * server as it is (evilnet/nefarious2#119, #120):
  *
@@ -36,8 +40,9 @@
 import type {IrcClient} from "./client";
 import {isErrorNumeric} from "./errors";
 import {openBatchesOf, type BatchHandler, type OpenBatch} from "./handlers/batch";
-import type {IrcMessage} from "./message";
+import {MAX_LINE_BYTES, utf8ByteLength, type IrcMessage} from "./message";
 import {takeQuietLabel} from "./quiet";
+import {NOTICE_PREFIX} from "./snotice";
 import {tagPrefix} from "./wire";
 
 export const LABELED_RESPONSE_CAP = "labeled-response";
@@ -45,7 +50,19 @@ export const LABELED_RESPONSE_CAP = "labeled-response";
 /** How long a request waits for the end of its answer. */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
-export type ReplyOutcome = "batch" | "lines" | "ack" | "timeout" | "closed";
+/**
+ * How an answer ended. `toolong`: the line, with its label, is over
+ * `MAX_LINE_BYTES` and was never sent — the connection is fine, the line is
+ * not (a long reason in a non-Latin script, a pasted mask).
+ */
+export type ReplyOutcome = "batch" | "lines" | "ack" | "timeout" | "closed" | "toolong";
+
+/** The outcomes that mean no answer came: nothing sent, the socket gone, or silence. */
+export type FailedOutcome = "timeout" | "closed" | "toolong";
+
+export function isFailedOutcome(outcome: ReplyOutcome): outcome is FailedOutcome {
+	return outcome === "timeout" || outcome === "closed" || outcome === "toolong";
+}
 
 export interface ReplyUnit {
 	/** Every line of the answer, in arrival order (a batch's contents, unwrapped). */
@@ -58,6 +75,13 @@ export interface RequestOptions {
 	end?: string[];
 	/** Numerics the server sends without the label (#120): 270, 302, 303, 340. */
 	untagged?: string[];
+	/**
+	 * A command the server forwards without keeping the label (a remote
+	 * CHECK: not in `forwarded_label.c`'s table). The local `ACK` then says
+	 * nothing about the answer: the request keeps waiting, collects untagged
+	 * server lines with these numerics, and ends on one of `end`.
+	 */
+	unlabeled?: string[];
 	timeoutMs?: number;
 }
 
@@ -73,6 +97,13 @@ interface PendingRequest {
 interface Registry {
 	next: number;
 	pending: PendingRequest[];
+	/**
+	 * The last unlabeled request's answer: an unlabeled answer carries
+	 * nothing to tell two apart, so they go out one at a time.
+	 */
+	unlabeledTail: Promise<unknown>;
+	/** Unlabeled requests sent or waiting to be. */
+	unlabeledOpen: number;
 }
 
 const registries = new WeakMap<IrcClient, Registry>();
@@ -81,7 +112,7 @@ function registryOf(client: IrcClient): Registry {
 	let registry = registries.get(client);
 
 	if (!registry) {
-		registry = {next: 0, pending: []};
+		registry = {next: 0, pending: [], unlabeledTail: Promise.resolve(), unlabeledOpen: 0};
 		registries.set(client, registry);
 	}
 
@@ -95,7 +126,9 @@ export function canRequest(client: IrcClient): boolean {
 
 /**
  * Send `line` labeled and resolve with its whole answer. Never rejects: a
- * line that cannot be sent resolves at once with outcome `closed`, a socket
+ * line over `MAX_LINE_BYTES` with its label resolves at once with outcome
+ * `toolong` (nothing sent, nothing in the lobby), one that cannot be sent
+ * for any other reason with `closed`, a socket
  * that dies first with what had arrived, a server that never finishes with
  * `timeout`.
  */
@@ -104,12 +137,32 @@ export function request(
 	line: string,
 	opts: RequestOptions = {}
 ): Promise<ReplyUnit> {
+	if (!opts.unlabeled) {
+		return send(client, line, opts);
+	}
+
+	const registry = registryOf(client);
+	const answer =
+		registry.unlabeledOpen > 0
+			? registry.unlabeledTail.then(() => send(client, line, opts))
+			: send(client, line, opts);
+	registry.unlabeledOpen++;
+	registry.unlabeledTail = answer.finally(() => registry.unlabeledOpen--);
+	return answer;
+}
+
+function send(client: IrcClient, line: string, opts: RequestOptions): Promise<ReplyUnit> {
 	const registry = registryOf(client);
 	const label = `r${++registry.next}`;
 
 	return new Promise((resolve) => {
 		if (!canRequest(client)) {
 			resolve({lines: [], outcome: "closed"});
+			return;
+		}
+
+		if (utf8ByteLength(`${tagPrefix({label})}${line}`) > MAX_LINE_BYTES) {
+			resolve({lines: [], outcome: "toolong"});
 			return;
 		}
 
@@ -155,6 +208,20 @@ function isError(msg: IrcMessage): boolean {
 	return isErrorNumeric(msg.command) || msg.command === "FAIL";
 }
 
+/**
+ * An unlabeled error naming a forwarded request's command: the far server
+ * refused it (517 disabled, 461, no privilege there), and nothing else
+ * would end the wait.
+ */
+function refusesCommand(entry: PendingRequest, msg: IrcMessage): boolean {
+	if (!entry.opts.unlabeled || !isError(msg)) {
+		return false;
+	}
+
+	const command = entry.line.split(" ")[0].toUpperCase();
+	return msg.params.some((param) => param.toUpperCase() === command);
+}
+
 /** Our open labeled batch, if one is open (the newest). */
 function openLabeledBatch(client: IrcClient): OpenBatch | undefined {
 	let found: OpenBatch | undefined;
@@ -187,7 +254,11 @@ export function interceptRequestLine(client: IrcClient, msg: IrcMessage): boolea
 
 	if (entry) {
 		if (msg.command === "ACK") {
-			finish(client, entry, "ack");
+			// A forwarded command's answer is still on its way, unlabeled.
+			if (!entry.opts.unlabeled) {
+				finish(client, entry, "ack");
+			}
+
 			return true;
 		}
 
@@ -208,11 +279,35 @@ export function interceptRequestLine(client: IrcClient, msg: IrcMessage): boolea
 	const fromServer = msg.source !== undefined && msg.source.user === undefined;
 
 	// #119: a server NOTICE to us inside our open labeled batch belongs to it.
-	if (msg.command === "NOTICE" && fromServer && client.isSelf(msg.params[0] ?? "")) {
+	// A real server notice (`*** Notice -- `, the +W "did a /whois on you")
+	// is never part of a reply: it goes on to be routed.
+	if (
+		msg.command === "NOTICE" &&
+		fromServer &&
+		client.isSelf(msg.params[0] ?? "") &&
+		!(msg.params[msg.params.length - 1] ?? "").startsWith(NOTICE_PREFIX)
+	) {
 		const batch = openLabeledBatch(client);
 
 		if (batch) {
 			batch.messages.push(msg);
+			return true;
+		}
+	}
+
+	// A forwarded command's answer, unlabeled, up to its end numeric.
+	if (fromServer) {
+		const forwarded = registry.pending.find(
+			(e) => e.opts.unlabeled?.includes(msg.command) || refusesCommand(e, msg)
+		);
+
+		if (forwarded) {
+			forwarded.lines.push(msg);
+
+			if (forwarded.opts.end?.includes(msg.command) || isError(msg)) {
+				finish(client, forwarded, "lines");
+			}
+
 			return true;
 		}
 	}
