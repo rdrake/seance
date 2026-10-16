@@ -561,7 +561,11 @@ export class IrcClient {
 		const state = this.transport.state;
 
 		if (state === "open") {
-			this.transport.send(trailingLine("QUIT", [reason ?? "Seance"]));
+			// The reason is the user's text: a line break or a long paste must
+			// not stop the close below, so it is flattened and cut to fit.
+			const text = (reason ?? "Seance").replace(/[\r\n\0]+/g, " ");
+			const [fits = ""] = splitMessage(utf8ByteLength("QUIT :"), text);
+			this.send(trailingLine("QUIT", [fits]));
 		}
 
 		this.transport.close();
