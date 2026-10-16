@@ -625,3 +625,23 @@ describe("markdown — composition", () => {
 		expect(applyMarkdown([]).fragments).to.deep.equal([]);
 	});
 });
+
+// A message can run to `draft/multiline`'s 16 KB, and anyone can send one
+// built to be slow: each of these took 200–360ms before the scan went linear.
+describe("markdown — cost of a hostile 16 KB message", () => {
+	const shapes: [string, string][] = [
+		["code spans", "`a".repeat(8000)],
+		["emphasis markers", "*_".repeat(8000)],
+		["a 4000-column table", "|a".repeat(4000) + "\n" + "|-".repeat(4000)],
+		["colours between markers", "\x0304a\x0305 **b** ".repeat(1500)],
+	];
+
+	for (const [name, text] of shapes) {
+		it(`stays fast on ${name}`, () => {
+			const fragments = parseStyle(text);
+			const started = Date.now();
+			applyMarkdown(fragments);
+			expect(Date.now() - started).to.be.below(120);
+		});
+	}
+});
