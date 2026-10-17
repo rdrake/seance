@@ -238,6 +238,9 @@ export class IrcClient {
 	/** Swapped for a new one on an STS upgrade; always subscribed via {@link reconfigure}. */
 	transport: Transport;
 	readonly isupport = new ISupport();
+	/** NICKLEN as registration learned it before 005 (`handlers/numerics.ts`);
+	 * cleared with ISUPPORT, since the next connection may be another server. */
+	learnedNickLen: number | undefined;
 	/** Attention and away bookkeeping (presence.ts). */
 	readonly presence: PresenceState = initialPresence();
 	/** Outstanding `TOKEN GENERATE` requests (draft/authtoken). */
@@ -796,6 +799,7 @@ export class IrcClient {
 		this.retryAt = undefined;
 		this.closeHintShown = false;
 		this.isupport.reset();
+		this.learnedNickLen = undefined;
 		this.authtoken.clear("Reconnecting");
 		this.motdBuffer = null;
 		this.host = "";
