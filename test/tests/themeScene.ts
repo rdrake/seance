@@ -1,10 +1,14 @@
 import {expect} from "chai";
 import sinon from "sinon";
+import fs from "fs";
+import path from "path";
 import {
 	createAttention,
 	createSceneHost,
 	IDLE_REST_MS,
 	normalizeSceneMotion,
+	normalizePsRenderer,
+	sceneKey,
 	SCENES,
 	UNFOCUSED_REST_MS,
 	type SceneHandle,
@@ -82,13 +86,13 @@ const host = (loaders: Record<string, SceneLoader>, warn?: (m: string, e: unknow
 	createSceneHost({
 		root: () => ROOT,
 		loaders,
-		state: {visible: true, attended: true, view: "channel", motion: "24"},
+		state: {visible: true, attended: true, view: "channel", motion: "auto"},
 		warn,
 	});
 
 describe("the theme-scene hook (client/js/themeScene.ts)", function () {
-	it("has a scene for ps and for no other theme", function () {
-		expect(Object.keys(SCENES)).to.deep.equal(["ps"]);
+	it("has a scene for ps (classic and NG) and for no other theme", function () {
+		expect(Object.keys(SCENES)).to.deep.equal(["ps", "ps-ng"]);
 	});
 
 	it("mounts the applied theme's scene with the current state", async function () {
@@ -167,7 +171,7 @@ describe("the theme-scene hook (client/js/themeScene.ts)", function () {
 		const h = createSceneHost({
 			root: () => fakeRoot,
 			loaders: {ps: () => Promise.resolve(throwing)},
-			state: {visible: true, attended: true, view: "channel", motion: "24"},
+			state: {visible: true, attended: true, view: "channel", motion: "auto"},
 			warn: (m) => warnings.push(m),
 		});
 		await h.setTheme("ps");
@@ -215,20 +219,20 @@ describe("the theme-scene hook (client/js/themeScene.ts)", function () {
 			},
 		};
 		const h = host({ps: () => Promise.resolve(mod)});
-		h.setMotion("1s");
+		h.setMotion("calm");
 		await h.setTheme("ps");
 		h.setAttended(false);
 		h.setPauseWhenAway(false); // attended again, whatever attention says
 		h.setAttended(false);
 		h.setPauseWhenAway(true); // and resting again
-		h.setMotion("60");
-		h.setMotion("60");
+		h.setMotion("full");
+		h.setMotion("full");
 		expect(seen).to.deep.equal([
-			"mount true 1s",
-			"update false 1s",
-			"update true 1s",
-			"update false 1s",
-			"update false 60",
+			"mount true calm",
+			"update false calm",
+			"update true calm",
+			"update false calm",
+			"update false full",
 		]);
 	});
 
@@ -250,10 +254,27 @@ describe("the theme-scene hook (client/js/themeScene.ts)", function () {
 		]);
 	});
 
-	it("reads an unknown stored motion level as the default", function () {
-		expect(normalizeSceneMotion("60")).to.equal("60");
-		expect(normalizeSceneMotion("fast")).to.equal("60");
-		expect(normalizeSceneMotion(undefined)).to.equal("60");
+	it("reads the old stored motion levels across, and anything else as auto", function () {
+		for (const [stored, level] of [
+			["60", "auto"],
+			["24", "auto"],
+			["1s", "calm"],
+			["sparse", "calm"],
+			["off", "still"],
+			["auto", "auto"],
+			["full", "full"],
+			["calm", "calm"],
+			["still", "still"],
+			["bogus", "auto"],
+			[undefined, "auto"],
+		] as const) {
+			expect(normalizeSceneMotion(stored), String(stored)).to.equal(level);
+		}
+	});
+
+	it("defaults the stored setting to auto", function () {
+		const src = fs.readFileSync(path.join(__dirname, "../../client/js/settings.ts"), "utf8");
+		expect(src).to.match(/psAnimation: \{\s*default: "auto",/);
 	});
 
 	describe("attention (createAttention)", function () {
@@ -362,7 +383,7 @@ describe("the theme-scene hook (client/js/themeScene.ts)", function () {
 			const h = createSceneHost({
 				root: () => ROOT,
 				loaders: {ps: rejectOnceThenResolve(mod)},
-				state: {visible: false, attended: true, view: "channel", motion: "24"},
+				state: {visible: false, attended: true, view: "channel", motion: "auto"},
 				warn: (m) => warnings.push(m),
 			});
 			await h.setTheme("ps");
@@ -441,6 +462,119 @@ describe("the theme-scene hook (client/js/themeScene.ts)", function () {
 			await h.retry();
 			expect(h.mounted).to.equal(null);
 			expect(log).to.deep.equal([]);
+		});
+	});
+	describe("the ps renderer (psRenderer)", function () {
+		it("keys the scene by theme and renderer", function () {
+			expect(sceneKey("ps", "ng")).to.equal("ps-ng");
+			expect(sceneKey("ps", "classic")).to.equal("ps");
+			expect(sceneKey("coffee", "ng")).to.equal("coffee");
+		});
+
+		it("reads an unknown stored renderer as classic", function () {
+			expect(normalizePsRenderer("ng")).to.equal("ng");
+			expect(normalizePsRenderer("classic")).to.equal("classic");
+			expect(normalizePsRenderer("webgl")).to.equal("classic");
+			expect(normalizePsRenderer(undefined)).to.equal("classic");
+		});
+
+		it("setRenderer('ng') with ps mounted swaps the module", async function () {
+			const classic = fakeScene();
+			const ng = fakeScene();
+			const ngLoader = sinon.stub().resolves(ng.mod);
+			const h = host({ps: () => Promise.resolve(classic.mod), "ps-ng": ngLoader});
+			await h.setTheme("ps");
+			expect(h.mounted).to.equal("ps");
+
+			h.setRenderer("ng");
+			await new Promise((resolve) => setImmediate(resolve));
+
+			expect(classic.log.filter((l) => l === "destroy")).to.have.length(1);
+			expect(ngLoader.callCount).to.equal(1);
+			expect(h.mounted).to.equal("ps-ng");
+			expect(ng.log).to.deep.equal(["mount true true channel"]);
+		});
+
+		it("setRenderer('classic') with ps-ng mounted swaps back", async function () {
+			const classic = fakeScene();
+			const ng = fakeScene();
+			const psLoader = sinon.stub().resolves(classic.mod);
+			const h = host({ps: psLoader, "ps-ng": () => Promise.resolve(ng.mod)});
+			h.setRenderer("ng");
+			await h.setTheme("ps");
+			expect(h.mounted).to.equal("ps-ng");
+			expect(psLoader.callCount).to.equal(0);
+
+			h.setRenderer("classic");
+			await new Promise((resolve) => setImmediate(resolve));
+
+			expect(ng.log.filter((l) => l === "destroy")).to.have.length(1);
+			expect(psLoader.callCount).to.equal(1);
+			expect(h.mounted).to.equal("ps");
+		});
+
+		it("setRenderer before setTheme('ps') never loads classic", async function () {
+			const ng = fakeScene();
+			const psLoader = sinon.stub().rejects(new Error("classic must not load"));
+			const h = host({ps: psLoader, "ps-ng": () => Promise.resolve(ng.mod)});
+			h.setRenderer("ng");
+			await h.setTheme("ps");
+			expect(psLoader.called).to.equal(false);
+			expect(h.mounted).to.equal("ps-ng");
+		});
+
+		it("setRenderer with another theme only remembers it", async function () {
+			const ng = fakeScene();
+			const ngLoader = sinon.stub().resolves(ng.mod);
+			const psLoader = sinon.stub().resolves(fakeScene().mod);
+			const h = host({ps: psLoader, "ps-ng": ngLoader});
+			await h.setTheme("coffee");
+			h.setRenderer("ng");
+			await new Promise((resolve) => setImmediate(resolve));
+			expect(ngLoader.called).to.equal(false);
+			expect(h.mounted).to.equal(null);
+
+			await h.setTheme("ps");
+			expect(psLoader.called).to.equal(false);
+			expect(ngLoader.callCount).to.equal(1);
+			expect(h.mounted).to.equal("ps-ng");
+		});
+
+		it("a failing ps-ng chunk keeps the fallback and retries the ps-ng key", async function () {
+			const ng = fakeScene();
+			const warnings: string[] = [];
+			const {loader, calls} = rejectNTimesThenResolve(ng.mod, 1);
+			const psLoader = sinon.stub().resolves(fakeScene().mod);
+			const h = createSceneHost({
+				root: () => ROOT,
+				loaders: {ps: psLoader, "ps-ng": loader},
+				state: {visible: false, attended: true, view: "channel", motion: "auto"},
+				warn: (m) => warnings.push(m),
+			});
+			h.setRenderer("ng");
+			await h.setTheme("ps");
+			expect(h.mounted).to.equal(null);
+			expect(warnings).to.have.length(1);
+
+			h.setVisible(true);
+			await new Promise((resolve) => setImmediate(resolve));
+
+			expect(calls()).to.equal(2);
+			expect(psLoader.called).to.equal(false);
+			expect(h.mounted).to.equal("ps-ng");
+			expect(warnings).to.have.length(1);
+		});
+
+		it("settings apply psRenderer before theme", function () {
+			// settings.ts reads document and matchMedia at import, so mocha
+			// cannot load it: applyAll walks the object in key order.
+			const source = fs.readFileSync(
+				path.join(__dirname, "../../client/js/settings.ts"),
+				"utf8"
+			);
+			const renderer = source.indexOf("psRenderer:");
+			expect(renderer).to.be.greaterThan(-1);
+			expect(renderer).to.be.below(source.indexOf("\ttheme:"));
 		});
 	});
 });

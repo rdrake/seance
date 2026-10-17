@@ -74,7 +74,7 @@ function tuft(x: number, y: number, h: number, cls: string): string {
  * gives it, with the river's sky gradient in its defs. The hills stretch
  * with the window; the round things on them (the shrubs, the bed's stones,
  * the two groves) are widened back about their own middles by the stretch's
- * squash (`--ps-land-unsquash`, scene.ts watchLand), so a narrow window does
+ * squash (`--ps-land-unsquash`, watchers.ts watchLand), so a narrow window does
  * not draw them as tall ellipses. (The heat haze that
  * bends the ground on hot days is the weather layer's: `weatherLayers`.)
  */
@@ -483,39 +483,24 @@ export function weatherClouds(weather: Weather): string {
 }
 
 /** The mockup's particle counts; a phone gets half. */
-const RAIN_DROPS = 130;
+export const RAIN_DROPS = 130;
 const SNOWFLAKES = 120;
 const SEEDS = 26;
 
-/** The rain's speeds: each drop falls with the sheet nearest its own 0.55–0.9 s. */
-const RAIN_SHEETS = [0.61, 0.73, 0.84];
-
-/**
- * `count` rain drops, still on three sheets that fall (ps.css `ps-rain-fall`):
- * one animated layer per speed instead of one per drop, which cost Chrome a
- * layer update per drop per frame. Each drop sits where its own clock put it
- * at time 0, a fall of 118cqh in its phase; its `::after` is the copy one fall
- * up, so a sheet's loop is seamless.
- */
-function rain(count: number): string {
+/** `count` rain drops, each falling on its own clock (ps.css `ps-drop`). */
+export function rain(count: number): string {
 	const r = rng(1301);
-	const sheets = RAIN_SHEETS.map(() => "");
+	let out = "";
 
 	for (let i = 0; i < count; i++) {
 		const left = (r() * 110).toFixed(1);
-		const d = 0.55 + r() * 0.35;
-		const phase = ((r() * 1.2) / d) % 1;
+		const d = (0.55 + r() * 0.35).toFixed(2);
+		const dl = (-r() * 1.2).toFixed(2);
 		const opacity = (0.4 + r() * 0.6).toFixed(2);
-		const sheet = Math.min(2, Math.floor(((d - 0.55) / 0.35) * 3));
-		sheets[sheet] += `<i style="left:${left}%;top:${n(
-			118 + 118 * phase
-		)}cqh;opacity:${opacity}"></i>`;
+		out += `<i style="left:${left}%;--rd:${d}s;--rdl:${dl}s;opacity:${opacity}"></i>`;
 	}
 
-	const out = sheets.map(
-		(drops, i) => `<div class="ps-rain-sheet" style="--rd:${RAIN_SHEETS[i]}s">${drops}</div>`
-	);
-	return `<div class="ps-rain">${out.join("")}</div>`;
+	return `<div class="ps-rain">${out}</div>`;
 }
 
 /** `count` snowflakes, each sized in rem and drifting sideways in cqw as it falls (ps.css `ps-flake`). */
@@ -558,7 +543,7 @@ function seeds(count: number): string {
  * `display: none`, where a reference to the filter may not resolve. ps.css
  * applies it to the ground group, and only by day (`ps-hot`).
  */
-const HEAT_HAZE =
+export const HEAT_HAZE =
 	`<svg class="ps-heat-haze" width="0" height="0" aria-hidden="true" focusable="false">` +
 	`<filter id="ps-heat" x="0" y="-5%" width="100%" height="110%">` +
 	`<feTurbulence type="turbulence" baseFrequency="0.007 0.05" numOctaves="2" seed="4" result="h">` +

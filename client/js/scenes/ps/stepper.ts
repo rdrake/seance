@@ -1,17 +1,12 @@
 import type {SceneMotion} from "../../themeScene";
 
 /**
- * The scene's frame rate (docs/projects/ps-theme.md §10.3). Left to the
- * browser, every running animation restyles its element on every main frame,
- * 60 times a second, and each frame moves what the chrome's glass blurs. The
- * plains move slowly; SCENE_FPS frames a second are plenty (the user's call,
- * 2026-10-05). So the scene's own CSS animations and SMIL clocks are held
- * paused, and one timer advances them all together by the real time elapsed,
- * SCENE_FPS times a second: the browser draws a frame only when they move.
- * The ps theme's Scene animation setting picks another pace (stepModeFor):
- * once a second, once every five minutes, or the browser's own playback at
- * the screen's rate, which this hands back to it rather than stepping on a
- * timer that no vsync aligns.
+ * The classic scene's pace (docs/projects/ps-theme.md §10.3), set by the ps
+ * theme's Scene animation setting through stepModeFor: Auto and Full hand
+ * playback to the browser at the screen's rate (`native`); Calm holds the
+ * scene's own CSS animations and SMIL clocks paused and one timer advances
+ * them all together by the real time elapsed, once a second, so the browser
+ * draws a frame only when they move; Still never starts it.
  *
  * Only CSS animations are stepped. Transitions (a layer's fade, the day/night
  * flip, the overcast's cross-fade) run natively, since the scene times its
@@ -22,33 +17,30 @@ import type {SceneMotion} from "../../themeScene";
  * its animations and its SVGs, so mocha drives it.
  */
 
-/** Frames a second the scene is drawn at by default. 24 divides 120 and 144 Hz screens evenly; on 60 Hz it lands on two vsyncs out of five. */
+/** The step rate createStepper falls back to when given no mode; every caller passes one now. */
 export const SCENE_FPS = 24;
 
-/** The sparse level's pace: the scene moves on once every five minutes (and on coming back, StepMode.catchUp). */
+/** The old sparse level's pace (every five minutes, with StepMode.catchUp); no setting reaches it now. */
 export const SPARSE_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * How the stepper moves the scene: the browser's own playback at the screen's
  * rate (`native`), or held and advanced every `interval` ms; `catchUp` steps
- * at once on every start by all the time since the last step, so a scene
- * that moves only now and then is up to date the moment it is looked at.
+ * at once on every start by all the time since the last step (no setting asks
+ * for it now: Calm steps without it).
  */
 export type StepMode = {kind: "native"} | {kind: "step"; interval: number; catchUp: boolean};
 
-/** The step mode for a motion level (the ps theme's Scene animation setting); null for off, which never runs. */
+/** The step mode for a motion level (the ps theme's Scene animation setting); null for still, which never runs. */
 export function stepModeFor(motion: SceneMotion): StepMode | null {
 	switch (motion) {
-		case "off":
+		case "still":
 			return null;
-		case "sparse":
-			return {kind: "step", interval: SPARSE_INTERVAL_MS, catchUp: true};
-		case "1s":
+		case "calm":
 			return {kind: "step", interval: 1000, catchUp: false};
-		case "60":
-			return {kind: "native"};
 		default:
-			return {kind: "step", interval: 1000 / SCENE_FPS, catchUp: false};
+			// auto, full
+			return {kind: "native"};
 	}
 }
 
@@ -142,12 +134,7 @@ export function createStepper(deps: {
 					a.play();
 				}
 			} else if (a.playState === "running") {
-				// pause() only asks: the animation runs on until the next
-				// frame, which a hidden page may never draw. Writing its time
-				// completes the pause at once, where it stands.
-				const t = a.currentTime;
 				a.pause();
-				a.currentTime = t;
 			}
 		}
 

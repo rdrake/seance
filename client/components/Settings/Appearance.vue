@@ -350,6 +350,29 @@
 					>
 				</label>
 			</div>
+			<template v-if="psngOffered">
+				<h2 id="label-ps-renderer">Scene renderer</h2>
+				<div role="group" aria-labelledby="label-ps-renderer" class="scene-motion-options">
+					<label class="opt">
+						<input
+							:checked="psRenderer === 'classic'"
+							type="radio"
+							name="psRenderer"
+							value="classic"
+						/>
+						Classic
+					</label>
+					<label class="opt">
+						<input
+							:checked="psRenderer === 'ng'"
+							type="radio"
+							name="psRenderer"
+							value="ng"
+						/>
+						NG (preview)
+					</label>
+				</div>
+			</template>
 		</template>
 
 		<div>
@@ -462,7 +485,13 @@ textarea#user-specified-css-input {
 <script lang="ts">
 import {computed, defineComponent, ref} from "vue";
 import {useStore} from "../../js/store";
-import {normalizeSceneMotion, SCENE_MOTIONS, type SceneMotion} from "../../js/themeScene";
+import {
+	normalizePsRenderer,
+	normalizeSceneMotion,
+	SCENE_MOTIONS,
+	type SceneMotion,
+} from "../../js/themeScene";
+import storage from "../../js/localStorage";
 import {
 	describeThemePairs,
 	effectiveTheme,
@@ -545,19 +574,23 @@ export default defineComponent({
 
 		// The ps theme's Scene animation levels (themeScene.ts SceneMotion).
 		const psAnimation = computed(() => normalizeSceneMotion(store.state.settings.psAnimation));
+		// The NG renderer is offered behind a preview flag, or while it is the
+		// stored choice: a restored backup carries psRenderer but not the flag,
+		// and must not leave a user in NG with no way back.
+		const psRenderer = computed(() => normalizePsRenderer(store.state.settings.psRenderer));
+		const psngFlag = storage.get("thelounge.state.psngPreview") === "1";
+		const psngOffered = computed(() => psngFlag || psRenderer.value === "ng");
 		const sceneMotionLabels: Record<SceneMotion, string> = {
-			off: "Off",
-			sparse: "Sparse",
-			"1s": "Once a second",
-			"24": "24 frames a second",
-			"60": "60 frames a second",
+			auto: "Auto",
+			full: "Full",
+			calm: "Calm",
+			still: "Still",
 		};
 		const sceneMotionHints: Record<SceneMotion, string> = {
-			off: "a still picture; the sky still follows the time of day",
-			sparse: "moves on every five minutes, and when you come back to the window",
-			"1s": "the birds and the rain move in visible jumps",
-			"24": "smooth, and lighter on the battery",
-			"60": "your screen's own rate: the smoothest; the default",
+			auto: "follows your device; for now the same as Full",
+			full: "everything moves, at your screen's rate",
+			calm: "clouds, weather, smoke and the birds' flight; the rest holds still",
+			still: "a still picture; the sky still follows the time of day",
 		};
 
 		// The step under the slider while it is being dragged. Applying every
@@ -663,6 +696,8 @@ export default defineComponent({
 		return {
 			sceneMotions: SCENE_MOTIONS,
 			psAnimation,
+			psRenderer,
+			psngOffered,
 			sceneMotionLabels,
 			sceneMotionHints,
 			store,

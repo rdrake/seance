@@ -12,17 +12,44 @@
 export type SceneView = "channel" | "query" | "other";
 
 /**
- * How much a scene moves (the ps theme's Scene animation setting): not at
- * all, once every five minutes and on coming back, once a second, 24 frames a
- * second, or the browser's own rate.
+ * How much a scene moves (the ps theme's Scene animation setting): `auto`
+ * (the default; full until power signals exist, docs/projects/ps-ng.md),
+ * `full` (everything at the browser's rate), `calm` (classic steps once a
+ * second, NG runs a reduced set) or `still` (nothing). Older stored values
+ * are read through normalizeSceneMotion.
  */
-export type SceneMotion = "off" | "sparse" | "1s" | "24" | "60";
+export type SceneMotion = "auto" | "full" | "calm" | "still";
 
-export const SCENE_MOTIONS: readonly SceneMotion[] = ["off", "sparse", "1s", "24", "60"];
+export const SCENE_MOTIONS: readonly SceneMotion[] = ["auto", "full", "calm", "still"];
 
-/** A stored value the list does not hold is the default. */
+const LEGACY_MOTIONS: Record<string, SceneMotion> = {
+	"60": "auto",
+	"24": "auto",
+	"1s": "calm",
+	sparse: "calm",
+	off: "still",
+};
+
+/** Read on load, never rewritten: the old values (60/24/1s/sparse/off) map across, anything else is auto. */
 export function normalizeSceneMotion(value: unknown): SceneMotion {
-	return SCENE_MOTIONS.includes(value as SceneMotion) ? (value as SceneMotion) : "60";
+	if (SCENE_MOTIONS.includes(value as SceneMotion)) {
+		return value as SceneMotion;
+	}
+
+	return LEGACY_MOTIONS[value as string] ?? "auto";
+}
+
+/** Which scene the ps theme draws: the shipped one, or the NG rewrite (ps NG plan 1). */
+export type PsRenderer = "classic" | "ng";
+
+/** A stored value other than "ng" is classic. */
+export function normalizePsRenderer(value: unknown): PsRenderer {
+	return value === "ng" ? "ng" : "classic";
+}
+
+/** The SCENES key for a theme under a renderer: only ps has an NG scene. */
+export function sceneKey(theme: string, renderer: PsRenderer): string {
+	return theme === "ps" && renderer === "ng" ? "ps-ng" : theme;
 }
 
 export interface SceneHostState {
@@ -52,6 +79,7 @@ export type SceneLoader = () => Promise<SceneModule>;
 /** The themes that have a scene, by theme name: each is its own chunk, loaded only for that theme. */
 export const SCENES: Readonly<Record<string, SceneLoader>> = {
 	ps: () => import(/* webpackChunkName: "scene-ps" */ "./scenes/ps/scene"),
+	"ps-ng": () => import(/* webpackChunkName: "scene-ps-ng" */ "./scenes/psng/scene"),
 };
 
 export interface SceneHost {
@@ -61,6 +89,8 @@ export interface SceneHost {
 	/** Whether a page nobody attends to rests its scene (default yes); no, and it counts as attended. */
 	setPauseWhenAway(pause: boolean): void;
 	setMotion(motion: SceneMotion): void;
+	/** Which ps scene to draw; swaps a mounted ps scene for the other one. */
+	setRenderer(renderer: PsRenderer): void;
 	setView(view: SceneView): void;
 	/**
 	 * Touch grass (touchGrass.ts): the app is hidden and the scene is all there
@@ -93,10 +123,11 @@ export function createSceneHost(opts: {
 	// The view the app reports; state.view is the one the scene is given.
 	let view = state.view;
 	let asked: string | null = null;
+	let renderer: PsRenderer = "classic";
 	let mounted: string | null = null;
 	let handle: SceneHandle | null = null;
 	let ticket = 0;
-	// The asked-for theme whose scene last failed to load, while nothing since
+	// The scene key (sceneKey) whose scene last failed to load, while nothing since
 	// has superseded that attempt. Cleared by any `setTheme` (win or lose) and
 	// by a successful mount; `retry()` reads it and nothing else sets it.
 	let failed: string | null = null;
@@ -199,7 +230,21 @@ export function createSceneHost(opts: {
 			failed = null;
 			const mine = ++ticket;
 			unmount();
-			await attempt(name, mine);
+			await attempt(sceneKey(name, renderer), mine);
+		},
+
+		setRenderer(next: PsRenderer): void {
+			const before = asked === null ? null : sceneKey(asked, renderer);
+			renderer = next;
+
+			if (asked === null || sceneKey(asked, renderer) === before) {
+				return;
+			}
+
+			failed = null;
+			const mine = ++ticket;
+			unmount();
+			void attempt(sceneKey(asked, renderer), mine);
 		},
 
 		setVisible(visible: boolean): void {
@@ -259,7 +304,7 @@ export function createSceneHost(opts: {
 export const themeScene: SceneHost = createSceneHost({
 	root: () => document.getElementById("theme-scene"),
 	loaders: SCENES,
-	state: {visible: true, attended: true, view: "other", motion: "60"},
+	state: {visible: true, attended: true, view: "other", motion: "auto"},
 	warn: (message, error) => console.warn(message, error), // eslint-disable-line no-console
 });
 

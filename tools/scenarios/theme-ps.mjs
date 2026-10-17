@@ -778,32 +778,13 @@ const SCENE_STATE = `(async () => {
 	// A layer that leaves or joins the page inside the window (its fade's
 	// clean-up, layers.ts) moved for part of it only: such a sample says
 	// nothing, so it is taken again (three tries).
-	let anims, animAt, allSvgs, svgAt, svgOff, fireAt;
-	// The sun's fire (flame.ts) is a canvas the stepper paints: a sum of its
-	// pixels, taken with the clocks, says whether it moved and whether it is drawn.
-	const fireEl = s.querySelector(".ps-fire");
-	// So is each skein (birds.ts createSkeinFlocks): the first flock's canvas.
-	const flockEl = s.querySelector(".ps-flock-birds");
-	let flockAt;
-	const canvasSum = (el) => {
-		if (!el || !el.width || !el.height) return {hash: 0, alpha: 0};
-		const px = el.getContext("2d").getImageData(0, 0, el.width, el.height).data;
-		let hash = 0, alpha = 0;
-		for (let i = 0; i < px.length; i += 4) {
-			hash = (hash * 31 + px[i] + px[i + 1] * 7 + px[i + 3] * 13) | 0;
-			alpha += px[i + 3];
-		}
-		return {hash, alpha};
-	};
-	const fireSum = () => (fireEl ? canvasSum(fireEl) : null);
+	let anims, animAt, allSvgs, svgAt, svgOff;
 	for (let tries = 0; tries < 3; tries++) {
 		anims = s.getAnimations({subtree: true});
 		animAt = anims.map((a) => a.currentTime);
 		allSvgs = [...s.querySelectorAll("svg")];
 		svgAt = allSvgs.map((v) => v.getCurrentTime());
 		svgOff = allSvgs.map((v) => !!v.closest(".ps-off"));
-		fireAt = fireSum();
-		flockAt = canvasSum(flockEl);
 		await new Promise((r) => setTimeout(r, ${MOTION_SAMPLE_MS}));
 		if (allSvgs.every((v, i) => !!v.closest(".ps-off") === svgOff[i])) break;
 	}
@@ -834,7 +815,7 @@ const SCENE_STATE = `(async () => {
 		deckBottom: (() => { const e = s.querySelector(".ps-deck"); return e ? +(e.getBoundingClientRect().bottom / s.getBoundingClientRect().height * 100).toFixed(1) : null; })(),
 		rainDeck: n(".ps-overcast-set:not(.ps-leaving) > .ps-deck.ps-deck-rain"),
 		birds: {
-			skeins: [...s.querySelectorAll(".ps-skeins, .ps-flock, .ps-flock-birds")].filter((e) => e.checkVisibility()).length,
+			skeins: [...s.querySelectorAll(".ps-skeins, .ps-flock, .ps-bird")].filter((e) => e.checkVisibility()).length,
 			buzzard: [...s.querySelectorAll(".ps-buzzard")].filter((e) => e.checkVisibility()).length,
 			larks: [...s.querySelectorAll(".ps-lark")].filter((e) => e.checkVisibility()).length,
 		},
@@ -865,14 +846,6 @@ const SCENE_STATE = `(async () => {
 			haze: v.classList.contains("ps-heat-haze"),
 		})),
 		running: anims.filter((a, i) => a.playState !== "idle" && a.currentTime !== animAt[i]).length,
-		fire: fireEl && (() => {
-			const now = fireSum();
-			return {drawn: now.alpha > 0, moved: now.hash !== fireAt.hash, off: !!fireEl.closest(".ps-off")};
-		})(),
-		flock: flockEl && (() => {
-			const now = canvasSum(flockEl);
-			return {drawn: now.alpha > 0, moved: now.hash !== flockAt.hash, off: !!flockEl.closest(".ps-off")};
-		})(),
 		view: s.dataset.view,
 		light: h.dataset.psLight,
 		text: h.dataset.psText,
@@ -907,7 +880,7 @@ const REDUCED_STATE = `(() => {
 			.filter((a) => a.playState === "running" && a.effect && a.effect.target && s.contains(a.effect.target))
 			.map((a) => a.animationName || a.transitionProperty || "?"),
 		flight: {
-			skeins: rendered(".ps-skeins, .ps-flock-birds"),
+			skeins: rendered(".ps-skeins, .ps-bird"),
 			buzzard: rendered(".ps-buzzard"),
 			larks: rendered(".ps-lark"),
 			rain: rendered(".ps-rain, .ps-rain i"),
@@ -939,16 +912,15 @@ async function atHour(page, hour) {
 }
 
 /**
- * The scene's SVGs (scene.ts sceneMarkup): the moon, the sun's two (its bloom
- * and its core; the fire between them is a canvas, flame.ts), the land, the
- * near grass and the yurt; the buzzard and the three larks. (The skeins'
- * birds are drawn on a canvas a flock, birds.ts createSkeinFlocks, not SVGs.) A hot day's weather
- * layer adds the heat haze.
+ * The scene's SVGs (markup.ts sceneMarkup): the moon, the sun, the land, the
+ * near grass and the yurt; the skeins' 38 birds (geese and cranes) and the
+ * one holding their belly gradient; the buzzard and the three larks. A hot day's weather layer
+ * adds the heat haze.
  */
-const SVGS = 10;
+const SVGS = 48;
 const svgsOn = (s) => SVGS + (s.weather === "heat" ? 1 : 0);
 
-/** The scene's layers, back to front (scene.ts sceneMarkup, docs/projects/ps-theme.md §5.1). */
+/** The scene's layers, back to front (markup.ts sceneMarkup, docs/projects/ps-theme.md §5.1). */
 const LAYERS = [
 	"ps-milky",
 	"ps-stars",
@@ -1027,10 +999,8 @@ function checkStopped(page, s, where) {
 	page.check(
 		`${where}: the scene is stopped (ps-paused ${s.paused}; ${s.svgs.length} of ${svgsOn(
 			s
-		)} SVG clocks, ${going} going; ${s.running} CSS animations running; the sun's fire ${
-			s.fire?.moved ? "moving" : "still"
-		})`,
-		s.paused && s.svgs.length === svgsOn(s) && going === 0 && s.running === 0 && !s.fire?.moved
+		)} SVG clocks, ${going} going; ${s.running} CSS animations running)`,
+		s.paused && s.svgs.length === svgsOn(s) && going === 0 && s.running === 0
 	);
 }
 
@@ -1049,20 +1019,8 @@ function checkRunning(page, s, where) {
 			s
 		)} SVG clocks, ${going} going, ${s.svgs.length - going} held in layers out of their window${
 			wrong.length ? `, ${wrong.length} the wrong way` : ""
-		}; ${s.running} CSS animations running; the sun's fire ${
-			!s.fire
-				? "missing"
-				: s.fire.off
-				? "out of its window"
-				: `${s.fire.drawn ? "drawn" : "blank"}, ${s.fire.moved ? "moving" : "still"}`
-		})`,
-		!s.paused &&
-			s.svgs.length === svgsOn(s) &&
-			wrong.length === 0 &&
-			going > 0 &&
-			s.running > 0 &&
-			!!s.fire &&
-			(s.fire.off || (s.fire.drawn && s.fire.moved))
+		}; ${s.running} CSS animations running)`,
+		!s.paused && s.svgs.length === svgsOn(s) && wrong.length === 0 && going > 0 && s.running > 0
 	);
 }
 
@@ -2879,7 +2837,7 @@ export default async function run(page) {
 		`noon: the canvas is the sky's top (${noon.canvas} = ${noon.skyTop})`,
 		noon.canvas !== "" && noon.canvas === noon.skyTop
 	);
-	// The browser's own bar runs on into the sky (scene.ts themeColorFor).
+	// The browser's own bar runs on into the sky (publish.ts themeColorFor).
 	page.check(
 		`noon: theme-color is the canvas (${noon.meta} = ${noon.canvas})`,
 		noon.canvas !== "" && noon.meta === noon.canvas
@@ -3245,12 +3203,6 @@ export default async function run(page) {
 		)})`,
 		sep25States.dusk.birds.skeins > 0
 	);
-	page.check(
-		`25 September at dusk: the first skein's canvas is drawn and its birds move (${JSON.stringify(
-			sep25States.dusk.flock
-		)})`,
-		!!sep25States.dusk.flock && sep25States.dusk.flock.drawn && sep25States.dusk.flock.moved
-	);
 
 	for (const [name, doy, day, want] of [
 		["a rainy dusk, 26 September", 269, 26, "rain"],
@@ -3530,7 +3482,7 @@ export default async function run(page) {
 	// A clear 4 October into a windy 5th, by the scene's own minute timer.
 	// The wind shortens the clouds' drift (ps.css ps-windy); the same time
 	// under a shorter loop is another place, and the clouds jumped hundreds of
-	// pixels (measured 126 to 1006 px before scene.ts kept their place).
+	// pixels (measured 126 to 1006 px before watchers.ts kept their place).
 	// Sampled every 100 ms across the flip: they move only as they drift.
 	const CLOUD_X = `JSON.stringify({windy: document.getElementById("theme-scene").classList.contains("ps-windy"), x: [...document.querySelectorAll("#theme-scene .ps-cloud-field > .ps-cloud")].map((e) => e.getBoundingClientRect().left)})`;
 	await at(page, Date.UTC(2026, 9, 4, 23, 59, 52));

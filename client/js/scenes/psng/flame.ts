@@ -1,5 +1,4 @@
-import {hexRgb} from "./colour";
-import type {StepSvg} from "./stepper";
+import {hexRgb} from "../ps/colour";
 
 /**
  * The sun's fire (spec §5.1 layer 5, "animated like a brilliant fire"): the
@@ -18,7 +17,7 @@ import type {StepSvg} from "./stepper";
  * What a frame holds is where each pixel samples the flame's gradient, not a
  * colour, so the hour's colours (the palette's flame and edge, which change
  * by the minute) are applied when a frame is painted, through a 256-entry
- * table. No DOM: the scene hands in the canvas's pixel sink, so mocha drives it.
+ * table. NG drives it itself (fireDriver): no stepper, a frame cache bounded at one loop.
  */
 
 /** The filter this replaces, in the sun's own units (its viewBox is -100…100). */
@@ -43,12 +42,8 @@ export const FIRE = {
 	] as ReadonlyArray<readonly [number, number]>,
 };
 
-/**
- * Frames of the loop kept: the screen's own rate, the scene's default since
- * 2026-10-08 (420 fields of FIRE_SIZE² bytes for the 7 s, about 10.8 MB; a
- * stepped scene shows every 2.5th).
- */
-export const FIRE_FPS = 60;
+/** Frames of the loop painted and kept a second: 7 s × 24 = 168 fields of FIRE_SIZE² bytes, about 4.3 MB. */
+export const FIRE_FPS_NG = 24;
 
 /** The canvas's side in pixels: about 1.5 sun units a pixel; next to the blur, as fine as Chrome draws the filter (tmp check: mean difference 1.2/255). */
 export const FIRE_SIZE = 160;
@@ -306,59 +301,51 @@ export function fireColours(flame: string, edge: string): Uint32Array {
 	return lut;
 }
 
-/** Where the fire paints: a size² RGBA sink the scene backs with its canvas. */
-export interface FireCanvas {
-	readonly size: number;
-	/** The pixels to fill, as 32-bit words. */
-	readonly pixels: Uint32Array;
-	/** Show what `pixels` holds now. */
-	commit(): void;
-}
-
 /**
- * The fire as one of the stepper's clocks (it takes the place of the sun's
- * SMIL, so it is stepped, held and handed to native playback the same way):
- * a time set paints the loop's frame for it, computed the first time it is
- * needed and kept, so after one loop the fire costs a table lookup a pixel.
+ * The fire's frame loop: at most FIRE_FPS_NG paints a second from a cache of
+ * one loop's frames (computed the first time each is needed). `stop()`
+ * cancels the pending frame request, so a stopped fire asks the browser for
+ * nothing; `start()` resumes the loop where it left off. A new pair of
+ * colours paints the current frame at once, running or not, so a fire that
+ * is held still still shows.
  */
-export function createFire(
-	canvas: FireCanvas,
-	deps: {
-		/** Native playback: call fn on the next frame with its time in ms; returns a cancel. */
-		frame(fn: (ms: number) => void): () => void;
-	}
-): StepSvg & {setColours(flame: string, edge: string): void; readonly cachedFrames: number} {
+export function fireDriver(
+	canvas: HTMLCanvasElement,
+	raf: (fn: (ms: number) => void) => number = (fn) => requestAnimationFrame(fn),
+	caf: (id: number) => void = (id) => cancelAnimationFrame(id)
+) {
+	const ctx = canvas.getContext("2d");
 	const turbulence = createTurbulence(FIRE.seed);
 	const frames = new Map<number, Uint8Array>();
-	const count = Math.round(FIRE.loop * FIRE_FPS);
+	const count = Math.round(FIRE.loop * FIRE_FPS_NG);
+	const image = ctx?.createImageData(FIRE_SIZE, FIRE_SIZE);
+	const pixels = image ? new Uint32Array(image.data.buffer) : null;
 	let lut: Uint32Array | null = null;
 	let colours = "";
 	let time = 0;
 	let shown = -1;
-	let cancel: (() => void) | null = null;
-	let base: number | null = null; // native playback: the frame clock, in s, at fire time 0
+	let pending: number | null = null;
+	let base: number | null = null; // the frame clock, in s, at fire time 0
 
 	const paint = (force: boolean) => {
-		const index = ((Math.floor(time * FIRE_FPS) % count) + count) % count;
+		const index = Math.floor(time * FIRE_FPS_NG) % count;
 
-		if (!lut || (!force && index === shown)) {
+		if (!ctx || !image || !pixels || !lut || (!force && index === shown)) {
 			return;
 		}
 
 		let field = frames.get(index);
 
 		if (!field) {
-			field = fireField(turbulence, ...frequencyAt(index / FIRE_FPS), canvas.size);
+			field = fireField(turbulence, ...frequencyAt(index / FIRE_FPS_NG));
 			frames.set(index, field);
 		}
-
-		const {pixels} = canvas;
 
 		for (let i = 0; i < field.length; i++) {
 			pixels[i] = lut[field[i]];
 		}
 
-		canvas.commit();
+		ctx.putImageData(image, 0, 0);
 		shown = index;
 	};
 
@@ -369,14 +356,25 @@ export function createFire(
 
 		time = ms / 1000 - base;
 		paint(false);
-		cancel = deps.frame(tick);
+		pending = raf(tick);
+	};
+
+	const stop = () => {
+		if (pending !== null) {
+			caf(pending);
+			pending = null;
+		}
 	};
 
 	return {
-		get cachedFrames() {
-			return frames.size;
+		start() {
+			if (pending === null) {
+				base = null;
+				pending = raf(tick);
+			}
 		},
-		setColours(flame, edge) {
+		stop,
+		setColours(flame: string, edge: string) {
 			if (flame + edge === colours) {
 				return;
 			}
@@ -385,23 +383,27 @@ export function createFire(
 			lut = fireColours(flame, edge);
 			paint(true);
 		},
-		animationsPaused: () => cancel === null,
-		pauseAnimations() {
-			cancel?.();
-			cancel = null;
+		destroy() {
+			stop();
+			frames.clear();
 		},
-		unpauseAnimations() {
-			if (cancel) {
-				return;
-			}
-
-			base = null;
-			cancel = deps.frame(tick);
-		},
-		getCurrentTime: () => time,
-		setCurrentTime(seconds) {
-			time = seconds;
-			paint(false);
+		/** For tests: the frames held. */
+		get cachedFrames() {
+			return frames.size;
 		},
 	};
+}
+
+/**
+ * Classic's sun markup with its filter fire taken out and the canvas put in its place, between the
+ * bloom and the core (perf-band's shape: the bloom's svg, the canvas, the core's svg). Gradients are
+ * document-global, so the core's `url(#ps-s-core)` still finds its defs in the first svg.
+ */
+export function ngSun(markup: string): string {
+	return markup
+		.replace(/<filter id="ps-s-fire"[\s\S]*?<\/filter>\n?/, "")
+		.replace(
+			/<g filter="url\(#ps-s-fire\)"><circle r="56" fill="url\(#ps-s-flame\)"\/><\/g>/,
+			`</svg><canvas class="ps-fire" width="${FIRE_SIZE}" height="${FIRE_SIZE}"></canvas><svg viewBox="-100 -100 200 200">`
+		);
 }

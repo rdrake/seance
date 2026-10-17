@@ -2612,8 +2612,8 @@ describe("the ps theme's embers (spec §9)", function () {
 		expect(ours.length).to.be.at.least(SPARKS.length);
 
 		for (const r of ours) {
-			// (WebKit's clip-path twin sits in an @supports around it)
-			expect(r.at.endsWith(MOTION_OK), r.selectors.join(", ")).to.equal(true);
+			// (WebKit's clip-path twin is the same gated selector in an @supports)
+			expect(r.at.includes(MOTION_OK), r.selectors.join(", ")).to.equal(true);
 		}
 
 		const reduced = rules.filter((r) => r.at.includes(REDUCED_MOTION));
@@ -3427,16 +3427,10 @@ describe("the ps theme's clouds and weather (plan 3 task 4, spec §5.1, §5.5)",
 	});
 
 	it("moves the rain, the snow and the seeds in cqw/cqh from the mockup's 1180 × 700 window", function () {
-		expect(valueOf(`${S} .ps-rain-sheet`, "animation")).to.equal(
-			"ps-rain-fall var(--rd) linear infinite"
+		expect(valueOf(`${S} .ps-rain i`, "animation")).to.equal(
+			"ps-drop var(--rd) linear var(--rdl) infinite"
 		);
-		// one sheet per speed, skewed so a drop drifts 3.9cqw left over its 118cqh fall
-		expect(frames("ps-rain-fall")).to.include(
-			"skewX(atan2(-3.9cqw, 118cqh)) translateY(118cqh)"
-		);
-		expect(valueOf(`${S} .ps-rain i::after`, "transform")).to.equal(
-			"skewX(atan2(3.9cqw, 118cqh))"
-		);
+		expect(frames("ps-drop")).to.include("translate(-3.9cqw, 118cqh)");
 		expect(valueOf(`${S} .ps-snow i`, "animation")).to.equal(
 			"ps-flake var(--fd) linear var(--fdl) infinite"
 		);
@@ -3458,7 +3452,7 @@ describe("the ps theme's clouds and weather (plan 3 task 4, spec §5.1, §5.5)",
 
 		for (const name of [
 			"ps-drift",
-			"ps-rain-fall",
+			"ps-drop",
 			"ps-flake",
 			"ps-seed",
 			"ps-shimmer",
@@ -3487,7 +3481,7 @@ describe("the ps theme's clouds and weather (plan 3 task 4, spec §5.1, §5.5)",
 	it("keeps its keyframes' names its own, once each", function () {
 		for (const name of [
 			"ps-drift",
-			"ps-rain-fall",
+			"ps-drop",
 			"ps-flake",
 			"ps-seed",
 			"ps-shimmer",
@@ -3502,12 +3496,13 @@ describe("the ps theme's birds (plan 3 task 6, spec §5.4: the user's N2, D1 buz
 	const S = "#theme-scene";
 	/** Every rule of the birds, plain or under a root class. */
 	const BIRD_RULE =
-		/^#theme-scene(\.ps-west)? \.(ps-skeins|ps-flock|ps-skein|ps-skein-sway|ps-flock-birds|ps-daybirds|ps-buzzard|ps-lark|ps-lark-track|ps-lark-bird)\b/;
+		/^#theme-scene(\.ps-west)? \.(ps-skeins|ps-bird-defs|ps-flock|ps-skein|ps-skein-sway|ps-bird|ps-daybirds|ps-buzzard|ps-lark|ps-lark-track|ps-lark-bird)\b/;
 	const own = rules.filter((r) => r.selectors.some((sel) => BIRD_RULE.test(sel)));
 	const FRAMES = [
 		"ps-skein-fly",
 		"ps-skein-west",
 		"ps-skein-sway",
+		"ps-bird-wander",
 		"ps-buzz-drift",
 		"ps-lark-fly",
 		"ps-lark-fl",
@@ -3521,6 +3516,12 @@ describe("the ps theme's birds (plan 3 task 6, spec §5.4: the user's N2, D1 buz
 		expect(valueOf(`${S} .ps-skeins`, "inset")).to.equal("0 0 45%");
 		expect(valueOf(`${S} .ps-skeins`, "opacity")).to.equal("var(--ps-skeins-op, 0)");
 		expect(valueOf(`${S} .ps-skeins`, "transition")).to.equal("opacity 1.4s ease");
+	});
+
+	it("keeps the belly gradient's svg in the page but of no size, never display: none", function () {
+		expect(valueOf(`${S} .ps-bird-defs`, "width")).to.equal("0");
+		expect(valueOf(`${S} .ps-bird-defs`, "height")).to.equal("0");
+		expect(declsOf(`${S} .ps-bird-defs`).filter(([p]) => p === "display")).to.deep.equal([]);
 	});
 
 	it("flies the first --ps-skein-count flocks, a rem box each, across the scene in cqw", function () {
@@ -3572,12 +3573,16 @@ describe("the ps theme's birds (plan 3 task 6, spec §5.4: the user's N2, D1 buz
 		);
 	});
 
-	it("draws each flock's birds on one canvas: no per-bird rule, layer or animation", function () {
-		expect(valueOf(`${S} .ps-flock-birds`, "position")).to.equal("absolute");
-		expect(
-			own.flatMap((r) => r.selectors).filter((sel) => /ps-bird\b|ps-wings/.test(sel))
-		).to.deep.equal([]);
-		expect(frames("ps-bird-wander")).to.equal("");
+	it("paints the skeins in the moonlit colours scene.ts publishes, the alpha on the whole bird", function () {
+		expect(valueOf(`${S} .ps-bird svg`, "opacity")).to.equal("var(--ps-bird-alpha, 0.8)");
+		expect(valueOf(`${S} .ps-bird svg`, "overflow")).to.equal("visible");
+		expect(valueOf(`${S} .ps-bird .ps-b-far`, "fill")).to.equal("var(--ps-bird-wing)");
+		expect(valueOf(`${S} .ps-bird .ps-b-far`, "opacity")).to.equal("0.55");
+		expect(valueOf(`${S} .ps-bird .ps-b-near`, "fill")).to.equal("var(--ps-bird-wing)");
+		expect(valueOf(`${S} .ps-bird .ps-b-body`, "fill")).to.equal('url("#ps-b-belly")');
+		expect(valueOf(`${S} .ps-bird`, "animation")).to.equal(
+			"ps-bird-wander var(--wd) ease-in-out var(--wdl) infinite alternate"
+		);
 	});
 
 	it("inks the day birds from --ps-db-ink, each shown by its own published switch", function () {
