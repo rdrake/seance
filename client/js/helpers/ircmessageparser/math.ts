@@ -50,8 +50,8 @@ const MAX_INLINE_EM = 10;
 
 function oversized(html: string): boolean {
 	for (const [style] of html.matchAll(/style="[^"]*"/g)) {
-		for (const [, n] of style.matchAll(/(-?[\d.]+)em/g)) {
-			if (Math.abs(parseFloat(n)) > MAX_INLINE_EM) {
+		for (const [, n] of style.matchAll(/([\d.]+)em/g)) {
+			if (parseFloat(n) > MAX_INLINE_EM) {
 				return true;
 			}
 		}
