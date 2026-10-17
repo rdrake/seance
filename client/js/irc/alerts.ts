@@ -106,8 +106,9 @@ export function delAlert(client: IrcClient, name: string): Promise<LookupResult<
  * after the other, both verdicts reported. Nothing is deleted when the add
  * could not be sent (too long), and the add is skipped when the delete
  * could not be asked at all (the bot missing, the network down). When the
- * delete went through and the add did not, `restore` — the old alert's own
- * `addalert` — puts it back.
+ * delete went through and O3 refused the add, `restore` — the old alert's
+ * own `addalert` — puts it back; an add that went unanswered may still have
+ * landed, so nothing is resent then.
  */
 export async function replaceAlert(
 	client: IrcClient,
@@ -133,7 +134,7 @@ export async function replaceAlert(
 
 	const added = await addAlert(client, command);
 
-	if (restore && deleted.value?.ok && !(added.kind === "reply" && added.value?.ok)) {
+	if (restore && deleted.value?.ok && added.kind === "reply" && !added.value?.ok) {
 		return {deleted, added, restored: await addAlert(client, restore)};
 	}
 

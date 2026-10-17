@@ -410,6 +410,29 @@ describe("the alert builder's wire side (irc/alerts.ts, services/x3/alerts.ts)",
 		expect(await half).to.deep.equal({deleted: {kind: "missing"}});
 	});
 
+	it("does not put the old alert back when the add goes unanswered", async function () {
+		const clock = sinon.useFakeTimers();
+
+		try {
+			const {client, transport} = setup();
+			const replaced = replaceAlert(
+				client,
+				"seance-bots",
+				"addalert seance-bots gline ident r????",
+				"addalert seance-bots notice ident a"
+			);
+			await Promise.resolve();
+			notice(transport, "O3", `Removed alert named ${B}seance-bots${B}.`);
+			await clock.tickAsync(60_000);
+			const result = await replaced;
+			expect(result.added).to.deep.equal({kind: "timeout"});
+			expect(result.restored).to.equal(undefined);
+			expect(transport.sent).to.have.length(2);
+		} finally {
+			clock.restore();
+		}
+	});
+
 	it("asks AuthServ for the oper's own level once, when logged in", async function () {
 		const {client, transport} = setup();
 
