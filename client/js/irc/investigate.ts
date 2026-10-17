@@ -403,6 +403,7 @@ export class Investigation {
 		this.liveBans = [];
 		this.accountAsked = "";
 		this.gtraceAsked = false;
+		this.statsPending = 0;
 		this.start();
 	}
 
@@ -1027,7 +1028,8 @@ export class Investigation {
 
 		if (opered && nefarious) {
 			const bans: LiveBan[] = [];
-			this.statsPending = 3;
+			// No labels, no STATS sent: nothing would ever count this down.
+			this.statsPending = canRequest(this.client) ? 3 : 0;
 
 			const done = (reply: ReplyUnit) => {
 				for (const msg of reply.lines) {

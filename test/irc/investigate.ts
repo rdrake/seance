@@ -111,11 +111,14 @@ function removeSpy(): void {
 const X3: ServicesConfig = {package: "x3", bots: {...X3_DEFAULTS}};
 
 /** A registered client on a nefarious2 server with labels, WHOX and #seance joined. */
-function setup(opts: {opered?: boolean; services?: boolean} = {}): {
+function setup(opts: {opered?: boolean; services?: boolean; labels?: boolean} = {}): {
 	client: IrcClient;
 	transport: FakeTransport;
 } {
-	const caps = "batch labeled-response message-tags server-time";
+	const caps =
+		opts.labels === false
+			? "batch message-tags server-time"
+			: "batch labeled-response message-tags server-time";
 	const transport = new FakeTransport();
 	const client = new IrcClient({
 		host: "irc.test",
@@ -835,6 +838,23 @@ describe("the user investigation (irc/investigate.ts)", function () {
 			},
 		]);
 		expect(inv.sources.gtrace).to.equal("done");
+	});
+
+	it("without labeled replies still asks O3's gtrace once a host is known", async function () {
+		const {client, transport} = setup({labels: false});
+		const inv = new Investigation(client, "user", "carol");
+		inv.start();
+		expect(inv.sources.stats).to.equal("off");
+
+		clock.tick(PACE_MS);
+		await flush();
+		notice(transport, "O3", o3Whois("carol", "c", "c.example.net", "198.51.100.9"));
+		clock.tick(PACE_MS);
+		await flush();
+		expect(transport.sent.map(commandOf)).to.include(
+			"PRIVMSG O3 :gtrace print host superset c.example.net"
+		);
+		inv.stop();
 	});
 
 	it("refresh asks everything again from a blank model", async function () {
