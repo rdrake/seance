@@ -34,6 +34,7 @@ export const REACTIONS: ReactionDef[] = [
 	{id: "gline", label: "G-line", level: 900},
 	{id: "shun", label: "Shun", level: 900},
 	{id: "tempshun", label: "Temporary shun", level: 900},
+	{id: "track", label: "Track", level: 900},
 	{id: "kill", label: "Kill", level: 900},
 	{id: "mark", label: "Mark", level: 999},
 	{id: "version", label: "Ask for the version", level: 999},

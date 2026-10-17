@@ -180,8 +180,11 @@ describe("the alert builder's form (helpers/alertBuilder.ts)", function () {
 		expect(expiryFor("2027-01-01 00:00:00 +0000", now)).to.equal("1M");
 		expect(expiryFor("whenever", now)).to.equal("1w");
 		expect(
-			formFromAlert({name: "a", reaction: "track", owner: "o", criteria: ""}, now).reaction
+			formFromAlert({name: "a", reaction: "frob", owner: "o", criteria: ""}, now).reaction
 		).to.equal("notice");
+		expect(
+			formFromAlert({name: "a", reaction: "track", owner: "o", criteria: ""}, now).reaction
+		).to.equal("track");
 	});
 
 	it("knows the defaults, the names O3 takes and the reaction levels", function () {
@@ -206,6 +209,7 @@ describe("the alert builder's form (helpers/alertBuilder.ts)", function () {
 			gline: 900,
 			shun: 900,
 			tempshun: 900,
+			track: 900,
 			kill: 900,
 			mark: 999,
 			version: 999,
