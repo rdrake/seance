@@ -408,6 +408,7 @@ export class Investigation {
 		this.liveBans = [];
 		this.accountAsked = "";
 		this.gtraceAsked = false;
+		this.statsPending = 0;
 		this.start();
 	}
 
@@ -1038,7 +1039,8 @@ export class Investigation {
 
 		if (opered && nefarious) {
 			const bans: LiveBan[] = [];
-			this.statsPending = 3;
+			// No labels, no STATS sent: nothing would ever count this down.
+			this.statsPending = canRequest(this.client) ? 3 : 0;
 
 			const done = (reply: ReplyUnit) => {
 				for (const msg of reply.lines) {
@@ -1050,10 +1052,7 @@ export class Investigation {
 				}
 
 				this.liveBans = bans;
-
-				if (--this.statsPending === 0) {
-					this.askGtrace(bans.length);
-				}
+				this.statsPending--; // derive() asks gtrace once all three are in
 			};
 
 			for (const letter of ["g", "S", "Z"]) {
@@ -1448,7 +1447,7 @@ export class Investigation {
 		model.seen = seenBefore(feed, identity, (a, b) => this.client.namesEqual(a, b));
 		model.verdict = verdict({user: identity, liveBans: near.live, seen: model.seen, now});
 
-		if (this.sources.stats !== "asking" && this.statsPending === 0 && !this.gtraceAsked) {
+		if (this.statsPending === 0 && !this.gtraceAsked) {
 			this.askGtrace(this.liveBans.length);
 		}
 	}
