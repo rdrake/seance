@@ -503,6 +503,13 @@ describe("markdown — masked links", () => {
 		expect(md("[x](ftp://e.com)")).to.deep.equal([{text: "[x](ftp://e.com)"}]);
 		expect(md("[x] (https://e.com)")).to.deep.equal([{text: "[x] (https://e.com)"}]);
 	});
+
+	it("keeps the url tail opaque when a later url is opaque too", () => {
+		expect(md("[a](https://x/*) b* https://y.com")).to.deep.equal([
+			{text: "a", href: "https://x/*"},
+			{text: " b* https://y.com"},
+		]);
+	});
 });
 
 describe("markdown — escapes", () => {

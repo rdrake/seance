@@ -449,8 +449,11 @@ function scan(text: string): Scan {
 				const end = i + match[0].length;
 				removals.push({start: i, end: textStart}, {start: textEnd, end});
 				ranges.push({start: textStart, end: textEnd, flag: "href", href: match[2]});
-				// The link text is scanned normally; the "](url)" tail is not
-				skips.push({start: textEnd, end});
+				// The link text is scanned normally; the "](url)" tail is not.
+				// skipAt() needs skips sorted by start; every skip behind
+				// firstSkip ends before i, so the insert never lands there
+				const at = skips.findIndex((r) => r.start > textEnd);
+				skips.splice(at === -1 ? skips.length : at, 0, {start: textEnd, end});
 				i = textStart;
 				continue;
 			}
