@@ -286,16 +286,11 @@ export function criterionWord(key: string, value: string): string {
 	return key === "info" || key === "version" ? v.replace(/\s+/g, "?") : v;
 }
 
-/** Keywords that take no value (x3-services.md: "every one but `log`"). */
-const BARE_KEYWORDS = new Set(["log"]);
-
-/** The criteria text: every row that is on and has a value, `key value` each (a bare keyword alone). */
+/** The criteria text: every row that is on and has a value, `key value` each (`log`, which takes no value, alone). */
 export function buildCriteria(rows: CriterionRow[]): string {
 	return rows
-		.filter((r) => r.on && (BARE_KEYWORDS.has(r.key) || r.value.trim() !== ""))
-		.map((r) =>
-			BARE_KEYWORDS.has(r.key) ? r.key : `${r.key} ${criterionWord(r.key, r.value)}`
-		)
+		.filter((r) => r.on && (r.key === "log" || r.value.trim() !== ""))
+		.map((r) => (r.key === "log" ? r.key : `${r.key} ${criterionWord(r.key, r.value)}`))
 		.join(" ");
 }
 
@@ -348,7 +343,7 @@ export function parseCriteria(text: string): {rows: CriterionRow[]; reason?: str
 			break;
 		}
 
-		if (BARE_KEYWORDS.has(key)) {
+		if (key === "log") {
 			rows.push(newRow(key, ""));
 			continue;
 		}
