@@ -114,7 +114,7 @@ export async function replaceAlert(
 	client: IrcClient,
 	name: string,
 	command: string,
-	restore?: string
+	restore: string
 ): Promise<{
 	deleted: LookupResult<CommandReply>;
 	added?: LookupResult<CommandReply>;
@@ -134,7 +134,7 @@ export async function replaceAlert(
 
 	const added = await addAlert(client, command);
 
-	if (restore && deleted.value?.ok && added.kind === "reply" && !added.value?.ok) {
+	if (deleted.value?.ok && added.kind === "reply" && !added.value?.ok) {
 		return {deleted, added, restored: await addAlert(client, restore)};
 	}
 
