@@ -4,7 +4,7 @@
 // phase by `--psng-t`), beside classic, in one build, switched by the
 // `psRenderer` setting. The run connects to #seance, says one line of its own,
 // leaves `thelounge.state.psngGroups` unset (every group a tier allows) and
-// the `psAnimation` setting at Auto unless a check says otherwise, and then:
+// the `psAnimation` setting at Full (Auto follows the device since plan 3; one check covers it), and then:
 //
 // - with the preview flag (`thelounge.state.psngPreview` = "1") set, opens
 //   Settings → Appearance, picks ps, and finds the "Scene renderer" radio
@@ -38,7 +38,11 @@
 //   clouds' phase as below (the move out of still at the moment the media
 //   was cleared); a hidden page; a query (`/query`, `data-view="query"`),
 //   then back to #seance and moving ("moving" is animations on the scene,
-//   frames from NG's chunk and at least one in-flight layer displayed);
+//   frames from NG's chunk and at least one in-flight layer displayed); at
+//   noon, before the hidden page, while it is frozen and once shown again,
+//   each lark shows the state its clock puts it in (plan 4: from its `--ld`,
+//   `--ldl` and `--psng-t`, sampled 1 % or more from a stop, its state box
+//   at opacity > 0 and the other two at 0; frozen, the state it had before);
 // - the phase: NG mounted at noon with the setting at Still, 30 s of real
 //   time, then Full: `--psng-t` equals the pinned clock's seconds since the
 //   mount day's midnight at the moment of the switch (± 3 s), and for each
@@ -62,7 +66,12 @@
 //   19 July 12:00 (storm), named so the pairs sort together
 //   (`desktop-0621-1200-classic.png` / `-ng.png`), and lays each viewport's
 //   pairs out on one contact sheet (classic left, NG right;
-//   `contact-desktop.png`);
+//   `contact-desktop.png`); then at 21 June noon pauses the larks in both
+//   renderers at the same points of their flights — the chute (66 %), the
+//   closed drop (84 %) and the flutter (30 %) — checks each shows that state
+//   in both, the chute's and the closed wing drawn within 0.5 px of classic's
+//   (plan 4: never one box lower), and shoots each lark close
+//   (`desktop-lark0-66-classic.png` / `-ng.png`);
 // - last, boots cold with ps and NG stored and the clock at 23:00 on a clear
 //   night (25 September): the first frame NG's root is in already carries
 //   the night's `--ps-sky-top` (read within 300 ms of the mount), the sky's
@@ -72,14 +81,15 @@
 //
 // The FULL census: the root carries all nine `psng-m-*` classes and no
 // `psng-calm`; every animation under #theme-scene is a known group's (by its
-// animationName; `psng-pose2` under .ps-daybirds is the larks') and a group
+// animationName; `psng-pose2` under .ps-daybirds is the larks' flutter) and a group
 // whose class is on; every one's keyframes (`effect.getKeyframes()`) touch
 // only `transform` and `opacity`; every animated element's untransformed box
 // is at most the viewport (± 1 px): an HTML element's offsetWidth/Height (the
 // layout box, which no transform changes), an SVG element's bounding rect (its
 // transformed box: a stricter bound, none of NG's SVG animations scales up);
 // static elements larger than the viewport (the Milky Way) do not count; no
-// SMIL element is left; the groups the moment is about are running; and, where
+// SMIL element is left; no animated element sits inside an `<svg>` (plan 4:
+// WebKit runs those on the main thread); the groups the moment is about are running; and, where
 // the sun is up, NG's chunk requests animation frames (the fire, at 24 a
 // second) — the positive control for the zero counts below.
 // Calm: the root carries `psng-calm` and calm's five classes (clouds, smoke,
@@ -112,6 +122,8 @@ import {writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
 
+const PHONE_LAYOUT_QUERY =
+	"(max-width: 768px), (max-height: 500px) and (hover: none) and (pointer: coarse)";
 const RUN = Date.now().toString(36);
 const NICK = `ng${RUN}`;
 const BASE = `http://localhost:${process.env.SEANCE_HTTP_PORT ?? "8021"}/`;
@@ -289,9 +301,9 @@ const GROUP_OF = {
 	"psng-buzz-orbit": "daybirds",
 	"psng-buzz-flap": "daybirds",
 	"ps-lark-fly": "daybirds",
-	"ps-lark-fl": "daybirds",
-	"ps-lark-ch": "daybirds",
-	"ps-lark-cl": "daybirds",
+	"psng-lark-fl-h": "daybirds",
+	"psng-lark-ch-h": "daybirds",
+	"psng-lark-cl-h": "daybirds",
 	"ps-spin": "sun",
 };
 const ALL_GROUPS = [...new Set(Object.values(GROUP_OF))];
@@ -303,12 +315,13 @@ const CENSUS = `(() => {
 	const G = ${JSON.stringify(GROUP_OF)};
 	const KEYS = new Set(["offset", "computedOffset", "easing", "composite"]);
 	const anims = s.getAnimations({subtree: true});
-	const keys = {}, props = new Set(), over = [], unknown = new Set();
+	const keys = {}, props = new Set(), over = [], unknown = new Set(), insvg = new Set();
 	for (const a of anims) {
 		const n = a.animationName ?? "(script)";
 		const el = a.effect.target;
 		const g = n === "psng-pose2" && el.closest(".ps-daybirds") ? "daybirds" : G[n];
 		if (!g) unknown.add(n);
+		if (el.parentElement && el.parentElement.closest("svg")) insvg.add(n + " on " + (el.getAttribute("class") || el.tagName));
 		keys[(g ?? "?") + ":" + n] = (keys[(g ?? "?") + ":" + n] || 0) + 1;
 		for (const k of a.effect.getKeyframes()) for (const p of Object.keys(k)) if (!KEYS.has(p)) props.add(p);
 		const r = el.getBoundingClientRect();
@@ -323,6 +336,7 @@ const CENSUS = `(() => {
 		props: [...props],
 		over: [...new Set(over)],
 		unknown: [...unknown],
+		insvg: [...insvg],
 		vp: innerWidth + "x" + innerHeight,
 		classes: [...s.classList].filter((c) => /^psng-(m-|calm)/.test(c)).sort(),
 		smil: s.querySelectorAll(${JSON.stringify(SMIL)}).length,
@@ -569,6 +583,13 @@ async function fullCensus(page, label, groups, sun) {
 		c.over.length === 0 && c.smil === 0
 	);
 
+	page.check(
+		`${label}: full — no animation runs on an element inside an <svg> (${
+			c.insvg.slice(0, 4).join("; ") || "none"
+		})`,
+		c.insvg.length === 0
+	);
+
 	if (sun) {
 		page.check(
 			`${label}: full — the sun's fire asks for frames (${frames} in 1 s)`,
@@ -608,7 +629,7 @@ async function calmCensus(page, label, full) {
 			c.over.length === 0 &&
 			frames === 0
 	);
-	await setMotion(page, "auto");
+	await setMotion(page, "full");
 }
 
 /** What exists only in flight: out of the page while NG is still (styles.ts). */
@@ -690,6 +711,67 @@ async function frozenCensus(page, label, before) {
 	return x;
 }
 
+/**
+ * Each lark's state (poses.ts larkStates): from its --ld, --ldl and the scene's --psng-t, where its
+ * flight stands (the state box's own animation gives only the time since it started), and so which of
+ * the flutter, the chute and the closed box shows, as classic's stops (0, 63, 69, 73, 80, 82.5 %) say.
+ * Each lark's three box opacities too, for comparing a frozen lark with itself.
+ */
+const LARKS = `(() => {
+	const s = document.getElementById("theme-scene");
+	const secs = (v) => (v.trim().endsWith("ms") ? parseFloat(v) / 1000 : parseFloat(v));
+	const t = parseFloat(s.style.getPropertyValue("--psng-t"));
+	const STOPS = [0, 63, 69, 73, 80, 82.5], STATE = ["fl", "ch", "fl", "ch", "fl", "cl"];
+	return [...s.querySelectorAll(".ps-lark")].map((l) => {
+		const cs = getComputedStyle(l);
+		const ld = secs(cs.getPropertyValue("--ld")), ldl = secs(cs.getPropertyValue("--ldl"));
+		const box = (k) => l.querySelector(".psng-lark-" + k);
+		const op = Object.fromEntries(["fl", "ch", "cl"].map((k) => [k, box(k) ? parseFloat(getComputedStyle(box(k)).opacity) : -1]));
+		const a = box("fl") && box("fl").getAnimations().find((x) => x.animationName === "psng-lark-fl-h");
+		if (!a || a.currentTime === null) return {op, running: false};
+		const pct = ((((a.currentTime / 1000 + t - ldl) % ld) + ld) % ld) / ld * 100;
+		const i = STOPS.findLastIndex((x) => x <= pct);
+		const dist = Math.min(...[...STOPS, 100].map((x) => Math.abs(pct - x)));
+		return {op, running: true, pct, state: STATE[i], dist};
+	});
+})()`;
+
+const shows = (op, state) =>
+	["fl", "ch", "cl"].every((k) => (k === state ? op[k] > 0 : op[k] === 0));
+
+/** Running larks show the state their clock puts them in (sampled 1 % or more from a stop); returns the sample. */
+async function larkCheck(page, label) {
+	const larks = await page.evaluate(LARKS);
+	const sampled = larks.filter((l) => l.running && l.dist >= 1);
+	const wrong = sampled.filter((l) => !shows(l.op, l.state));
+	page.check(
+		`${label}: each lark shows the state its clock puts it in — ${sampled
+			.map((l) => `${l.state} at ${l.pct.toFixed(1)} %`)
+			.join(", ")} (${larks.length - sampled.length} of ${
+			larks.length
+		} near a stop or not running; wrong: ${
+			wrong.map((l) => JSON.stringify(l.op)).join(" ") || "none"
+		})`,
+		larks.length === 3 && sampled.length > 0 && wrong.length === 0
+	);
+	return larks;
+}
+
+/** Frozen larks hold the state they had the moment before (`before`, from larkCheck). */
+async function larkHeld(page, label, before) {
+	const larks = await page.evaluate(LARKS);
+	const sampled = before.map((b, i) => [b, larks[i]]).filter(([b]) => b.running && b.dist >= 1);
+	const wrong = sampled.filter(([b, l]) => !shows(l.op, b.state));
+	page.check(
+		`${label}: each lark holds the state it froze in (${sampled
+			.map(([b]) => b.state)
+			.join(", ")}; wrong: ${
+			wrong.map(([, l]) => JSON.stringify(l.op)).join(" ") || "none"
+		})`,
+		sampled.length > 0 && wrong.length === 0
+	);
+}
+
 /** Thawed: every cloud goes on from where it was held (`held`), within 4 px, not from where the clock is. */
 async function thawCheck(page, label, held) {
 	const x = await page.evaluate(CLOUD_X);
@@ -750,6 +832,15 @@ const MOMENTS = [
 	["0719-1200-storm", instant(7, 19, 12, 0), "storm"],
 ];
 
+// A discharging battery at 0.5 whose level a check moves, firing `levelchange`.
+const FAKE_BATTERY = `(() => {
+	const b = new EventTarget();
+	b.charging = false;
+	b.level = 0.5;
+	window.__fakeBattery = {set(l) { b.level = l; b.dispatchEvent(new Event("levelchange")); }};
+	navigator.getBattery = () => Promise.resolve(b);
+})()`;
+
 export default async function run(page) {
 	const vp = page.flags.has("--mobile") ? "mobile" : "desktop";
 	await page.send("Emulation.setTimezoneOverride", {timezoneId: "Etc/GMT"});
@@ -757,6 +848,7 @@ export default async function run(page) {
 	await page.addInitScript(PAGE_HELPERS);
 	await page.addInitScript(PREVIEW_FLAG);
 	await page.addInitScript(NG_FRAME_COUNTER);
+	await page.addInitScript(FAKE_BATTERY);
 
 	await page.goto(page.url, {waitForSelector: "#connect form"});
 	await page.evaluate(`document.querySelector("#connect form").requestSubmit()`);
@@ -771,6 +863,10 @@ export default async function run(page) {
 	await page.sleep(1000);
 	await sendLine(page, `hello from the moving plains ${RUN}`);
 	await page.waitFor(`!document.querySelector("#chat .msg.pending")`, {label: "our own line"});
+
+	// Auto follows the device (plan 3): every census below is of Full's groups,
+	// so the setting is Full until the Auto check.
+	await setMotion(page, "full");
 
 	// ---- ps, and the radio pair (desktop) or the store (phone)
 
@@ -817,7 +913,7 @@ export default async function run(page) {
 		`setting Still: every SVG clock paused (${still.svgsRunning} of ${still.svgs} running), nothing moves in 300 ms (${ngMoves.moved} of ${ngMoves.clocks} clocks)`,
 		still.svgs > 0 && still.svgsRunning === 0 && ngMoves.moved === 0
 	);
-	await setMotion(page, "auto");
+	await setMotion(page, "full");
 	await moving(page, "setting Auto");
 
 	// ---- switch to classic while NG moves
@@ -927,15 +1023,18 @@ export default async function run(page) {
 	await phaseCheck(page, "phase after reduced motion", offAt);
 	await moving(page, "reduced motion off again");
 
+	const larksBefore = await larkCheck(page, "noon, before a hidden page");
 	let before = await page.evaluate(CLOUD_X);
 	await page.evaluate(VISIBILITY("hidden"));
 	await page.sleep(300);
 	let held = await frozenCensus(page, "a hidden page", before);
+	await larkHeld(page, "a hidden page", larksBefore);
 	await page.sleep(3000); // a rest long enough that the clock would have moved them on
 	await page.evaluate(VISIBILITY("visible"));
 	await thawCheck(page, "shown again", held);
 	await page.sleep(600);
 	await moving(page, "shown again");
+	await larkCheck(page, "noon, shown again");
 
 	before = await page.evaluate(CLOUD_X);
 	await sendLine(page, `/query ${NICK}q`);
@@ -960,7 +1059,7 @@ export default async function run(page) {
 	const switchedAt = await page.evaluate(`Date.now()`);
 	await setMotion(page, "full");
 	await phaseCheck(page, "phase", switchedAt);
-	await setMotion(page, "auto");
+	await setMotion(page, "full");
 
 	// ---- the theme to coffee while NG moves, then back to ps
 
@@ -1002,6 +1101,62 @@ export default async function run(page) {
 	await at(page, noon);
 	await moving(page, "theme back to ps");
 
+	// ---- Auto follows the device: calm on a touch phone, full elsewhere
+
+	await setMotion(page, "auto");
+	await mountNgAt(page, noon);
+	const calmClass = () =>
+		page.evaluate(`document.getElementById("theme-scene").classList.contains("psng-calm")`);
+	page.check(
+		`Auto on ${vp === "mobile" ? "a touch phone" : "a desktop viewport"}: ${
+			vp === "mobile" ? "psng-calm" : "no psng-calm"
+		}`,
+		(await calmClass()) === (vp === "mobile")
+	);
+
+	if (vp === "desktop") {
+		await page.send("Emulation.setDeviceMetricsOverride", {
+			width: 390,
+			height: 844,
+			deviceScaleFactor: 1,
+			mobile: false,
+		});
+		await page.sleep(600);
+		const narrow = await page.evaluate(
+			`({layout: matchMedia(${JSON.stringify(
+				PHONE_LAYOUT_QUERY
+			)}).matches, coarse: matchMedia("(pointer: coarse)").matches})`
+		);
+		page.check(
+			`Auto on a desktop resized to 390 x 844, no touch (phone layout ${narrow.layout}, coarse ${narrow.coarse}): no psng-calm`,
+			narrow.layout && !narrow.coarse && !(await calmClass())
+		);
+		await page.send("Emulation.setDeviceMetricsOverride", {
+			width: 1280,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false,
+		});
+		await page.sleep(600);
+	}
+
+	if (vp === "desktop") {
+		// Low power from the battery: a discharging 0.5 changes nothing, 0.1 takes Auto down to calm.
+		const setLevel = (l) => page.evaluate(`window.__fakeBattery.set(${l})`);
+		page.check(
+			"battery 0.5, discharging: Auto stays full (no psng-calm)",
+			!(await calmClass())
+		);
+		await setLevel(0.1);
+		await page.sleep(500);
+		page.check("battery 0.1: psng-calm within 500 ms", await calmClass());
+		await setLevel(0.5);
+		await page.sleep(500);
+		page.check("battery back to 0.5: psng-calm gone", !(await calmClass()));
+	}
+
+	await setMotion(page, "full");
+
 	// ---- the pairs (no hostname in frame: the join and quit lines carry it)
 
 	await page.evaluate(`(() => {
@@ -1029,6 +1184,85 @@ export default async function run(page) {
 		}
 
 		names.push(name);
+	}
+
+	// ---- the larks, classic and NG paused at the same points of their flights: the first in its
+	// chute (66 %), the second closed (84 %), the third fluttering (30 %); the shown wing set drawn in
+	// the same place by both, and a close shot of each for the user
+
+	const LARK_AT = [66, 84, 30];
+	const LARK_SEEK = `(() => {
+		const pct = ${JSON.stringify(LARK_AT)};
+		return [...document.querySelectorAll("#theme-scene .ps-lark")].map((l, i) => {
+			const ld = parseFloat(getComputedStyle(l).getPropertyValue("--ld")) * 1000;
+			for (const a of l.getAnimations({subtree: true})) {
+				if (!/^(ps-lark-|psng-lark-)/.test(a.animationName)) continue;
+				const d = a.effect.getTiming().delay;
+				a.pause();
+				a.currentTime = ((((pct[i] / 100) * ld + d) % ld) + ld) % ld;
+			}
+			const psng = !!l.querySelector(".psng-lark-fl");
+			const set = (k) => psng ? l.querySelector(".psng-lark-" + k) : [...l.querySelectorAll(".ps-lark-" + k)].at(-1);
+			const op = (el) => parseFloat(getComputedStyle(el).opacity);
+			const shown = ["fl", "ch", "cl"].filter((k) => op(set(k)) > 0);
+			// The near wing of the shown set: the last path drawn in it.
+			const wing = shown.length === 1 ? [...set(shown[0]).querySelectorAll("path")].at(-1).getBoundingClientRect().toJSON() : null;
+			const bird = l.querySelector(".ps-lark-bird").getBoundingClientRect().toJSON();
+			return {shown, wing, bird};
+		});
+	})()`;
+	const larkPair = {};
+
+	for (const renderer of ["classic", "ng"]) {
+		await setRenderer(page, renderer);
+		await at(page, noon, 2000);
+		await page.evaluate(LARK_SEEK);
+		await page.sleep(300);
+		larkPair[renderer] = await page.evaluate(LARK_SEEK);
+		await page.evaluate(HIDE_CHROME);
+		await page.sleep(150);
+
+		for (const [i, l] of larkPair[renderer].entries()) {
+			const rem = 16;
+			const shot = await page.send("Page.captureScreenshot", {
+				format: "png",
+				clip: {
+					x: l.bird.x - 1.5 * rem,
+					y: l.bird.y - 1.5 * rem,
+					width: l.bird.width + 3 * rem,
+					height: l.bird.height + 3 * rem,
+					scale: 6,
+				},
+			});
+			writeFileSync(
+				join(page.outDir, `${vp}-lark${i}-${LARK_AT[i]}-${renderer}.png`),
+				Buffer.from(shot.data, "base64")
+			);
+		}
+
+		await page.evaluate(SHOW_CHROME);
+	}
+
+	for (const [i, want] of [["ch"], ["cl"], ["fl"]].entries()) {
+		const c = larkPair.classic[i];
+		const n = larkPair.ng[i];
+		// The flutter's wing is mid-beat in both, at different poses: only its state is compared.
+		const off =
+			want[0] === "fl"
+				? 0
+				: c.wing && n.wing
+				? Math.max(
+						...["x", "y", "width", "height"].map((k) => Math.abs(c.wing[k] - n.wing[k]))
+				  )
+				: Infinity;
+		page.check(
+			`lark ${i} at ${LARK_AT[i]} %: classic shows ${c.shown.join("+")}, NG ${n.shown.join(
+				"+"
+			)}${
+				want[0] === "fl" ? "" : `, its near wing drawn ${off.toFixed(2)} px from classic's`
+			}`,
+			c.shown.join() === want.join() && n.shown.join() === want.join() && off <= 0.5
+		);
 	}
 
 	// ---- last: a cold start at night with NG stored

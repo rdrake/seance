@@ -9,6 +9,11 @@
  * time. It touches the document only inside functions, so mocha loads it.
  */
 
+import {PHONE_LAYOUT_QUERY} from "./helpers/device";
+import {isIOSShell, nativeCall, nativeListen} from "./helpers/capacitor";
+import {createPowerMerge, framesSayLowPower} from "./helpers/power";
+import {onAndroidSystemStatus} from "./helpers/systemAccessibility";
+
 export type SceneView = "channel" | "query" | "other";
 
 /**
@@ -63,6 +68,10 @@ export interface SceneHostState {
 	attended: boolean;
 	view: SceneView;
 	motion: SceneMotion;
+	/** A touch phone: the phone layout on a coarse pointer. Auto's tier follows it. */
+	phone: boolean;
+	/** The device asks to save power (battery below 20 %, a system battery saver). Auto's tier follows it. */
+	lowPower: boolean;
 }
 
 export interface SceneHandle {
@@ -89,6 +98,8 @@ export interface SceneHost {
 	/** Whether a page nobody attends to rests its scene (default yes); no, and it counts as attended. */
 	setPauseWhenAway(pause: boolean): void;
 	setMotion(motion: SceneMotion): void;
+	/** What the device is; a mounted scene is updated once, and only when a value changed. */
+	setDevice(device: Partial<{phone: boolean; lowPower: boolean}>): void;
 	/** Which ps scene to draw; swaps a mounted ps scene for the other one. */
 	setRenderer(renderer: PsRenderer): void;
 	setView(view: SceneView): void;
@@ -272,6 +283,17 @@ export function createSceneHost(opts: {
 			}
 		},
 
+		setDevice(device: Partial<{phone: boolean; lowPower: boolean}>): void {
+			const phone = device.phone ?? state.phone;
+			const lowPower = device.lowPower ?? state.lowPower;
+
+			if (state.phone !== phone || state.lowPower !== lowPower) {
+				state.phone = phone;
+				state.lowPower = lowPower;
+				handle?.update({...state});
+			}
+		},
+
 		setView(next: SceneView): void {
 			view = next;
 			const given = watching ? "channel" : view;
@@ -304,7 +326,14 @@ export function createSceneHost(opts: {
 export const themeScene: SceneHost = createSceneHost({
 	root: () => document.getElementById("theme-scene"),
 	loaders: SCENES,
-	state: {visible: true, attended: true, view: "other", motion: "auto"},
+	state: {
+		visible: true,
+		attended: true,
+		view: "other",
+		motion: "auto",
+		phone: false,
+		lowPower: false,
+	},
 	warn: (message, error) => console.warn(message, error), // eslint-disable-line no-console
 });
 
@@ -423,6 +452,100 @@ export function installThemeSceneHooks(): void {
 
 	for (const type of ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"]) {
 		window.addEventListener(type, onInput, {capture: true, passive: true});
+	}
+
+	const layout = window.matchMedia(PHONE_LAYOUT_QUERY);
+	const touch = window.matchMedia("(pointer: coarse)");
+	const syncPhone = () => themeScene.setDevice({phone: layout.matches && touch.matches});
+	layout.addEventListener("change", syncPhone);
+	touch.addEventListener("change", syncPhone);
+	syncPhone();
+
+	// Low power: the battery below 20 % here, the system's battery saver from
+	// the shells and Safari's frame rate below (a shell built before it reports
+	// nothing leaves it unknown).
+	const power = createPowerMerge((lowPower) => themeScene.setDevice({lowPower}));
+	const nav = navigator as Navigator & {
+		getBattery?: () => Promise<EventTarget & {charging: boolean; level: number}>;
+	};
+
+	if (nav.getBattery) {
+		nav.getBattery().then(
+			(b) => {
+				const read = () => power.update({battery: {charging: b.charging, level: b.level}});
+				b.addEventListener("chargingchange", read);
+				b.addEventListener("levelchange", read);
+				read();
+			},
+			() => power.update({battery: null})
+		);
+	} else {
+		power.update({battery: null});
+	}
+
+	onAndroidSystemStatus((status) => {
+		if (status.powerSave !== undefined) {
+			power.update({saver: status.powerSave});
+		}
+	});
+
+	type PowerStatus = {lowPower: boolean};
+
+	if (isIOSShell()) {
+		void nativeCall<PowerStatus>("Power", "status").then((s) => {
+			if (s) {
+				power.update({saver: s.lowPower});
+			}
+		});
+		nativeListen("Power", "changed", (s: PowerStatus) => power.update({saver: s.lowPower}));
+	} else if (
+		/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+		(/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+	) {
+		// Safari on iOS: Low Power Mode shows only as a 30 fps cap. Sampled on
+		// load and on each return to the page, and every 2 minutes while it
+		// says low power, so a passing slowdown does not stick.
+		let probing = false;
+		let again = 0;
+
+		const probe = () => {
+			if (probing || document.visibilityState === "hidden") {
+				return;
+			}
+
+			probing = true;
+			const gaps: number[] = [];
+			let last = 0;
+
+			const step = (t: number) => {
+				if (last) {
+					gaps.push(t - last);
+				}
+
+				last = t;
+
+				if (gaps.length < 30) {
+					requestAnimationFrame(step);
+					return;
+				}
+
+				probing = false;
+				gaps.sort((a, b) => a - b);
+				const low = framesSayLowPower(gaps[15]);
+				power.update({saver: low});
+				window.clearTimeout(again);
+
+				if (low) {
+					again = window.setTimeout(probe, 2 * 60 * 1000);
+				}
+			};
+
+			requestAnimationFrame(step);
+		};
+
+		document.addEventListener("visibilitychange", probe);
+		// Not during boot, whose own long frames would read as low power.
+		window.setTimeout(probe, 2000);
 	}
 
 	const sync = () => {
