@@ -151,7 +151,7 @@ export interface MaskCheck {
 function checkIp(host: string): MaskCheck | undefined {
 	const cidr = /^([0-9a-f.:*?]+?)(?:\/(\d{1,3}))?$/i.exec(host);
 
-	if (!cidr || !/[.:]/.test(cidr[1]) || !/^[0-9a-f.:*?]+$/i.test(cidr[1])) {
+	if (!cidr || !/[.:]/.test(cidr[1])) {
 		return undefined; // not an IP mask
 	}
 
