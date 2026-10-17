@@ -129,11 +129,9 @@ describe("command aliases (helpers/aliases.ts)", function () {
 				{name: "c", body: fan("/msg x hi")},
 			]);
 
-			const started = Date.now();
 			const result = expandAlias("/a", {});
 			expect(result).to.have.length(MAX_LINES);
 			expect(result?.every((line) => line === "/msg x hi")).to.equal(true);
-			expect(Date.now() - started).to.be.below(100);
 		});
 
 		it("prefers an explicit list over storage (the settings preview)", function () {

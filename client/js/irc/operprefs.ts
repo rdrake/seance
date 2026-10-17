@@ -70,8 +70,12 @@ function readAll(): Record<string, OperPrefs> {
 
 		// A restored settings file can carry anything here; a temporary route
 		// without a numeric `until` made every sweep throw, for good.
-		for (const prefs of Object.values(parsed)) {
-			if (isObject(prefs) && isObject(prefs.temporary)) {
+		for (const [uuid, prefs] of Object.entries(parsed)) {
+			if (!isObject(prefs)) {
+				delete parsed[uuid];
+			} else if (prefs.temporary !== undefined && !isObject(prefs.temporary)) {
+				delete prefs.temporary;
+			} else if (isObject(prefs.temporary)) {
 				const temporary = prefs.temporary;
 
 				for (const [kind, entry] of Object.entries(temporary)) {
