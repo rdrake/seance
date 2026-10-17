@@ -106,6 +106,7 @@
 									>
 								</span>
 								<input
+									v-if="row.key !== 'log'"
 									v-model="row.value"
 									class="input oper-mono oper-alert-value"
 									type="text"
