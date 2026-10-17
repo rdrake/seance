@@ -615,6 +615,15 @@ describe("oper tools: temporary routes (irc/operprefs.ts)", function () {
 		expect(temporaryRouteFor("n1", "oper.up", now)).to.equal(undefined);
 	});
 
+	it("drops a restored network entry or `temporary` that is not an object", function () {
+		prefsStore.set(OPER_PREFS_KEY, JSON.stringify({n1: "x", n2: {temporary: [null]}}));
+		expect(getOperPrefs("n1")).to.deep.equal({});
+		expect(sweepTemporaryRoutes("n2", now)).to.equal(false);
+		expect(routeFor("n2", "oper.up", "active", now)).to.equal("active");
+		setRoute("n1", "oper.up", "off");
+		expect(getOperPrefs("n1")).to.deep.equal({routes: {"oper.up": "off"}});
+	});
+
 	it("keeps notes by their own keys, `constructor` and `__proto__` included", function () {
 		setNote("n1", "alice", "seen before");
 		expect(getNote("n1", "constructor")).to.equal("");
