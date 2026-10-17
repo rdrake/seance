@@ -5351,8 +5351,7 @@ html[data-shell="native"] #footer {
 
 /* Display TeX stands alone; inline TeX is no taller than its line. KaTeX's
  * own stylesheet does the typesetting once the first span has linked it.
- * TeX sets its own lengths and anyone can type them, so a display block
- * scrolls past 30em (inline TeX that asks for more stays text, math.ts). */
+ * TeX may set any length; see math.ts. */
 .md-math-block {
 	display: block;
 	margin: 2px 0;
