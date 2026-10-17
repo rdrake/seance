@@ -19,9 +19,12 @@ import {ignoreListFor} from "../../ignore";
 
 const nickRegExp = /(?:\x03[0-9]{1,2}(?:,[0-9]{1,2})?)?([\w[\]\\`^{|}-]+)/g;
 
+/** Longest `PING` argument echoed back, in bytes: see CTCP_REPLY_INTERVAL_MS. */
+const CTCP_PING_ARG_MAX = 32;
+
 const ctcpResponses: Record<string, (arg: string) => string> = {
 	CLIENTINFO: () => "CLIENTINFO PING VERSION",
-	PING: (arg) => arg,
+	PING: (arg) => (new TextEncoder().encode(arg).length <= CTCP_PING_ARG_MAX ? arg : ""),
 	VERSION: () => "Seance",
 };
 
@@ -278,8 +281,11 @@ function handleCtcpResponse(client: IrcClient, nick: string, ctcp: Ctcp, time: D
 }
 
 /** One automatic CTCP reply per network per this long: each reply costs
- * server-side fake lag, so answering a burst of requests (a channel full of
- * `PING <450 bytes>`) would flood every Seance user in it off the server. */
+ * server-side fake lag, so answering a burst of requests would flood every
+ * Seance user in it off the server. ircu-line servers charge `2 + len/120` s
+ * (integer division), so a reply under 120 bytes costs exactly the 2 s this
+ * gate allows; a `PING` argument longer than `CTCP_PING_ARG_MAX` bytes is not
+ * echoed, or a stream of `PING <450 bytes>` would still outrun it. */
 export const CTCP_REPLY_INTERVAL_MS = 2000;
 const lastCtcpReply = new WeakMap<IrcClient, number>();
 

@@ -698,6 +698,14 @@ describe("IrcClient", function () {
 				clock.restore();
 			}
 		});
+
+		it("does not echo a long PING argument, so each reply costs the same fake lag", function () {
+			const h = setup();
+			joined(h);
+			h.transport.line(`:bob!bob@host PRIVMSG alice :\x01PING ${"x".repeat(450)}\x01`);
+
+			expect(h.sentAfter()).to.deep.equal(["NOTICE bob :\x01PING\x01"]);
+		});
 	});
 
 	describe("NAMES", function () {
