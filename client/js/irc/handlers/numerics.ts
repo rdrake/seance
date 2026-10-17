@@ -128,21 +128,21 @@ function pushError(client: IrcClient, msg: SharedMsg | Partial<SharedMsg>, chann
  * server treats a fallback that ran too long. Servers differ: nefarious2
  * (like other ircu- and charybdis-line servers) cuts an over-long NICK and
  * answers 433 for the cut nick if it is taken; Ergo (and others) refuse it
- * with 432. Either way the limit is what we sent, less one.
+ * with 432. Either way the limit is what we sent, less one; it is kept in
+ * `client.learnedNickLen`.
+ *
+ * Pick a fallback nick that still fits NICKLEN.
  */
-const learnedNickLen = new WeakMap<IrcClient, number>();
-
-/** Pick a fallback nick that still fits NICKLEN. */
 function fallbackNick(client: IrcClient, wanted: string): string {
 	// A 433 for less than we sent: the server cut it. Without this, `alice_`
 	// cut back to a taken `alice` looped NICK/433 until timeout.
 	const sent = client.nick;
 
 	if (sent.length > wanted.length && sent.startsWith(wanted)) {
-		learnedNickLen.set(client, wanted.length);
+		client.learnedNickLen = wanted.length;
 	}
 
-	const maxLen = client.isupport.nicklen ?? learnedNickLen.get(client) ?? 30;
+	const maxLen = client.isupport.nicklen ?? client.learnedNickLen ?? 30;
 	const candidate =
 		wanted.length < maxLen ? `${wanted}_` : `${wanted.slice(0, Math.max(1, maxLen - 1))}_`;
 
@@ -177,7 +177,7 @@ const badNick: Handler = (client, msg) => {
 		} else if (nick === client.nick && nick !== client.options.nick && nick.length > 1) {
 			// Our own fallback refused as erroneous: too long for a server that
 			// refuses rather than cuts. Start again from the nick asked for.
-			learnedNickLen.set(client, nick.length - 1);
+			client.learnedNickLen = nick.length - 1;
 			next = fallbackNick(client, client.options.nick);
 		} else {
 			next = `seance${Math.floor(1000 + Math.random() * 9000)}`;

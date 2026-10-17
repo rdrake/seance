@@ -366,6 +366,18 @@ describe("IrcClient", function () {
 			expect(nicks()[2]).to.match(/^NICK abcdefghijk\d{4}$/);
 		});
 
+		it("forgets a learned NICKLEN on the next connection", function () {
+			const h = setup({nick: "abcdefghijklmno"});
+			h.client.connect();
+			h.transport.open();
+			h.transport.line(":irc.test 433 * abcdefghijklmno :Nickname is already in use.");
+			h.transport.line(":irc.test 433 * abcdefghijklmno :Nickname is already in use.");
+			expect(h.client.learnedNickLen).to.equal(15);
+
+			h.transport.open();
+			expect(h.client.learnedNickLen).to.equal(undefined);
+		});
+
 		it("still picks a random nick when the nick asked for is refused", function () {
 			const h = setup({nick: "bad*nick"});
 			h.client.connect();
