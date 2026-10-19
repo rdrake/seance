@@ -64,7 +64,7 @@ import {parseCheck} from "./profiles/nefarious/check";
 import {type LiveBan, parseBanRow} from "./profiles/nefarious/stats";
 import {isIp, parseCtime} from "./profiles/report";
 import {sendQuiet} from "./quiet";
-import {canRequest, request, type ReplyUnit} from "./request";
+import {canRequest, isFailedOutcome, request, type ReplyUnit} from "./request";
 import {collectServiceReply, type ServiceAnswer} from "./services";
 import {servicesProfileFor} from "./services/index";
 import type {ServiceBan, ServiceLookup, ServicesLookups} from "./services/types";
@@ -242,6 +242,11 @@ class Pacer {
 	}
 }
 
+const FAILED_NOTES = {
+	closed: "the connection is down",
+	timeout: "no answer",
+	toolong: "too long to send",
+} as const;
 const pacers = new WeakMap<IrcClient, Pacer>();
 
 function pacerOf(client: IrcClient): Pacer {
@@ -453,10 +458,9 @@ export class Investigation {
 
 				this.raw.push(...reply.lines.map((msg) => msg.raw));
 
-				if (reply.outcome === "closed" || reply.outcome === "timeout") {
+				if (isFailedOutcome(reply.outcome)) {
 					this.sources[source] = "failed";
-					this.notes[source] =
-						reply.outcome === "closed" ? "the connection is down" : "no answer";
+					this.notes[source] = FAILED_NOTES[reply.outcome];
 				} else {
 					const error = errorText(reply.lines);
 
@@ -493,17 +497,23 @@ export class Investigation {
 		this.enqueue({
 			lane: "services",
 			run: async () => {
-				const reply = collectServiceReply(this.client, bot, {
-					accept: (text) => lookup.accept(text),
-				});
-
 				// Quiet (quiet.ts): the PRIVMSG's echo opens no window for the bot.
-				if (!sendQuiet(this.client, lookup.command(bot))) {
+				// Sent first, then watched, so a line never sent leaves no watcher.
+				const sent = sendQuiet(this.client, lookup.command(bot));
+
+				if (sent !== "sent") {
+					if (generation === this.generation) {
+						this.sources[source] = "failed";
+						this.notes[source] = FAILED_NOTES[sent];
+					}
+
 					apply(undefined, {kind: "closed"});
 					return;
 				}
 
-				const answer = await reply;
+				const answer = await collectServiceReply(this.client, bot, {
+					accept: (text) => lookup.accept(text),
+				});
 
 				if (generation !== this.generation) {
 					return;
@@ -725,7 +735,8 @@ export class Investigation {
 			}
 		}
 
-		if (model.users.length === 0 && reply.outcome !== "closed") {
+		// Silence is worth saying; a request never sent is not "nobody".
+		if (model.users.length === 0 && reply.outcome !== "closed" && reply.outcome !== "toolong") {
 			this.notes.who ??= "nobody answered to WHO";
 		}
 	}
