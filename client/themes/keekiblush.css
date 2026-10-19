@@ -1,0 +1,144 @@
+/* Keeki Blush — Keeki in daylight: the chat on pink paper and the rail
+ * lifted from Keeki's purple-black to a dusky lavender (an orchid before it
+ * read as too loud a purple), so the two meet halfway rather than a
+ * near-white chat against Keeki's darkest purple (the first cut, which
+ * read as plain Keeki with the lights on). keeki.css does the rest: the
+ * glitter, the sunflowers and roses and their drift, the rose-gold open
+ * conversation, the hot-pink mention badge and the 🐾; the dividers still
+ * bloom. This file is token values alone, as creama.css is to coffee.css,
+ * plus a nick palette for a light surface and the three mIRC colours coffee
+ * brightens for a dark one.
+ *
+ * Keeki's pastels are darkened into the same families until they read on
+ * the paper: rose gold to a brown rose, blush pink to a deep rose, lavender
+ * to a violet, peach to a dark gold. Every text colour clears 4.5:1 on
+ * --chat-bg and on the mention row, and the rail's text clears it on the
+ * rail's lighter top. The nick palette is Keeki's warm-weighted sweep (20
+ * slots pink → rose → peach → gold, 12 through the rest) at
+ * oklch(0.42 0.13 h), ≥ 5:1 on the paper, the mention row and the
+ * own-message band. */
+@import "keeki.css";
+
+:root {
+	color-scheme: light;
+
+	/* Chat surface: pink paper, plum ink, a dusky violet for what is
+	 * quieter. */
+	--chat-bg: #f6e1ec;
+	--chat-fg: #2e1a33;
+	--chat-fg-muted: #5d4a75;
+	--chat-fg-faint: #6b5682;
+	--chat-heading: #5f4b78;
+	--chat-rule: #e6c6d8;
+	--chat-accent: #962a5e;
+	--chat-accent-fg: #f6e1ec;
+	--chat-accent-rule: rgb(150 42 94 / 45%);
+	--chat-highlight-bg: #efcfe0;
+	--chat-selection: #e8bcd3;
+	--composer-bg: #f1d6e4;
+	--composer-border: #e6c6d8;
+	--window-border: #e6c6d8;
+	--window-shadow: 0 0 25px rgb(46 26 51 / 35%);
+	--menu-bg: #f6e1ec;
+	--own-bg: #f0d8e7;
+
+	/* Sidebar rail: dusky lavender under the glitter, white text; the rose-gold
+	 * active row, the badges and the hot-pink accent are Keeki's. */
+	--rail-bg-top: #6f608c;
+	--rail-bg-bottom: #584974;
+	--rail-fg: #fbf4ff;
+	--rail-fg-strong: #fff;
+	--rail-fg-active: #fff;
+	--rail-fg-muted: #f0e2f6;
+	--rail-input-bg: #45385b;
+	--rail-input-border: #988ab2;
+
+	/* Message semantics: joins deep rose, quits violet, notices dark gold,
+	 * /me lines a deep pink. */
+	--event-join: #a01f4f;
+	--event-quit: #6f43a0;
+	--nick-default: #7d4d43;
+	--notice-color: #6b5000;
+	--action-color: #962565;
+
+	/* Notice boxes */
+	--note-bg: #f0d8e7;
+	--note-fg: #5f4b78;
+	--warn-bg: #f7e6cc;
+	--warn-fg: #6b5000;
+	--error-bg: #f6d3dc;
+	--error-fg: #9e1c3a;
+	--ok-bg: #efcfe0;
+	--ok-fg: #9e2a6a;
+
+	/* Tints, focus ring, scrollbars */
+	--tint-soft: rgb(150 42 94 / 5%);
+	--tint-strong: rgb(150 42 94 / 10%);
+	--accent-tint-20: rgb(150 37 101 / 16%);
+	--accent-tint-30: rgb(150 37 101 / 26%);
+	--focus-ring: rgb(150 37 101 / 40%);
+	--scrollbar-track: rgb(46 26 51 / 8%);
+	--scrollbar-thumb: rgb(46 26 51 / 35%);
+	--scrollbar-thumb-active: rgb(46 26 51 / 50%);
+
+	/* Code blocks */
+	--tok-comment: #5d4a75;
+	--tok-keyword: #962565;
+	--tok-string: #6b5000;
+	--tok-number: #7d4d43;
+	--tok-function: #9e2a6a;
+	--tok-operator: #7d4d43;
+	--tok-punctuation: #5f4b78;
+	--tok-tag: #6f43a0;
+	--tok-attr: #6b5000;
+
+	/* The dividers' text: a rose red and a dark gold on paper. */
+	--sunflower-on-page: #6b5000;
+	--rose-on-page: #9e1c3a;
+
+	/* The yurt by day: the same drawing a step below the rail, toward the
+	 * plum ink, so the rail's white rows keep 8:1 over it; a dark doorway and
+	 * no smoke (tools/generate-keeki-yurt.ts). */
+	--keeki-yurt: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 18 226 150'%3E%3Cdefs%3E%3ClinearGradient id='w' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%234d3d63'/%3E%3Cstop offset='.48' stop-color='%23504168'/%3E%3Cstop offset='1' stop-color='%234d3d63'/%3E%3C/linearGradient%3E%3ClinearGradient id='r' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%2354446e'/%3E%3Cstop offset='1' stop-color='%234e3e64'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cellipse cx='120' cy='153' rx='98' ry='6' fill='%23453457'/%3E%3Cg fill='%234c3c62'%3E%3Ccircle cx='10' cy='147' r='4'/%3E%3Ccircle cx='18.5' cy='147' r='4'/%3E%3Ccircle cx='27' cy='147' r='4'/%3E%3Ccircle cx='14.25' cy='139.8' r='4'/%3E%3Ccircle cx='22.75' cy='139.8' r='4'/%3E%3Ccircle cx='18.5' cy='132.6' r='4'/%3E%3C/g%3E%3Cg fill='none' stroke='%23716187' stroke-width='.8'%3E%3Ccircle cx='10' cy='147' r='2.2'/%3E%3Ccircle cx='18.5' cy='147' r='2.2'/%3E%3Ccircle cx='27' cy='147' r='2.2'/%3E%3Ccircle cx='14.25' cy='139.8' r='2.2'/%3E%3Ccircle cx='22.75' cy='139.8' r='2.2'/%3E%3Ccircle cx='18.5' cy='132.6' r='2.2'/%3E%3C/g%3E%3Cg fill='%234f3f66'%3E%3Cellipse cx='100' cy='160' rx='5' ry='2.2'/%3E%3Cellipse cx='140' cy='164' rx='5.5' ry='2.4'/%3E%3C/g%3E%3Cpath d='M38,150 L38,98 Q120,90 202,98 L202,150 Q120,158 38,150 Z' fill='url(%23w)'/%3E%3Cg fill='none' stroke='%2349385d' stroke-width='1.3'%3E%3Cpath d='M38,114 Q120,121 202,114'/%3E%3Cpath d='M38,130 Q120,137 202,130'/%3E%3Cpath d='M38,145 Q120,152 202,145'/%3E%3C/g%3E%3Cpath d='M38,98 Q120,90 202,98 L202,107 Q120,99 38,107 Z' fill='%234a395e'/%3E%3Cg fill='%239e5e97'%3E%3Cpath d='M40.13,102.41 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M50.38,101.38 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M60.63,100.49 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M70.88,99.77 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M81.13,99.27 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M91.38,98.89 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M101.63,98.64 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M111.88,98.52 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M122.13,98.52 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M132.38,98.64 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M142.63,98.89 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M152.88,99.27 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M163.13,99.77 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M173.38,100.49 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M183.63,101.38 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3Cpath d='M193.88,102.41 l3,-2.4 l3,2.4 l-3,2.4 Z'/%3E%3C/g%3E%3Cpath d='M24,101 Q120,86 216,101 L133,49 Q120,45 107,49 Z' fill='url(%23r)'/%3E%3Cg stroke='%234b3b61' stroke-width='.9' fill='none'%3E%3Cpath d='M110,50 L44,99'/%3E%3Cpath d='M114,49 L70,95'/%3E%3Cpath d='M118,48 L97,92'/%3E%3Cpath d='M122,48 L143,92'/%3E%3Cpath d='M126,49 L170,95'/%3E%3Cpath d='M130,50 L196,99'/%3E%3C/g%3E%3Cellipse cx='120' cy='48' rx='14' ry='4.2' fill='%234a395e'/%3E%3Cg fill='%23504067'%3E%3Crect x='116.5' y='24' width='7' height='24' rx='1.2'/%3E%3Crect x='114.5' y='22' width='11' height='3' rx='1'/%3E%3C/g%3E%3Cpath d='M104,151 L104,120 Q120,114.5 136,120 L136,151 Z' fill='%23412f50'/%3E%3Cg fill='none' stroke='%236e5e85' stroke-width='1.1'%3E%3Cpath d='M108,148 L108,123 Q120,118.5 132,123 L132,148 Z'/%3E%3Cpath d='M120,122 L120,146'/%3E%3Cpath d='M113,134 Q116,130 120,134 Q124,138 127,134'/%3E%3C/g%3E%3C/svg%3E");
+	--keeki-smoke: none;
+}
+
+/* Nick colours: oklch(0.42 0.13 h), 20 slots over the warm arc 320°→80° and
+ * 12 over the rest. */
+.user.color-1 { color: #6b3078; }
+.user.color-2 { color: #6f2e72; }
+.user.color-3 { color: #742c6c; }
+.user.color-4 { color: #772a65; }
+.user.color-5 { color: #7b285e; }
+.user.color-6 { color: #7e2757; }
+.user.color-7 { color: #80264f; }
+.user.color-8 { color: #822547; }
+.user.color-9 { color: #84253f; }
+.user.color-10 { color: #852537; }
+.user.color-11 { color: #86262e; }
+.user.color-12 { color: #862724; }
+.user.color-13 { color: #852919; }
+.user.color-14 { color: #852b09; }
+.user.color-15 { color: #832d00; }
+.user.color-16 { color: #823000; }
+.user.color-17 { color: #7f3300; }
+.user.color-18 { color: #7c3700; }
+.user.color-19 { color: #793a00; }
+.user.color-20 { color: #753e00; }
+.user.color-21 { color: #714100; }
+.user.color-22 { color: #5e4c00; }
+.user.color-23 { color: #455600; }
+.user.color-24 { color: #1c5d07; }
+.user.color-25 { color: #006133; }
+.user.color-26 { color: #006250; }
+.user.color-27 { color: #006069; }
+.user.color-28 { color: #005a7d; }
+.user.color-29 { color: #00538c; }
+.user.color-30 { color: #1d4a93; }
+.user.color-31 { color: #424091; }
+.user.color-32 { color: #593888; }
+
+/* style.css's mIRC values again: coffee brightens these for its dark surface. */
+.irc-fg2 { color: #001f3f; }
+.irc-fg5 { color: #85144b; }
+.irc-fg12 { color: #0074d9; }
