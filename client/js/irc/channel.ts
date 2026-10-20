@@ -85,6 +85,11 @@ export class Channel {
 	 * at or before it never count as unread.
 	 */
 	readMarker: Date | undefined = undefined;
+	/**
+	 * The server has told us this channel's marker at least once, `*` (none
+	 * stored) included: asking again would only cost fake lag.
+	 */
+	markerAnswered = false;
 	/** Pending debounced `MARKREAD` send (handlers/markread.ts). */
 	markReadTimer: ReturnType<typeof setTimeout> | null = null;
 	/** A debounced `MARKREAD` came due while the connection was not

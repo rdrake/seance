@@ -141,6 +141,9 @@ export function scheduleMarkRead(client: IrcClient, chan: Channel): void {
 	}, MARKREAD_DEBOUNCE_MS);
 }
 
+/** One command: what a background marker send is reckoned to cost. */
+const MARKREAD_COST_MS = 2000;
+
 function sendMarkRead(client: IrcClient, chan: Channel): void {
 	if (!chan.readMarker) {
 		return;
@@ -155,17 +158,35 @@ function sendMarkRead(client: IrcClient, chan: Channel): void {
 		return;
 	}
 
-	chan.markReadDeferred = false;
-
 	if (!markReadEnabled(client)) {
+		chan.markReadDeferred = false;
 		return;
 	}
 
-	client.send(
-		formatLine({
-			command: "MARKREAD",
-			params: [chan.name, `timestamp=${chan.readMarker.toISOString()}`],
-		})
+	// Nobody waits on the marker the moment it moves: it is background work
+	// (fakelag.ts), sent with whatever is newest when the clock has room —
+	// ahead of the catch-up, since the account's other devices close their
+	// notifications on it. Deferred until then, so a socket that closes
+	// first hands it to flushDeferredMarkRead on the next registration.
+	chan.markReadDeferred = true;
+	client.background.add(
+		{
+			key: `markread:${chan.id}`,
+			cost: MARKREAD_COST_MS,
+			run() {
+				chan.markReadDeferred = false;
+
+				if (chan.readMarker && markReadEnabled(client)) {
+					client.send(
+						formatLine({
+							command: "MARKREAD",
+							params: [chan.name, `timestamp=${chan.readMarker.toISOString()}`],
+						})
+					);
+				}
+			},
+		},
+		{front: true}
 	);
 }
 
@@ -194,6 +215,7 @@ export function markReadAt(client: IrcClient, target: string, time: Date): void 
 		}
 
 		cancelMarkRead(chan);
+		client.background.take(`markread:${chan.id}`);
 		chan.markReadDeferred = false;
 		chan.readMarker = time;
 	}
@@ -241,6 +263,7 @@ const markread: Handler = (client, msg) => {
 		return;
 	}
 
+	chan.markerAnswered = true;
 	const time = parseMarker(param);
 
 	if (time) {

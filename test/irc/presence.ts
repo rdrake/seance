@@ -19,6 +19,7 @@ import {MARKREAD_DEBOUNCE_MS} from "../../client/js/irc/handlers/markread";
 import {AWAY_STAR} from "../../client/js/irc/presence";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
+import {NO_FAKE_LAG} from "../../client/js/irc/fakelag";
 
 class FakeTransport implements Transport {
 	state: TransportState = "closed";
@@ -77,7 +78,7 @@ interface Harness {
 	sent(): string[];
 }
 
-function connect(opts: {attended?: boolean} = {}): Harness {
+function connect(opts: {attended?: boolean; caps?: string} = {}): Harness {
 	const transport = new FakeTransport();
 	const dispatch = sinon.spy();
 	const client = new IrcClient({
@@ -94,6 +95,7 @@ function connect(opts: {attended?: boolean} = {}): Harness {
 		ids: new IdAllocator(),
 		transportFactory: () => transport,
 		highlights: () => ({keywords: [], exceptions: []}),
+		fakeLag: NO_FAKE_LAG,
 	});
 	let mark = 0;
 
@@ -103,7 +105,7 @@ function connect(opts: {attended?: boolean} = {}): Harness {
 
 	client.connect();
 	transport.open();
-	transport.line(`:irc.test CAP * LS :${CAPS}`);
+	transport.line(`:irc.test CAP * LS :${opts.caps ?? CAPS}`);
 	const req = transport.sent.find((l) => l.startsWith("CAP REQ :"));
 	expect(req, "CAP REQ sent").to.be.a("string");
 	transport.line(`:irc.test CAP alice ACK :${(req as string).slice("CAP REQ :".length)}`);
@@ -198,6 +200,59 @@ describe("attention and AWAY * (presence.ts)", function () {
 		expect(h.sent()).to.deep.equal(["AWAY"]);
 		h.client.setAttended(false);
 		expect(h.sent(), "automatic again after /back").to.deep.equal([`AWAY ${AWAY_STAR}`]);
+	});
+
+	it("under draft/pre-away a hidden page says AWAY * before CAP END, where it is free", function () {
+		const h = connect({attended: false, caps: `${CAPS} draft/pre-away`});
+		const all = h.transport.sent;
+		const away = all.indexOf("AWAY *");
+		expect(away, "AWAY * sent").to.be.greaterThan(
+			all.findIndex((l) => l.startsWith("CAP REQ"))
+		);
+		expect(away).to.be.lessThan(all.indexOf("CAP END"));
+		// Nothing more after registration: the server applied it in silence.
+		expect(h.sent()).to.deep.equal([]);
+		expect(h.client.presence.starSent).to.equal(true);
+		h.client.setAttended(true);
+		expect(h.sent()).to.deep.equal(["AWAY"]);
+	});
+
+	it("an attended page says nothing before CAP END, pre-away or not", function () {
+		const h = connect({caps: `${CAPS} draft/pre-away`});
+		expect(h.transport.sent.some((l) => l.startsWith("AWAY"))).to.equal(false);
+	});
+
+	it("a page that comes back during registration takes the pre-away AWAY * back", function () {
+		const transport = new FakeTransport();
+		const client = new IrcClient({
+			host: "irc.test",
+			port: 8443,
+			tls: true,
+			nick: "alice",
+			join: "",
+			sasl: "",
+			saslAccount: "",
+			saslPassword: "",
+			ids: new IdAllocator(),
+			transportFactory: () => transport,
+			highlights: () => ({keywords: [], exceptions: []}),
+			fakeLag: NO_FAKE_LAG,
+		});
+		client.setAttended(false);
+		client.connect();
+		transport.open();
+		transport.line(`:irc.test CAP * LS :${CAPS} draft/pre-away`);
+		expect(transport.sent).to.include("AWAY *");
+		const req = transport.sent.find((l) => l.startsWith("CAP REQ :"))!;
+		transport.line(`:irc.test CAP alice ACK :${req.slice("CAP REQ :".length)}`);
+		client.setAttended(true); // not registered: nothing can be sent yet
+		const mark = transport.sent.length;
+		transport.lines(
+			":irc.test 001 alice :Welcome to the SeanceDev IRC Network, alice",
+			":irc.test 422 alice :MOTD File is missing"
+		);
+		expect(transport.sent.slice(mark)).to.deep.equal(["AWAY"]);
+		expect(client.presence.starSent).to.equal(false);
 	});
 
 	it("a page hidden while it connects says AWAY * once registered", function () {

@@ -51,7 +51,13 @@ import {
 	markReadAt,
 	scheduleMarkRead,
 } from "./handlers/markread";
-import {PresenceState, initialPresence, presenceRegistered, setAttended} from "./presence";
+import {
+	PresenceState,
+	initialPresence,
+	preRegistrationAway,
+	presenceRegistered,
+	setAttended,
+} from "./presence";
 import {abortHistory, retryLostHistory} from "./history";
 import {
 	cancelCatchup,
@@ -59,6 +65,7 @@ import {
 	enqueueCatchup,
 	prefetchCatchup,
 	prioritiseCatchup,
+	queueModes,
 } from "./catchup";
 import {
 	attachCursorLine,
@@ -99,6 +106,7 @@ import {
 import {channelOrder, get as getSavedNetwork, NetworkCursor, setCursor} from "./saved-networks";
 import {noteServiceReply, resetServiceReplies} from "./services";
 import {dropQuietLine} from "./quiet";
+import {BackgroundQueue, FakeLagClock, type FakeLagModel} from "./fakelag";
 import {ReconnectOptions, TransportEvent, TransportOptions, WsTransport} from "./transport";
 import type {ConnectOptions, InputOptions, IrcClientState, Transport} from "./types";
 import {
@@ -187,6 +195,8 @@ export interface IrcClientOptions extends ConnectOptions {
 	ids?: IdAllocator;
 	/** Build the transport (tests inject a fake); defaults to `new WsTransport(opts)`. */
 	transportFactory?: (opts: TransportOptions) => Transport;
+	/** The server's flood rule as we model it (fakelag.ts); ircu's by default. */
+	fakeLag?: FakeLagModel;
 	reconnect?: ReconnectOptions;
 	/** Custom highlight keywords (from the settings store). */
 	highlights?: () => HighlightKeywords;
@@ -230,6 +240,9 @@ const SELF_READ_TYPES: ReadonlySet<MessageType> = new Set([
 	MessageType.ACTION,
 	MessageType.NOTICE,
 ]);
+
+/** A `+typing` TAGMSG: one command of fake lag. */
+const TYPING_COST_MS = 2000;
 
 export class IrcClient {
 	readonly uuid: string;
@@ -285,6 +298,11 @@ export class IrcClient {
 	account = "";
 	/** The server holds our session across disconnects (`PERSISTENCE STATUS ON`, see persistence.ts). */
 	persistenceHold = false;
+	/**
+	 * The account's own persistence setting as the last STATUS reported it
+	 * (`ON|OFF|DEFAULT`; "" from a build that sends the effective state alone).
+	 */
+	persistenceSetting = "";
 	/** Our registration-time `PERSISTENCE SET ON` ack is pending (swallowed
 	 * by handlers/persistence.ts until the STATUS echo lands). */
 	persistenceAutoSetPending = false;
@@ -319,6 +337,13 @@ export class IrcClient {
 	private connected = false;
 	/** 001 seen on this connection: the server takes commands (`isWelcomed`). */
 	private welcomed = false;
+	/** The server's fake-lag clock as we reckon it (fakelag.ts). */
+	readonly fakeLag: FakeLagClock;
+	/**
+	 * Work nobody is waiting for — catch-up, read markers, mode queries,
+	 * push renewal — sent only while {@link fakeLag} leaves the user room.
+	 */
+	readonly background: BackgroundQueue;
 	private announced = false;
 	private quitting = false;
 	/** Last transport error text for the close report; browsers say nothing useful. */
@@ -342,6 +367,8 @@ export class IrcClient {
 	constructor(options: IrcClientOptions) {
 		const host = options.host.trim();
 		this.options = {...options, host};
+		this.fakeLag = new FakeLagClock(options.fakeLag);
+		this.background = new BackgroundQueue(this.fakeLag, () => this.isWelcomed);
 		this.nick = options.nick;
 		this.ident = options.username || sanitizeIdent(options.nick);
 		this.uuid = options.uuid ?? deriveUuid(host, options.port, options.nick);
@@ -408,6 +435,7 @@ export class IrcClient {
 	/** The 001 handler: see {@link isWelcomed}. */
 	markWelcomed(): void {
 		this.welcomed = true;
+		this.fakeLag.start();
 	}
 
 	get name(): string {
@@ -796,6 +824,7 @@ export class IrcClient {
 		this._state = "registering";
 		this.connected = false;
 		this.welcomed = false;
+		this.fakeLag.stop();
 		this.retryAt = undefined;
 		this.closeHintShown = false;
 		this.isupport.reset();
@@ -805,6 +834,7 @@ export class IrcClient {
 		this.host = "";
 		this.account = "";
 		this.persistenceHold = false;
+		this.persistenceSetting = "";
 		this.attachCursor = undefined;
 		this.serverReplay = false;
 		this.endSasl();
@@ -967,6 +997,7 @@ export class IrcClient {
 			caps.beforeEnd = () => this.startSasl(mechanism);
 		}
 
+		caps.lastWords = () => preRegistrationAway(this);
 		return caps;
 	}
 
@@ -1082,6 +1113,8 @@ export class IrcClient {
 		this._state = "disconnected";
 		this.connected = false;
 		this.welcomed = false;
+		this.fakeLag.stop();
+		this.background.clear();
 		// The wait before the transport's retry, for the UI to count down;
 		// an immediate retry has nothing worth counting.
 		this.retryAt =
@@ -1229,8 +1262,14 @@ export class IrcClient {
 		// creates the server's bouncer session and turns its hold on, which
 		// is what draft/webpush triggers fire against. It needs the account
 		// flag, so it only goes out post-registration (a SET sent before CAP
-		// END is answered FAIL ACCOUNT_REQUIRED), and it is idempotent.
-		if (this.caps.hasCapability(PERSISTENCE_CAP) && this.options.saslAccount) {
+		// END is answered FAIL ACCOUNT_REQUIRED), and it is idempotent — so
+		// when the registration STATUS already says the account's setting is
+		// ON it is skipped: every command after 001 costs fake lag (fakelag.ts).
+		if (
+			this.caps.hasCapability(PERSISTENCE_CAP) &&
+			this.options.saslAccount &&
+			this.persistenceSetting !== "ON"
+		) {
 			// Flag the ack + STATUS echo as ours: handlers/persistence.ts
 			// swallows them (the user never typed anything).
 			this.persistenceAutoSetPending = true;
@@ -1304,9 +1343,15 @@ export class IrcClient {
 	 * subscription with this account. The endpoint must be https (the server
 	 * rejects anything else) and the keys are the `PushSubscription.toJSON()`
 	 * material (`p256dh`, `auth`). Registration is idempotent per endpoint —
-	 * re-registering on every connect is the draft's renewal mechanism.
+	 * re-registering on every connect is the draft's renewal mechanism. That
+	 * renewal is background work (nefarious2 keeps a registration 90 days):
+	 * it waits in {@link background} until the fake-lag clock has room.
 	 */
-	webpushRegister(endpoint: string, keys: {p256dh: string; auth: string}): boolean {
+	webpushRegister(
+		endpoint: string,
+		keys: {p256dh: string; auth: string},
+		{renewal = false}: {renewal?: boolean} = {}
+	): boolean {
 		const line = `WEBPUSH REGISTER ${endpoint} p256dh=${keys.p256dh};auth=${keys.auth}`;
 
 		// A REGISTER split in two would be two garbage commands: endpoints are
@@ -1318,6 +1363,15 @@ export class IrcClient {
 				text: "Not sent: the push subscription does not fit on one line",
 			});
 			return false;
+		}
+
+		if (renewal) {
+			this.background.add({
+				key: `webpush:${endpoint}`,
+				cost: this.fakeLag.cost(line),
+				run: () => void this.send(line),
+			});
+			return true;
 		}
 
 		return this.send(line);
@@ -1334,6 +1388,17 @@ export class IrcClient {
 
 	// --------------------------------------------------------------- sending
 
+	/**
+	 * Resolves when the fake-lag clock has room for `cost` ms more of
+	 * background work (fakelag.ts), for a sender that awaits a reply — the
+	 * oper-up queries. Never resolves if the connection closes first.
+	 */
+	whenRoom(key: string, cost = 2000): Promise<void> {
+		return new Promise((resolve) => {
+			this.background.add({key, cost, run: resolve});
+		});
+	}
+
 	/** Send one raw line. Reports an ERROR message in the lobby instead of throwing. */
 	send(line: string): boolean {
 		if (this.transport.state !== "open") {
@@ -1343,6 +1408,7 @@ export class IrcClient {
 
 		try {
 			this.transport.send(line);
+			this.fakeLag.charge(line);
 			return true;
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -1587,7 +1653,11 @@ export class IrcClient {
 				this.cancelTypingTimer(entry);
 			}
 
-			if (wait <= 0) {
+			// Each notice costs as much fake lag as the message it announces,
+			// and one the server reads seconds late is worse than none: it
+			// goes only when nothing else is waiting and the clock has room
+			// (fakelag.ts), never ahead of the catch-up.
+			if (wait <= 0 && this.background.fits(TYPING_COST_MS)) {
 				this.sendTyping(chan.name, key, state);
 			}
 
@@ -1926,14 +1996,11 @@ export class IrcClient {
 			scheduleMarkRead(this, chan);
 			prioritiseCatchup(this, chan);
 
-			if (
-				chan.type === ChanType.CHANNEL &&
-				chan.state === ChanState.JOINED &&
-				!chan.modesKnown &&
-				this.transport.state === "open"
-			) {
-				chan.modesKnown = true;
-				this.send(formatLine({command: "MODE", params: [chan.name]}));
+			// The modes only feed the "Channel modes" line: background work,
+			// so clicking through channels during the catch-up costs the user
+			// nothing (catchup.ts).
+			if (chan.type === ChanType.CHANNEL && chan.state === ChanState.JOINED) {
+				queueModes(this, chan);
 			}
 		}
 	}

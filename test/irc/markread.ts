@@ -9,6 +9,7 @@ import {MARKREAD_DEBOUNCE_MS} from "../../client/js/irc/handlers/markread";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
 import type {SharedMsg} from "../../shared/types/msg";
+import {NO_FAKE_LAG} from "../../client/js/irc/fakelag";
 
 class FakeTransport implements Transport {
 	state: TransportState = "closed";
@@ -136,6 +137,7 @@ function setup(opts: {readMarker?: boolean} = {}): Harness {
 		ids: new IdAllocator(),
 		transportFactory: () => transport,
 		highlights: () => ({keywords: [], exceptions: []}),
+		fakeLag: NO_FAKE_LAG,
 	});
 	let mark = 0;
 	const caps = opts.readMarker === false ? BASE_CAPS : `${BASE_CAPS} draft/read-marker`;
@@ -484,6 +486,18 @@ describe("Read markers (handlers/markread.ts)", function () {
 
 		const without = setup({readMarker: false});
 		expect(join(without)).to.not.include("MARKREAD #seance");
+	});
+
+	it("asks once: an answer of `*` (no marker stored) is still an answer", function () {
+		const h = setup();
+		expect(join(h)).to.include("MARKREAD #seance");
+		h.transport.line(":irc.test MARKREAD #seance timestamp=*");
+		const chan = h.client.findChannel("#seance")!;
+		expect(chan.markerAnswered).to.equal(true);
+
+		// The same channel joined again on the next connection: not asked.
+		h.transport.line(":alice!alice@host KICK #seance alice :bye");
+		expect(join(h)).to.not.include("MARKREAD #seance");
 	});
 
 	describe("a marker asked for by the page (the `markread` emit — a notification's Mark read)", function () {

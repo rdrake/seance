@@ -2,7 +2,8 @@
 
 _Noted 2026-08-27 ("it takes a long time to connect to an existing account…
 we should not have a flood of crap to send"). Status: **root cause found and
-fixed the same day** (`client/js/irc/catchup.ts`); follow-ups below._
+fixed the same day** (`client/js/irc/catchup.ts`); the pacing was redone
+2026-10-19 (see "The clock parked at the ceiling" below); follow-ups below._
 
 ## What was happening
 
@@ -83,6 +84,87 @@ five round trips (LS · REQ · END→001 · JOIN · history) to three
 (LS · REQ+END→001 · JOIN+history), all commands for the visible channel
 out by 0.07 s. On a 100 ms link that is ~200 ms off every connect and
 reconnect.
+
+## The clock parked at the ceiling (2026-10-19)
+
+The 4 s pacing above was wrong in a way the August measurement did not
+show: two commands cost 4 s and the interval was 4 s, so the catch-up
+drained exactly as fast as it was charged and the server's clock never came
+back down. Ten seconds is where the server stops reading, not a limit on the
+wait: every line still in its buffer adds 2 s more, so each line typed
+during the catch-up grew a backlog that only the end of the catch-up
+drained. That is the "far more than 10 seconds" opening Seance.
+
+Measured with `tools/scenarios/connect-fakelag.mjs` (12 channels, a line
+typed every 4 s for 45 s, `SEANCE_FAKELAG_TYPE=4000`). The dev ircd's image
+turns fake lag **off** for users (`fakelagminimum = 0; fakelagfactor = 0`
+in its `base.conf-dist`), so it never shows the delay; these runs used a
+second container of the same image with those lines removed (ports 18443 /
+16667, `SEANCE_IRC_PORT` / `SEANCE_IRC_PLAIN_PORT`). The send → echo time
+under `echo-message` is when the server read the line:
+
+|                                  | develop                                                      | this change              |
+| -------------------------------- | ------------------------------------------------------------ | ------------------------ |
+| typed lines, fresh connect       | waited 0, 6.1, 14.3, 18.3, 22.4 s; 6 of 11 unread after 45 s | all 11 read within 0.1 s |
+| typed lines, reconnect           | waited 0, 4.1, 8.1, 17.3, 20.3 s; 6 of 11 unread after 45 s  | all 11 read within 0.1 s |
+| server clock peak (with typing)  | 63 s ahead                                                   | 6 s                      |
+| clock peak, no typing (dev ircd) | 9.9 s, held at 7.9–9.9 s for the whole catch-up              | 4.0 s                    |
+| marker queries on reconnect      | one per channel, every time                                  | none once answered       |
+
+One of three runs of this change saw no echo at all on its connection
+(not even for the first line, while the clock was low) — most likely
+`echo-message` was not enabled on it; it did not reproduce.
+
+What changed:
+
+- **`client/js/irc/fakelag.ts`.** `FakeLagClock` keeps the server's
+  `cli_since` on our side: `IrcClient.send` charges every line after 001
+  `2 + bytes/120` s (`parse.c`), pulled up to now as `s_bsd.c` does on each
+  read. `BackgroundQueue` (`IrcClient.background`, one per connection)
+  holds the work nobody is waiting for and sends a job only once it fits
+  under 4 s ahead (`BACKGROUND_BUDGET_MS`), so the user always has three
+  lines' room before the 10 s ceiling. The model charges opers too (most
+  commands are `MFLG_SLOW`) and counts tags; a server with a gentler rule
+  only gets its catch-up a little later than it could have.
+- **On the queue:** other channels' catch-up (`catchup.ts`, one job per
+  channel; opening a waiting one runs it at once), marker queries (front),
+  the open channel's `MODE` (in arrival order, cosmetic), debounced `MARKREAD` sets (front: the other devices close
+  their notifications on them), and the connect-time `WEBPUSH REGISTER`
+  renewal (`renewal: true` on the bus emit; a Settings subscribe still goes
+  at once — nefarious2 keeps a registration 90 days, `WEBPUSH_EXPIRE`).
+  Steady state is still one channel per ~4 s, but it starts once the burst
+  has drained (~10 s in) instead of at 4 s, and a reconnect's channel whose
+  marker is already known costs one command, so those go every 2 s.
+- **Also on the queue, because each could push the clock far past 10 s on
+  its own** (10 s is where the server stops reading, not a cap: every line
+  still in its buffer adds 2 s more): the reconnect walk's `CHATHISTORY BEFORE` pages (front, one channel's walk at a time — they used to go out
+  as each reply landed, ~10 s per busy channel), the `MODE` a channel's
+  first open asks for (clicking through channels during the catch-up cost
+  ~8 s each), and the oper-up queries (`PRIVS`, the snomask, `GET`s, the
+  snomask restore, `MODE <me>`: `IrcClient.whenRoom`, one at a time; nearly
+  every command is `MFLG_SLOW`, so opers pay too). A `+typing` notice is
+  not sent while the clock is past the budget: one read seconds late is
+  worse than none.
+- **Not sent at all:** the `MARKREAD <chan>` query when the server has
+  already answered for that channel, `*` included (`Channel.markerAnswered`;
+  `*` used to read as "no answer" and was asked again every connect). The
+  query is a background job of its own that checks again when its turn
+  comes, so on a server that volunteers the marker after JOIN (nefarious2
+  for a logged-in account) it is never sent, and a server that does not
+  still gets asked. Also `PERSISTENCE SET ON` when the registration
+  `STATUS` already says the account's setting is `ON`.
+- **Moved before `CAP END`, where it is free:** a page hidden while it
+  connects says `AWAY *` under `draft/pre-away` (requested now;
+  `CapNegotiator.lastWords`, `presence.ts` `preRegistrationAway`). The
+  server applies it silently at registration; a page that comes back before
+  then sends `AWAY` once registered.
+
+Server side, for MrLenin: the lag is per connection class
+(`fakelagminimum` / `fakelagfactor` in a `Class` block, `class.c`
+`get_lag_min`), so a network can give its WebSocket clients a gentler rule
+without a code change. Read-only fetches (`CHATHISTORY`, a `MARKREAD`
+query, a `MODE` query) charged less than a `PRIVMSG` would still be the
+better fix.
 
 ## Follow-ups
 

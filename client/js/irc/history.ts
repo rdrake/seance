@@ -49,6 +49,9 @@ import type {Handler} from "./types";
 
 /** How long to wait for the server before answering `more` with nothing. */
 export const HISTORY_TIMEOUT_MS = 15_000;
+
+/** One `CHATHISTORY BEFORE` page of the catch-up walk: a command. */
+const PAGE_COST_MS = 2000;
 /** Page size for `more` (the old server also paged by 100). */
 export const MORE_PAGE_SIZE = 100;
 /** Page size for the LATEST request on first JOIN. */
@@ -532,20 +535,40 @@ function resolve(
 		request.gapAfter.unshift(...after);
 
 		if (!reached && !end && fullPage && request.pagesLeft > 0 && oldest) {
-			const next = requestHistory(client, chan, {
+			// The next page back is background work like the rest of the
+			// catch-up (fakelag.ts): asked for as soon as each reply landed,
+			// a busy channel's walk alone put the server's clock 10 s ahead.
+			// At the front, so a channel finishes its walk before the next
+			// channel starts one.
+			const spec: HistorySpec = {
 				subcommand: "BEFORE",
 				ref: oldest,
 				limit: request.limit,
 				mode: "append",
 				pagesLeft: request.pagesLeft - 1,
 				floor: request.floor,
-			});
+			};
+			const {gap, gapAfter} = request;
+			client.background.add(
+				{
+					key: `page:${chan.id}`,
+					cost: PAGE_COST_MS,
+					run() {
+						const next = requestHistory(client, chan, spec);
 
-			if (next) {
-				next.gap = request.gap;
-				next.gapAfter = request.gapAfter;
-				return;
-			}
+						if (next) {
+							next.gap = gap;
+							next.gapAfter = gapAfter;
+							return;
+						}
+
+						deliverAppend(client, chan, gap);
+						runAfter(gapAfter);
+					},
+				},
+				{front: true}
+			);
+			return;
 		}
 
 		// Done (or the next page could not be asked for): deliver what we

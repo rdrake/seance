@@ -49,10 +49,18 @@ export interface PresenceState {
 	 * `/away` sent after ours is still acknowledged.
 	 */
 	quietReplies: number;
+	/**
+	 * This connection said `AWAY *` before `CAP END` (`draft/pre-away`):
+	 * free there, where after registration it costs fake lag. The server
+	 * applies it silently at registration.
+	 */
+	preAwaySent: boolean;
 }
 
+export const PRE_AWAY_CAP = "draft/pre-away";
+
 export function initialPresence(): PresenceState {
-	return {attended: true, userAway: false, starSent: false, quietReplies: 0};
+	return {attended: true, userAway: false, starSent: false, quietReplies: 0, preAwaySent: false};
 }
 
 function canSend(client: IrcClient): boolean {
@@ -132,8 +140,39 @@ export function userAwayChanged(client: IrcClient, away: boolean): void {
 	p.starSent = false;
 }
 
+/**
+ * `CAP END` is about to go out: a page that is hidden while it connects
+ * says so now, under `draft/pre-away`, rather than after registration. The
+ * `CAP REQ` for the cap is in the same flush and the server reads it first.
+ */
+export function preRegistrationAway(client: IrcClient): string[] {
+	const p = client.presence;
+	p.preAwaySent = false;
+
+	if (p.attended || p.userAway || !client.caps.available.has(PRE_AWAY_CAP)) {
+		return [];
+	}
+
+	p.preAwaySent = true;
+	return [formatLine({command: "AWAY", params: [AWAY_STAR]})];
+}
+
 /** Registration done: a page that is hidden while it connects says so. */
 export function presenceRegistered(client: IrcClient): void {
-	client.presence.starSent = false;
+	const p = client.presence;
+	// Said before CAP END and the cap took: the server is already holding it
+	// (applied in silence, no RPL_NOWAWAY). Otherwise say it now.
+	const held = p.preAwaySent && client.caps.enabled.has(PRE_AWAY_CAP);
+	p.preAwaySent = false;
+	p.starSent = held;
+
+	if (held && p.attended) {
+		// The page came back while we were registering: take it back.
+		p.starSent = false;
+		p.quietReplies++;
+		client.send(formatLine({command: "AWAY", params: []}));
+		return;
+	}
+
 	sendStar(client);
 }

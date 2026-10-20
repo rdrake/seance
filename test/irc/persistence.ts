@@ -123,6 +123,34 @@ describe("Session persistence and quiet re-joins (irc/persistence.ts)", function
 			);
 		});
 
+		it("skips SET ON when the registration STATUS says the account's setting is already ON", function () {
+			const signIn = (status: string) => {
+				const h = setup({sasl: "plain", saslAccount: "acc", saslPassword: "pw"});
+				h.client.connect();
+				h.transport.open();
+				h.transport.line(`:irc.test CAP * LS :${CAPS} sasl=PLAIN`);
+				const req = h.transport.sent.find((l) => l.startsWith("CAP REQ :"))!;
+				h.transport.line(`:irc.test CAP alice ACK :${req.slice("CAP REQ :".length)}`);
+				h.transport.line("AUTHENTICATE +");
+				h.transport.lines(
+					":irc.test 900 alice alice!alice@host acc :You are now logged in as acc",
+					":irc.test 903 alice :SASL authentication successful",
+					":irc.test 001 alice :Welcome to the SeanceDev IRC Network, alice",
+					`:irc.test PERSISTENCE STATUS ${status}`,
+					":irc.test 422 alice :MOTD File is missing"
+				);
+				return h.transport.sent.includes("PERSISTENCE SET ON");
+			};
+
+			// Every command after 001 costs fake lag; this one would change nothing.
+			expect(signIn("ON ON")).to.equal(false);
+			// DEFAULT follows the server's default; ON pins it for the account.
+			expect(signIn("DEFAULT ON")).to.equal(true);
+			expect(signIn("OFF OFF")).to.equal(true);
+			// A build that sends the effective state alone: cannot tell, so ask.
+			expect(signIn("ON")).to.equal(true);
+		});
+
 		it("does not auto-enable persistence without SASL", function () {
 			const h = setup();
 			register(h, CAPS, HOLD);
