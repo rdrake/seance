@@ -798,7 +798,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			expect(h.sent().filter((l) => /CHATHISTORY BEFORE #seance /.test(l))).to.have.length(1);
 		});
 
-		it("skips nothing it cannot vouch for when the answer was cut short", function () {
+		it("skips nothing on an answer without draft/chathistory-end, however fast", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
 			answerTargets(
@@ -810,8 +810,14 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				],
 				false
 			);
-			// #two is still known to be quiet; #four may have been cut off.
-			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#four"]);
+			// Without the end tag a listed row may be older than the channel's
+			// newest (a storage server that timed out or hit its limit): it
+			// orders the catch-up but vouches for nothing, #two included.
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#three",
+				"#two",
+				"#four",
+			]);
 		});
 
 		it("goes in JOIN order when the server refuses, and does not ask that server again", function () {
@@ -879,20 +885,17 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#five"]);
 		});
 
-		it("never skips a channel the answer leaves out, nor on an answer slow enough to be cut short", function () {
+		it("never skips a channel the answer leaves out; a complete answer skips however late", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
-			// Federated and late: nefarious2 marks a timed-out merge complete.
+			// The end tag is the server's word, not the clock: a federated
+			// answer cut short comes without it (nefarious2 a333d81).
 			clock.tick(3500);
 			answerTargets(h, targets, [
 				["#three", "2026-08-27T12:05:00.000Z"],
 				["#two", "2026-08-27T12:00:10.000Z"],
 			]); // #four left out
-			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
-				"#three",
-				"#two",
-				"#four",
-			]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#four"]);
 		});
 
 		it("is not asked to order a single channel, nor while the server replays the gap", function () {

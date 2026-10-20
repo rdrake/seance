@@ -65,14 +65,6 @@ const TARGETS_LIMIT = 100;
  */
 const TARGETS_AHEAD_MS = 86_400_000;
 
-/**
- * An answer slower than this may be a federated one the server cut short
- * when a storage server did not answer in its own 5 s: nefarious2 still
- * marks it complete (complete_targets_fed). It orders the catch-up but
- * skips nothing.
- */
-const TARGETS_TRUST_MS = 3000;
-
 /** Fewer channels than this behind the active one are not worth a command to order. */
 const TARGETS_MIN_CHANNELS = 2;
 
@@ -93,6 +85,11 @@ interface PendingCatchup {
 /** The newest message per channel (casefolded name → ms), from a TARGETS answer. */
 interface TargetsAnswer {
 	rows: Map<string, number>;
+	/**
+	 * The batch carried `draft/chathistory-end`: the server says nothing was
+	 * cut. Only then is a listed row the channel's newest message.
+	 */
+	complete: boolean;
 }
 
 /** One connection's TARGETS exchange. */
@@ -109,8 +106,6 @@ interface TargetsState {
 	late: Set<string>;
 	label?: string;
 	timer?: ReturnType<typeof setTimeout>;
-	/** When the command went out (ms). */
-	sentAt?: number;
 }
 
 const targetsOf = new WeakMap<IrcClient, TargetsState>();
@@ -443,7 +438,6 @@ function sendTargets(client: IrcClient, state: TargetsState): void {
 	}
 
 	state.status = "asked";
-	state.sentAt = Date.now();
 	state.timer = setTimeout(() => release(client, state, undefined), TARGETS_TIMEOUT_MS);
 }
 
@@ -473,12 +467,18 @@ function unpark(client: IrcClient, chan: Channel): PendingCatchup | undefined {
  *
  * - listed, newest message later than ours (or we hold none): fetched,
  *   the most recently written channel first;
- * - listed, newest message the one we hold: nothing new, no fetch — unless
- *   the answer was slow enough to be a truncated federated one;
+ * - listed, newest message the one we hold: nothing new, no fetch — if
+ *   the answer is complete (`draft/chathistory-end`). Without the tag a
+ *   row may be short of the channel's newest: nefarious2 leaves it off a
+ *   federated answer a storage server cut short, by its own timeout or its
+ *   row limit (`CH E … T`, which can come back at once). That
+ *   needs a server at or after nefarious2 a333d81; an older one tags every
+ *   federated answer under the limit, cut short or not;
  * - not listed, or its JOIN followed the command: fetched last, as before.
  *   Not listed while we hold its history means its newest message is older
- *   than the window or was never stored where the server looked, and a
- *   federated answer can say complete when it is not: never a skip.
+ *   than the window or was never stored where the server looked; strict
+ *   presence leaves channels out of a complete answer, and an older
+ *   server's answer can say complete when it is not: never a skip.
  *
  * A skipped channel still gets its marker query and any page the last
  * connection lost; only the history fetch is left out.
@@ -498,7 +498,7 @@ function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer |
 		return;
 	}
 
-	const trusted = Date.now() - (state.sentAt ?? 0) <= TARGETS_TRUST_MS;
+	const trusted = answer.complete;
 	const busy: {pending: PendingCatchup; newest: number}[] = [];
 	const rest: PendingCatchup[] = [];
 	const quiet: PendingCatchup[] = [];
@@ -554,9 +554,8 @@ export const targetsBatch: BatchHandler = (client, batch) => {
 		}
 	}
 
-	// `draft/chathistory-end` is not trusted: a federated answer cut short
-	// still carries it (see release).
-	release(client, state, {rows});
+	// The tag rides the opener (spec; nefarious2 puts it beside our label).
+	release(client, state, {rows, complete: batch.tags.has("draft/chathistory-end")});
 };
 
 /**

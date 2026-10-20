@@ -198,13 +198,27 @@ parked until it answers (`catchup.ts`):
   channels: written to since what we hold, newest first; then the rest in
   JOIN order. A channel listed with the newest message we already hold has
   nothing new and gets no fetch at all (its marker query and a lost `more`
-  page still go). A channel the answer leaves out is always fetched:
-  nefarious2 marks a federated answer complete even when a storage server
-  timed out (`complete_targets_fed` ignores `fed_truncated`), and under
-  `CHATHISTORY_STRICT_PRESENCE` it leaves out channels whose newest message
-  we were not present for. For the same reason an answer slower than 3 s
-  (`TARGETS_TRUST_MS`, which a federation timeout would be) orders the
-  catch-up and skips nothing.
+  page still go) — but only when the batch opener carries
+  `draft/chathistory-end`. Without the tag the server is saying the answer
+  was cut: a federated query whose storage server timed out (its
+  `CHATHISTORY_TIMEOUT`, 5 s) or capped its rows (a `CH E … T` reply, which
+  can arrive at once), and a listed row may then be older
+  than the channel's newest message. Such an answer still orders the
+  catch-up and skips nothing. A channel the answer leaves out is always
+  fetched: under `CHATHISTORY_STRICT_PRESENCE` a complete answer leaves out
+  channels whose newest message we were not present for.
+
+  This trusts the server's tag, so it needs nefarious2 at or after
+  `a333d81` (2026-10-20). Before it `complete_targets_fed` tagged every
+  federated answer under the limit whether or not `fed_truncated` was set,
+  and the first version of this change guarded against that with the
+  clock instead: an answer slower than 3 s skipped nothing. That missed the
+  row-limit truncation, which is fast, and the timeout it was meant for
+  cannot reach us anyway — the server's federation timeout is 5 s from when
+  it reads the command, our `TARGETS_TIMEOUT_MS` is 5 s from when we sent
+  it, so a timed-out answer arrives after we have gone in JOIN order and is
+  ignored. The clock rule was dropped.
+
 - "What we hold" is the newest message the server stamped (one with a
   msgid, `Channel.newestServerRef`) before this JOIN, and only once that
   channel's catch-up has completed (`historyFilled`: cleared when a JOIN's
