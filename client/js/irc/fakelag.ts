@@ -163,14 +163,24 @@ export class BackgroundQueue {
 		this.budgetMs = budgetMs;
 	}
 
-	/** Queue `job` (at the back, or in its old place when the key is queued). */
-	add(job: BackgroundJob, {front = false}: {front?: boolean} = {}): void {
+	/**
+	 * Queue `job`: at the back, at the front, or just before the first job
+	 * whose key passes `ahead` (in order among others queued the same way);
+	 * in its old place when the key is already queued.
+	 */
+	add(
+		job: BackgroundJob,
+		{front = false, ahead}: {front?: boolean; ahead?: (key: string) => boolean} = {}
+	): void {
 		const index = this.jobs.findIndex((j) => j.key === job.key);
+		const before = ahead ? this.jobs.findIndex((j) => ahead(j.key)) : -1;
 
 		if (index !== -1) {
 			this.jobs[index] = job;
 		} else if (front) {
 			this.jobs.unshift(job);
+		} else if (before !== -1) {
+			this.jobs.splice(before, 0, job);
 		} else {
 			this.jobs.push(job);
 		}

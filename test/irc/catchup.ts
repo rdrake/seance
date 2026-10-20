@@ -7,6 +7,7 @@ import {
 	TARGETS_TIMEOUT_MS,
 } from "../../client/js/irc/catchup";
 import {BACKGROUND_BUDGET_MS, IRCU_FAKE_LAG} from "../../client/js/irc/fakelag";
+import {MARKREAD_DEBOUNCE_MS} from "../../client/js/irc/handlers/markread";
 import {ChanState} from "../../shared/types/chan";
 import {MessageType} from "../../shared/types/msg";
 import {ALL_CAPS, Harness, register, setup} from "./support";
@@ -288,6 +289,67 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		expect(h.client.fakeLag.ahead()).to.be.at.most(BACKGROUND_BUDGET_MS);
 	});
 
+	it("puts the oper-up queries ahead of other channels' catch-up", async function () {
+		const h = connected();
+		h.client.open(h.client.findChannel("#seance")!.id);
+		joinAll(h);
+		const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+		answerTargets(h, targets, []); // the catch-up is queued now
+		h.transport.line(":alice!alice@host MODE alice +o");
+		const order: string[] = [];
+
+		for (let i = 0; i < 300; i++) {
+			await clock.tickAsync(100);
+			order.push(...h.sent().filter((l) => /PRIVS|CHATHISTORY LATEST/.test(l)));
+		}
+
+		const privs = order.findIndex((l) => l.includes("PRIVS"));
+		expect(privs, order.join(" | ")).to.be.at.least(0);
+		expect(order.slice(privs).filter((l) => l.includes("LATEST"))).to.have.length(3);
+	});
+
+	it("sends a read marker ahead of the catch-up, and a Mark read from a notification at once", function () {
+		const h = connected();
+		const seance = h.client.findChannel("#seance")!;
+		h.client.open(seance.id);
+		joinAll(h);
+		const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+		answerTargets(h, targets, []); // the catch-up is queued now
+		h.transport.line(
+			"@time=2026-08-27T12:00:01.000Z;msgid=r1 :bob!bob@host PRIVMSG #seance :read me"
+		);
+		const lines: string[] = [];
+
+		for (let i = 0; i < 300 && lines.length < 8; i++) {
+			clock.tick(100);
+			lines.push(...h.sent());
+		}
+
+		const marker = lines.indexOf("MARKREAD #seance timestamp=2026-08-27T12:00:01.000Z");
+		expect(marker, lines.join(" | ")).to.be.at.least(0);
+		expect(lines.slice(0, marker).filter(isFetch)).to.deep.equal([]);
+
+		// The push worker's Mark read: whatever the clock says.
+		h.client.send("PRIVMSG #seance :busy");
+		h.client.send("PRIVMSG #seance :busy");
+		h.sent();
+		h.client.markRead("#two", "2026-08-27T12:00:02.000Z");
+		expect(h.sent()).to.deep.equal(["MARKREAD #two timestamp=2026-08-27T12:00:02.000Z"]);
+	});
+
+	it("never renews a push registration after it was unregistered", function () {
+		const h = connected();
+		h.client.open(h.client.findChannel("#seance")!.id);
+		joinAll(h);
+		h.sent();
+		const keys = {p256dh: "pk", auth: "au"};
+		h.client.webpushRegister("https://push.example/ep1", keys, {renewal: true});
+		h.client.webpushUnregister("https://push.example/ep1");
+		clock.tick(60_000);
+		const push = h.transport.sent.filter((l) => l.startsWith("WEBPUSH"));
+		expect(push).to.deep.equal(["WEBPUSH UNREGISTER https://push.example/ep1"]);
+	});
+
 	it("never sends MODE on JOIN; asks once when the channel is first opened", function () {
 		const h = connected();
 		h.sent();
@@ -463,8 +525,8 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		it("on a reconnect fetches only the channels with something new, newest first", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
-			// From the oldest message held (#two's) less the skew allowance.
-			expect(targets).to.include("TARGETS timestamp=2026-08-27T12:00:05.000Z ");
+			// From the start: events move what we hold, not the server's index.
+			expect(targets).to.include("TARGETS timestamp=1970-01-01T00:00:00.000Z ");
 			answerTargets(h, targets, [
 				["#three", "2026-08-27T12:05:00.000Z"], // written to since
 				["#seance", "2026-08-27T12:04:00.000Z"], // the active one: served already

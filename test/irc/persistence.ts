@@ -144,6 +144,8 @@ describe("Session persistence and quiet re-joins (irc/persistence.ts)", function
 
 			// Every command after 001 costs fake lag; this one would change nothing.
 			expect(signIn("ON ON")).to.equal(false);
+			// ON but not in force (no session, the bouncer off): SET ON creates one.
+			expect(signIn("ON OFF")).to.equal(true);
 			// DEFAULT follows the server's default; ON pins it for the account.
 			expect(signIn("DEFAULT ON")).to.equal(true);
 			expect(signIn("OFF OFF")).to.equal(true);

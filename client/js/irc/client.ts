@@ -432,6 +432,7 @@ export class IrcClient {
 	markWelcomed(): void {
 		this.welcomed = true;
 		this.fakeLag.start();
+		this.background.pump(); // anything queued before 001 can go now
 	}
 
 	get name(): string {
@@ -1263,7 +1264,10 @@ export class IrcClient {
 		if (
 			this.caps.hasCapability(PERSISTENCE_CAP) &&
 			this.options.saslAccount &&
-			this.persistenceSetting !== "ON"
+			// Already on, and in force: asking again only costs fake lag. A
+			// setting of ON that is not in force (no session, bouncer off)
+			// still asks, since SET ON is what creates the session.
+			!(this.persistenceSetting === "ON" && this.persistenceHold)
 		) {
 			// Flag the ack + STATUS echo as ours: handlers/persistence.ts
 			// swallows them (the user never typed anything).
@@ -1378,6 +1382,8 @@ export class IrcClient {
 	 * the endpoint was not registered.
 	 */
 	webpushUnregister(endpoint: string): boolean {
+		// A renewal still waiting for the clock must not re-register it after.
+		this.background.take(`webpush:${endpoint}`);
 		return this.send(`WEBPUSH UNREGISTER ${endpoint}`);
 	}
 
@@ -1386,21 +1392,26 @@ export class IrcClient {
 	/**
 	 * Resolves when the fake-lag clock has room for `cost` ms more of
 	 * background work (fakelag.ts), for a sender that awaits a reply — the
-	 * oper-up queries. Never resolves if the connection closes first.
+	 * oper-up queries. Ahead of the catch-up: the oper panel and its menus
+	 * wait on these, other channels' history on nobody. Never resolves if
+	 * the connection closes first.
 	 */
 	whenRoom(key: string, cost = 2000): Promise<void> {
 		return new Promise((resolve) => {
-			this.background.add({
-				// Never in place of an earlier wait on the same key: that
-				// promise would never resolve.
-				key: `${key}#${++this.roomWaits}`,
-				cost,
-				run: () => {
-					resolve();
-					// The caller's line goes out in a microtask: let it be charged first.
-					this.background.yieldTurn();
+			this.background.add(
+				{
+					// Never in place of an earlier wait on the same key: that
+					// promise would never resolve.
+					key: `${key}#${++this.roomWaits}`,
+					cost,
+					run: () => {
+						resolve();
+						// The caller's line goes out in a microtask: let it be charged first.
+						this.background.yieldTurn();
+					},
 				},
-			});
+				{ahead: (k) => /^(catchup|mode|page|targets):/.test(k)}
+			);
 		});
 	}
 

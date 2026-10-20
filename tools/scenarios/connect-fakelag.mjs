@@ -231,6 +231,9 @@ async function watch(page, label) {
 const results = {};
 
 export default async function run(page) {
+	// Every channel holds a message, as real ones do: a channel with none is
+	// never in a TARGETS answer, and one left out is always fetched.
+	await seed(CHANS, 1);
 	await page.addInitScript(WRAP);
 	await page.goto(page.url, {waitForSelector: "#connect form"});
 	await page.click("#connect button[type=submit]");

@@ -141,7 +141,7 @@ What changed:
   as each reply landed, ~10 s per busy channel), the `MODE` a channel's
   first open asks for (clicking through channels during the catch-up cost
   ~8 s each), and the oper-up queries (`PRIVS`, the snomask, `GET`s, the
-  snomask restore, `MODE <me>`: `IrcClient.whenRoom`, one at a time; nearly
+  snomask restore, `MODE <me>`: `IrcClient.whenRoom`, one at a time, ahead of other channels' catch-up — the oper panel waits on them; nearly
   every command is `MFLG_SLOW`, so opers pay too). A `+typing` notice is
   not sent while the clock is past the budget: one read seconds late is
   worse than none.
@@ -152,7 +152,8 @@ What changed:
   comes, so on a server that volunteers the marker after JOIN (nefarious2
   for a logged-in account) it is never sent, and a server that does not
   still gets asked. Also `PERSISTENCE SET ON` when the registration
-  `STATUS` already says the account's setting is `ON`.
+  `STATUS` already says the account's setting is `ON` and in force (`SET ON`
+  is what creates a missing session, so `ON OFF` still asks).
 - **Not moved before `CAP END`:** a page hidden while it connects still
   says `AWAY *` after 001. Pre-registration lines are free (an unregistered
   connection's cached lag rule is 0 until `register_user` resets it), but
@@ -178,13 +179,14 @@ to need the background queue on a connection asks one
 (at the front of the queue) and the catch-up of every other channel is
 parked until it answers (`catchup.ts`):
 
-- `<from>` is the oldest message any parked channel holds, less
-  `CATCHUP_FUZZ_MS`, or the epoch when one holds nothing. The far end is a
-  day past now because nefarious2 drops a target whose newest message is
-  later than it (`filter_targets_window`), and a server clock ahead of ours
-  would lose exactly the channel just written to. The limit is 100 (capped
-  by ISUPPORT `CHATHISTORY`); nefarious2 lists only channels we are a
-  member of, so it is asked once the JOINs are in, newest first.
+- `<from>` is the epoch: nefarious2's index moves only on messages, while
+  the newest line we hold can be a later join, topic or redaction, and a
+  window starting there leaves the channel out. The far end is a day past
+  now because nefarious2 drops a target whose newest message is later than
+  it (`filter_targets_window`), and a server clock ahead of ours would lose
+  exactly the channel just written to. The limit is 100 (capped by ISUPPORT
+  `CHATHISTORY`); nefarious2 lists only channels we are a member of, so it
+  is asked once the JOINs are in, newest first.
 - The answer (`draft/chathistory-targets` batch, labelled; a batch without
   our label is somebody's typed query and is left alone) orders the parked
   channels: written to since what we hold, newest first; then the rest in
@@ -237,7 +239,8 @@ What a skipped channel can miss, all on nefarious2:
   message in the same millisecond: the index keeps the max, so the row
   equals what we hold. The old `LATEST` walk caught these.
 
-Also in this round: the open channel's reconnect walk (`CHATHISTORY BEFORE` pages) goes at once while the server's clock stays under 6 s
+Also in this round: a queued push renewal is dropped when its endpoint is
+unregistered (it would have re-registered it); the open channel's reconnect walk (`CHATHISTORY BEFORE` pages) goes at once while the server's clock stays under 6 s
 (`PAGE_NOW_LIMIT_MS`) instead of waiting for the background budget, and
 opening a channel runs its queued page; a walk the socket cuts short still
 lands the pages it gathered (`abortHistory`).

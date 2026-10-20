@@ -31,13 +31,7 @@ import type {Channel, MsgRef} from "./channel";
 import type {IrcClient} from "./client";
 import type {BatchHandler} from "./handlers/batch";
 import {fetchReadMarker} from "./handlers/markread";
-import {
-	CATCHUP_FUZZ_MS,
-	historyEnabled,
-	historyLimit,
-	requestChannelHistory,
-	retryLostHistory,
-} from "./history";
+import {historyEnabled, historyLimit, requestChannelHistory, retryLostHistory} from "./history";
 import {formatLine, type IrcMessage} from "./message";
 
 /** What one channel's step is reckoned to cost: its history fetch (the marker query is a job of its own). */
@@ -410,10 +404,11 @@ function sendTargets(client: IrcClient, state: TargetsState): void {
 		return;
 	}
 
-	// From the oldest message any of them holds (less the skew allowance),
-	// or from the start when one holds nothing: newest first either way.
-	const oldest = Math.min(...state.parked.map((p) => p.held?.time.getTime() ?? 0));
-	const since = new Date(Math.max(0, oldest - CATCHUP_FUZZ_MS));
+	// From the start: the server's index moves on messages only (not joins,
+	// parts, topics, redactions), so the newest line we hold can be well past
+	// a quiet channel's newest message, and a window starting there would
+	// leave it out. Newest first, so a long history costs nothing extra.
+	const since = new Date(0);
 	const until = new Date(Date.now() + TARGETS_AHEAD_MS);
 	const tags: Record<string, string> = {};
 
