@@ -188,10 +188,6 @@ export class BackgroundQueue {
 		this.pump();
 	}
 
-	has(key: string): boolean {
-		return this.jobs.some((j) => j.key === key);
-	}
-
 	/** Remove a queued job and hand it back (to run it now, or to forget it). */
 	take(key: string): BackgroundJob | undefined {
 		const index = this.jobs.findIndex((j) => j.key === key);

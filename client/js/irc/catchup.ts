@@ -93,8 +93,6 @@ interface PendingCatchup {
 /** The newest message per channel (casefolded name → ms), from a TARGETS answer. */
 interface TargetsAnswer {
 	rows: Map<string, number>;
-	/** `draft/chathistory-end` on the batch: every channel with a message in the window is listed. */
-	complete: boolean;
 }
 
 /** One connection's TARGETS exchange. */
@@ -556,7 +554,9 @@ export const targetsBatch: BatchHandler = (client, batch) => {
 		}
 	}
 
-	release(client, state, {rows, complete: batch.tags.has("draft/chathistory-end")});
+	// `draft/chathistory-end` is not trusted: a federated answer cut short
+	// still carries it (see release).
+	release(client, state, {rows});
 };
 
 /**
