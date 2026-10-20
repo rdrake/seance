@@ -7,7 +7,8 @@
 // Needs the dev ircd (tools/nefarious-dev/run.sh). `SEANCE_PORT` (default
 // 8047) is where `public/` is served, `SEANCE_FAKELAG_CHANNELS` (default 12)
 // how many channels to autojoin, `SEANCE_FAKELAG_WAIT` (ms, default 30000)
-// how long to watch each connect.
+// how long to watch each connect — the fresh one longer, until every
+// channel has its history (at most 20 + 4·N s).
 //
 // The page's WebSocket is wrapped to timestamp every line, and the server's
 // clock is replayed over them exactly as parse.c and s_bsd.c keep it: each
@@ -97,39 +98,121 @@ function replay(wire) {
 }
 
 /**
- * An opered helper on the plain-IRC port posts `count` lines into each of
- * `chans` — opers are not charged for PRIVMSG — then quits.
+ * An opered helper on the plain-IRC port, one connection for the whole run.
+ * nefarious2 rations the channels a client may newly join or message
+ * ("target changes", 439) and remembers the ration per address across
+ * reconnects (IPcheck), so a helper per seed — 12 channels each — ran it
+ * dry within a run or two and the next run's JOIN was refused for minutes.
+ * One helper joins each channel once; a refusal is waited out as the
+ * server says. Every wait is bounded: an ircd that never answers fails the
+ * run with what it said instead of hanging it with Chrome left open.
  */
-async function seed(chans, count) {
+let helper = null;
+
+async function openHelper() {
 	const {connect} = await import("node:net");
 	const sock = connect(PLAIN_PORT, "127.0.0.1");
-	const closed = new Promise((r) => sock.on("close", r));
-	const nick = "seed" + Date.now().toString(36).slice(-5);
-	let buf = "";
-	const waitFor = (re) =>
-		new Promise((resolve) => {
-			const check = () => (re.test(buf) ? resolve() : setTimeout(check, 50));
+	const h = {sock, buf: "", ended: null, joined: new Set()};
+	sock.on("close", () => (h.ended ??= "the server closed the connection"));
+	sock.on("error", (e) => (h.ended = e.message));
+	let pending = "";
+	sock.on("data", (d) => {
+		pending += d.toString();
+		const lines = pending.split(/\r?\n/);
+		pending = lines.pop();
+
+		for (const line of lines) {
+			h.buf += line + "\n";
+
+			if (line.startsWith("PING ")) {
+				sock.write(`PONG ${line.slice(5)}\r\n`);
+			}
+		}
+	});
+	h.waitFor = (re, what, {from = 0, ms = 20000} = {}) =>
+		new Promise((resolve, reject) => {
+			const until = Date.now() + ms;
+			const check = () => {
+				const m = re.exec(h.buf.slice(from));
+
+				if (m) {
+					resolve(m);
+				} else if (h.ended || Date.now() > until) {
+					const tail = h.buf.trim().split("\n").slice(-3).join(" | ");
+					reject(
+						new Error(
+							`seed helper: no ${what} (${
+								h.ended ?? ms / 1000 + " s"
+							}); last: ${tail}`
+						)
+					);
+				} else {
+					setTimeout(check, 50);
+				}
+			};
 			check();
 		});
-	sock.on("data", (d) => {
-		buf += d.toString();
-		for (const m of buf.matchAll(/^PING (.*)$/gm)) sock.write(`PONG ${m[1]}\r\n`);
-	});
+	const nick = "seed" + Date.now().toString(36).slice(-5);
 	sock.write(`NICK ${nick}\r\nUSER ${nick} 0 * :${nick}\r\n`);
-	await waitFor(/ 001 /);
+	await h.waitFor(/ 001 /, "welcome");
 	sock.write("OPER seanceop seance\r\n");
-	await waitFor(/ 381 /);
-	sock.write(`JOIN ${chans.join(",")}\r\n`);
-	await waitFor(new RegExp(` 366 \\S+ \\${chans.at(-1)} `));
+	await h.waitFor(/ 381 /, "OPER");
+	return h;
+}
+
+/** Join what the helper is not in yet, waiting out the server's target ration. */
+async function helperJoin(h, chans) {
+	const deadline = Date.now() + 240000;
+
+	for (let todo = chans.filter((c) => !h.joined.has(c)); todo.length > 0; ) {
+		const from = h.buf.length;
+		h.sock.write(`JOIN ${todo.join(",")}\r\n`);
+		const end = new RegExp(
+			` 366 \\S+ \\${todo.at(-1)} | 439 \\S+ (\\S+) .*wait (\\d+) seconds`
+		);
+		const m = await h.waitFor(end, "JOIN", {from});
+		// The rest of the list is still being answered.
+		await new Promise((r) => setTimeout(r, 500));
+
+		for (const c of todo) {
+			if (new RegExp(` 366 \\S+ \\${c} `).test(h.buf.slice(from))) {
+				h.joined.add(c);
+			}
+		}
+
+		todo = todo.filter((c) => !h.joined.has(c));
+
+		if (m[2] && todo.length > 0) {
+			const wait = (Number(m[2]) + 1) * 1000;
+
+			if (Date.now() + wait > deadline) {
+				throw new Error(`seed helper: ${m[0].trim()} (more than the run can wait)`);
+			}
+
+			console.log(`seed helper: ${m[0].trim()}; waiting`);
+			await new Promise((r) => setTimeout(r, wait));
+		}
+	}
+}
+
+/**
+ * The helper posts `count` lines into each of `chans` — opers are not
+ * charged for PRIVMSG.
+ */
+async function seed(chans, count) {
+	helper ??= await openHelper();
+	await helperJoin(helper, chans);
 
 	for (let i = 0; i < count; i++) {
-		sock.write(chans.map((c) => `PRIVMSG ${c} :busy line ${i} in ${c}\r\n`).join(""));
+		helper.sock.write(chans.map((c) => `PRIVMSG ${c} :busy line ${i} in ${c}\r\n`).join(""));
 		// Slow enough for the server's receive queue (Excess Flood otherwise).
 		await new Promise((r) => setTimeout(r, 100));
 	}
+}
 
-	sock.write("QUIT :done\r\n");
-	await closed;
+function closeHelper() {
+	helper?.sock.end("QUIT :done\r\n");
+	helper = null;
 }
 
 const command = (line) =>
@@ -183,8 +266,30 @@ function typedDelays(wire, label) {
 	return delays;
 }
 
-async function watch(page, label) {
+/** `CHATHISTORY LATEST` targets among `sent` (replayed lines). */
+const latestFetched = (sent) =>
+	new Set(
+		sent
+			.filter((s) => command(s.line) === "CHATHISTORY LATEST")
+			.map((s) => s.line.split(" ")[3])
+	);
+
+/**
+ * Watch for WAIT ms, then — with `until` — on until `until(sent)` holds or
+ * `cap` ms have passed in all.
+ */
+async function watch(page, label, {until, cap = WAIT} = {}) {
+	const start = Date.now();
 	await typeWhileWatching(page, label);
+
+	while (
+		until &&
+		!until(replay(await page.evaluate("window.__wire"))) &&
+		Date.now() - start < cap
+	) {
+		await page.sleep(1000);
+	}
+
 	const wire = await page.evaluate("window.__wire");
 	const sent = replay(wire);
 
@@ -231,26 +336,35 @@ async function watch(page, label) {
 const results = {};
 
 export default async function run(page) {
+	try {
+		await scenario(page);
+	} finally {
+		closeHelper();
+	}
+}
+
+async function scenario(page) {
 	// Every channel holds a message, as real ones do: a channel with none is
 	// never in a TARGETS answer, and one left out is always fetched.
 	await seed(CHANS, 1);
 	await page.addInitScript(WRAP);
 	await page.goto(page.url, {waitForSelector: "#connect form"});
 	await page.click("#connect button[type=submit]");
-	const fresh = await watch(page, "fresh");
-	const fetched = new Set(
-		fresh
-			.filter((s) => command(s.line) === "CHATHISTORY LATEST")
-			.map((s) => s.line.split(" ")[3])
-	);
-	// The open channel at once; its modes and marker (4 s) once the burst has
-	// drained (6 s); then one channel per 4 s.
-	const expected = Math.min(N, 1 + Math.floor((WAIT / 1000 - 10) / 4));
+	// To the end of the catch-up, so the reconnect below can tell a quiet
+	// channel from one the fresh connect never reached. The open channel at
+	// once, TARGETS, then one channel per 4 s (its history and, for a guest,
+	// its marker query): about 10 + 4·N s.
+	const freshStart = Date.now();
+	const fresh = await watch(page, "fresh", {
+		until: (sent) => latestFetched(sent).size >= N,
+		cap: (20 + 4 * N) * 1000,
+	});
+	const fetched = latestFetched(fresh);
 	page.check(
-		`fresh: catch-up keeps coming (${fetched.size} of ${N} channels in ${
-			WAIT / 1000
-		} s, expected ≥ ${expected})`,
-		fetched.size >= expected
+		`fresh: every channel gets its history (${fetched.size} of ${N} in ${Math.round(
+			(Date.now() - freshStart) / 1000
+		)} s)`,
+		fetched.size === N
 	);
 
 	// Drop the socket; the page reconnects on its own.
@@ -311,7 +425,8 @@ export default async function run(page) {
 		backgroundFetches(after).join() === written
 	);
 
-	const {writeFileSync} = await import("node:fs");
+	const {mkdirSync, writeFileSync} = await import("node:fs");
+	mkdirSync(page.outDir, {recursive: true});
 	writeFileSync(`${page.outDir}/connect-fakelag.json`, JSON.stringify(results));
 
 	page.check(
