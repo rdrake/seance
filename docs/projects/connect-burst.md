@@ -166,13 +166,60 @@ without a code change. Read-only fetches (`CHATHISTORY`, a `MARKREAD`
 query, a `MODE` query) charged less than a `PRIVMSG` would still be the
 better fix.
 
+## Ordered by `CHATHISTORY TARGETS` (2026-10-19)
+
+The background catch-up used to go in JOIN order, so the channel that had
+been written to waited behind every quiet one, and a reconnect fetched every
+channel whether anything had happened in it or not. Now the first channel
+to need the background queue on a connection asks one
+`CHATHISTORY TARGETS timestamp=<from> timestamp=<a day past now> <limit>`
+(at the front of the queue) and the catch-up of every other channel is
+parked until it answers (`catchup.ts`):
+
+- `<from>` is the oldest message any parked channel holds, less
+  `CATCHUP_FUZZ_MS`, or the epoch when one holds nothing. The far end is a
+  day past now because nefarious2 drops a target whose newest message is
+  later than it (`filter_targets_window`), and a server clock ahead of ours
+  would lose exactly the channel just written to. The limit is 100 (capped
+  by ISUPPORT `CHATHISTORY`); nefarious2 lists only channels we are a
+  member of, so it is asked once the JOINs are in, newest first.
+- The answer (`draft/chathistory-targets` batch, `draft/chathistory-end` on
+  the opener when nothing was cut) orders the parked channels: written to
+  since what we hold, newest first; then those we hold nothing for, and
+  those an incomplete answer may have left out, in JOIN order. A channel
+  listed with the newest message we already hold, or not listed in a
+  complete answer while we hold its history, has nothing new and gets no
+  fetch at all (its marker query and a lost `more` page still go).
+- "What we hold" is the newest message the server stamped (one with a
+  msgid, `Channel.newestServerRef`) before this JOIN, and only once a
+  history request for the channel has been answered (`historyFilled`): a
+  local line is on our clock and can be later than lines we never got, and
+  a channel whose fill never came holds nothing but our own last JOIN.
+- No answer within `TARGETS_TIMEOUT_MS` (5 s), or a `FAIL`: JOIN order, as
+  before. A `FAIL` saying the server does not know the subcommand stops it
+  being asked again for the page; our own `FAIL` is not shown. Not asked
+  without `batch`, while the persistence cursor replays the gap
+  (`serverReplay`), or for fewer than two channels behind the open one.
+
+Measured on the lag rig (12 channels, 60 s per phase,
+`SEANCE_FAKELAG_WAIT=60000`): a fresh connect fetched the one channel
+written to in the last run first; a reconnect with nothing new sent 5
+commands after 001 instead of 12 and fetched no history; a reconnect after a
+helper wrote three lines to `#lag10` while the page was offline fetched
+`#lag10` and nothing else. The peak stayed at 4.0 s throughout.
+
+The cost: one command (2 s on the server's clock) on every connect that has
+two or more channels behind the open one, so the first background fetch
+starts about 2 s later on a fresh connect, where nothing can be skipped.
+Under `CHATHISTORY_STRICT_PRESENCE` the server leaves out a channel whose
+newest message we were not present for, even when an older one in the gap
+was sent while we were (a socket that died without our noticing): a
+reconnect cannot tell that apart from "nothing new" and skips the channel,
+where the old `LATEST` fetch would have shown that older line. The feature
+is off by default.
+
 ## Follow-ups
 
-- **`CHATHISTORY TARGETS <t1> <t2> <limit>`** — nefarious2 implements it
-  (`m_chathistory.c`). On reconnect, one command would list which targets
-  have messages since the newest we hold, so only those need an `AFTER`
-  fetch; on first connect it tells which channels have any recent traffic.
-  Would collapse the background queue to the channels that matter.
 - **Server side:** read-only fetches (`CHATHISTORY`, `MARKREAD` query,
   `MODE` query) could carry a lower lag charge, or a client with
   `labeled-response`/`draft/chathistory` could get a larger burst budget on
@@ -182,8 +229,10 @@ better fix.
 - **Queries** are not caught up on connect at all today (no JOIN to hook);
   history for open PMs is fetched when opened (`more`). Fine, but note it.
 - **Unread badges** for not-yet-caught-up channels only reflect live traffic
-  until their turn comes (≤ 4 s × position). If that is too slow for large
-  channel lists, prioritise channels with an unread marker mismatch once
-  `TARGETS` is in.
+  until their turn comes (2–4 s × position among the channels with
+  traffic, since `TARGETS` puts those first).
+- **Private conversations in the `TARGETS` answer** are ignored. They are
+  exactly the rows that could open a query window for a PM received while
+  away (or refresh an open one), which nothing does on connect today.
 - Show a subtle "catching up…" state on channels still queued (the UI has
   `moreHistoryAvailable`; a `catchingUp` flag would be the analogue).

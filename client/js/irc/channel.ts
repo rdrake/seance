@@ -77,6 +77,12 @@ export class Channel {
 	newestRef: MsgRef | undefined = undefined;
 	/** History has been requested at least once (so `newestRef` is a valid catch-up reference). */
 	historyRequested = false;
+	/**
+	 * A history request has been answered (a batch or an empty ACK): what we
+	 * hold reaches back past this connection's JOIN, so the newest line the
+	 * server stamped can stand for "everything up to here" (catchup.ts).
+	 */
+	historyFilled = false;
 	/** A `more` page the connection died on; asked again once we are back (history.ts). */
 	lostMore: HistorySpec | undefined = undefined;
 	/**
@@ -194,6 +200,28 @@ export class Channel {
 	/** msgids already shown (history deduplication). */
 	get msgids(): IterableIterator<string> {
 		return this.idByMsgid.keys();
+	}
+
+	/**
+	 * The newest message the server stamped — one with a msgid, whose time is
+	 * the server's. `newestRef` can be a local line on our own clock (an
+	 * error while the socket was dead), later than lines the server stored
+	 * that we never got: never vouch for "nothing new" by that one.
+	 */
+	newestServerRef(): MsgRef | undefined {
+		if (this.newestRef?.msgid) {
+			return this.newestRef;
+		}
+
+		let best: MsgRef | undefined;
+
+		for (const ref of this.msgRefs.values()) {
+			if (ref.msgid && (!best || ref.time.getTime() > best.time.getTime())) {
+				best = ref;
+			}
+		}
+
+		return best;
 	}
 
 	/**

@@ -235,10 +235,27 @@ export class BackgroundQueue {
 				}
 
 				this.jobs.shift()!.run();
+
+				if (this.timer !== null) {
+					return; // the job yielded its turn (yieldTurn)
+				}
 			}
 		} finally {
 			this.pumping = false;
 		}
+	}
+
+	/**
+	 * Called from a job's `run` whose line goes out a little later (a promise
+	 * hands the turn to an awaiting caller): the queue sends nothing more until
+	 * that line has been charged to the clock, after the current microtasks.
+	 */
+	yieldTurn(): void {
+		this.stopTimer();
+		this.timer = setTimeout(() => {
+			this.timer = null;
+			this.pump();
+		}, 0);
 	}
 
 	private stopTimer(): void {

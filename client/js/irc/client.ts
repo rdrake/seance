@@ -1395,7 +1395,15 @@ export class IrcClient {
 	 */
 	whenRoom(key: string, cost = 2000): Promise<void> {
 		return new Promise((resolve) => {
-			this.background.add({key, cost, run: resolve});
+			this.background.add({
+				key,
+				cost,
+				run: () => {
+					resolve();
+					// The caller's line goes out in a microtask: let it be charged first.
+					this.background.yieldTurn();
+				},
+			});
 		});
 	}
 
@@ -2065,6 +2073,10 @@ export class IrcClient {
 		const joinName = selfJoin ? msg.params[0] ?? "" : "";
 		const joined = selfJoin ? this.findChannel(joinName) : undefined;
 		const beforeJoin: MsgRef | undefined = selfJoin ? joined?.newestRef : undefined;
+		// Only once history has filled it: before that, its newest stamped line
+		// can be our own previous JOIN, with the scrollback never fetched.
+		const heldBeforeJoin: MsgRef | undefined =
+			selfJoin && joined?.historyFilled ? joined.newestServerRef() : undefined;
 		// A JOIN for a channel we are already in repeats a membership we have
 		// (see handlers/join.ts): its history and modes are not asked again.
 		const alreadyJoined = joined?.state === ChanState.JOINED;
@@ -2090,7 +2102,7 @@ export class IrcClient {
 				// History + read marker, paced (catchup.ts): the active channel
 				// now, the rest one at a time so the server's flood penalty
 				// never queues the user's own lines.
-				enqueueCatchup(this, chan, beforeJoin);
+				enqueueCatchup(this, chan, beforeJoin, heldBeforeJoin);
 			} else if (chan) {
 				// The replay fills the gap, not a `more` page the last
 				// connection died on: that one is asked again here.

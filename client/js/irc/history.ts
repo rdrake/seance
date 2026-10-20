@@ -494,6 +494,11 @@ function resolve(
 	clearTimeout(request.timer);
 
 	const {chan} = request;
+
+	if (outcome === "batch" || outcome === "ack") {
+		chan.historyFilled = true;
+	}
+
 	const {messages, after} =
 		lines && lines.length > 0 ? replay(client, chan, lines) : {messages: [], after: []};
 	const fullPage = lines !== null && lines.length >= request.limit;

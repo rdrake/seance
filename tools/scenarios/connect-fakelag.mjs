@@ -28,7 +28,11 @@
 //   * the peak stays at or under 6 s, and once the burst is over at or
 //     under the background budget (4 s);
 //   * every autojoined channel gets its history in the end (fresh connect);
-//   * the reconnect asks for no marker the server has already answered.
+//   * the reconnect asks for no marker the server has already answered;
+//   * each connect asks one `CHATHISTORY TARGETS`, and a reconnect fetches
+//     the history of no channel that was not written to meanwhile;
+//   * after a helper writes to one channel while the page is offline, that
+//     channel is the only one the reconnect fetches.
 
 const PORT = process.env.SEANCE_PORT || "8047";
 // The ircd's WebSocket (TLS) and plain ports. The dev ircd's image turns
@@ -194,6 +198,15 @@ async function watch(page, label) {
 				.join(", ")}`
 		);
 	}
+	const answer = wire
+		.filter(
+			(x) =>
+				x.d === "in" &&
+				/ (CHATHISTORY TARGETS |BATCH [+-]\S+ draft\/chathistory-targets)/.test(x.l)
+		)
+		.map((x) => x.l);
+	results[`${label}.targets`] = answer;
+	console.log(`${label}: TARGETS answer\n${answer.map((l) => "    " + l).join("\n")}`);
 	const peak = Math.max(0, ...sent.map((s) => s.ahead));
 	const late = sent.filter((s) => s.at > 1);
 	const latePeak = Math.max(0, ...late.map((s) => s.ahead));
@@ -262,6 +275,38 @@ export default async function run(page) {
 		);
 		await watch(page, "busy");
 	}
+
+	// The reconnect fetched nothing in the background: nobody wrote anywhere.
+	const backgroundFetches = (sent) =>
+		sent
+			.filter((s) => s.at > 1 && /^CHATHISTORY (LATEST|AFTER|BEFORE)$/.test(command(s.line)))
+			.map((s) => s.line.replace(/^@\S+ /, "").split(" ")[2]);
+	const targetsAsked = (sent) => sent.filter((s) => command(s.line) === "CHATHISTORY TARGETS");
+	page.check(
+		`fresh: one CHATHISTORY TARGETS (${targetsAsked(fresh).length})`,
+		targetsAsked(fresh).length === 1
+	);
+	page.check(
+		`reconnect: one CHATHISTORY TARGETS (${targetsAsked(again).length})`,
+		targetsAsked(again).length === 1
+	);
+	page.check(
+		`reconnect: no quiet channel fetched (${backgroundFetches(again).join(", ") || "none"})`,
+		backgroundFetches(again).length === 0
+	);
+
+	// One channel written to while the page is offline: the only one fetched.
+	const written = CHANS.at(-2);
+	await page.evaluate("window.__offline = true, window.__socks.at(-1).close(), 1");
+	await seed([written], 3);
+	await page.evaluate(
+		"window.__wire.length = 0, window.__offline = false, dispatchEvent(new Event('online')), 1"
+	);
+	const after = await watch(page, "written");
+	page.check(
+		`written: only ${written} fetched (${backgroundFetches(after).join(", ") || "none"})`,
+		backgroundFetches(after).join() === written
+	);
 
 	const {writeFileSync} = await import("node:fs");
 	writeFileSync(`${page.outDir}/connect-fakelag.json`, JSON.stringify(results));

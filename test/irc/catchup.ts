@@ -1,9 +1,14 @@
 import {expect} from "chai";
 import sinon from "ts-sinon";
 import socket from "../../client/js/socket";
-import {CATCHUP_STEP_COST_MS, pendingCatchup} from "../../client/js/irc/catchup";
+import {
+	CATCHUP_STEP_COST_MS,
+	pendingCatchup,
+	TARGETS_TIMEOUT_MS,
+} from "../../client/js/irc/catchup";
 import {BACKGROUND_BUDGET_MS, IRCU_FAKE_LAG} from "../../client/js/irc/fakelag";
 import {ChanState} from "../../shared/types/chan";
+import {MessageType} from "../../shared/types/msg";
 import {ALL_CAPS, Harness, register, setup} from "./support";
 
 // The spy from test/irc/client.ts's root-level beforeEach may be installed;
@@ -91,6 +96,34 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		return out;
 	}
 
+	/** The server's answer to the TARGETS `request`: `rows` as [name, ISO time], newest first. */
+	function answerTargets(
+		h: Harness,
+		request: string,
+		rows: [string, string][],
+		complete = true
+	): void {
+		const label = /^@label=(\S+) /.exec(request)?.[1];
+		const tags = [complete ? "draft/chathistory-end" : "", label ? `label=${label}` : ""]
+			.filter(Boolean)
+			.join(";");
+		h.transport.line(`${tags ? `@${tags} ` : ""}:irc.test BATCH +tg draft/chathistory-targets`);
+
+		for (const [name, time] of rows) {
+			h.transport.line(
+				`@batch=tg :irc.test!chathistory@irc.test CHATHISTORY TARGETS ${name} ${time}`
+			);
+		}
+
+		h.transport.line(":irc.test BATCH -tg");
+	}
+
+	const isTargets = (l: string) => /^(@\S+ )?CHATHISTORY TARGETS /.test(l);
+	const isFetch = (l: string) => /^(@\S+ )?CHATHISTORY (LATEST|AFTER|BEFORE) /.test(l);
+	/** The channels of the history fetches among `lines`, in order. */
+	const fetched = (lines: string[]) =>
+		lines.filter(isFetch).map((l) => /CHATHISTORY \S+ (\S+)/.exec(l)![1]);
+
 	function commandsOf(lines: string[]): string[] {
 		return lines.map((l) =>
 			l
@@ -144,7 +177,8 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		h.sent();
 		joinAll(h);
 
-		// Active channel: its history now. Nothing for the others yet.
+		// Active channel: its history now. Nothing for the others yet: they
+		// wait for the server to say which of them has been written to.
 		const first = h.sent();
 		expect(commandsOf(first)).to.deep.equal(["CHATHISTORY LATEST"]);
 		expect(first[0]).to.include("#seance");
@@ -154,21 +188,34 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			"#four",
 		]);
 
+		// One TARGETS, first in the queue, from the start of time (nothing is
+		// held yet) to a day past now.
+		const [targets] = collect(h, 1).map((s) => s.line);
+		expect(targets).to.match(
+			/^@label=tg\d+ CHATHISTORY TARGETS timestamp=1970-01-01T00:00:00\.000Z timestamp=2026-08-28T12:00:\d\d\.\d{3}Z 100$/
+		);
+		answerTargets(h, targets, [
+			["#three", "2026-08-27T11:59:00.000Z"],
+			["#two", "2026-08-27T11:58:00.000Z"],
+		]);
+
 		// Then, each job only once the clock has drained enough for it to
-		// stay within the budget: its marker query (a server that volunteers
-		// it has done so by then), its modes, then one channel at a time,
-		// history first and its marker query right behind it.
+		// stay within the budget: the active channel's marker query (a server
+		// that volunteers it has done so by then), its modes, then one channel
+		// at a time, the most recently written first and the unlisted one
+		// last, history first and its marker query right behind it.
 		const sent = collect(h, 8);
 		expect(commandsOf(sent.map((s) => s.line))).to.deep.equal([
 			"MARKREAD #seance",
 			"MODE #seance",
 			"CHATHISTORY LATEST",
-			"MARKREAD #two",
-			"CHATHISTORY LATEST",
 			"MARKREAD #three",
+			"CHATHISTORY LATEST",
+			"MARKREAD #two",
 			"CHATHISTORY LATEST",
 			"MARKREAD #four",
 		]);
+		expect(fetched(sent.map((s) => s.line))).to.deep.equal(["#three", "#two", "#four"]);
 		// Steady state: a channel's two commands drain in their own 4 s.
 		expect(sent[6].at - sent[4].at).to.equal(4000);
 		expect(pendingCatchup(h.client)).to.deep.equal([]);
@@ -276,6 +323,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 
 		const four = h.client.findChannel("#four")!;
 		clock.tick(1000);
+		h.sent();
 		h.client.open(four.id);
 		const now = h.sent();
 		// Opening marks the channel read up to its newest line (the JOIN), so
@@ -287,7 +335,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 
 		// The rest wait for the room those took (the debounced "read up to
 		// here" markers are background work of their own).
-		const catchupOnly = (l: string) => /^(@\S+ )?(CHATHISTORY|MARKREAD #two$)/.test(l);
+		const catchupOnly = (l: string) => isFetch(l) || l === "MARKREAD #two";
 		expect(commandsOf(collect(h, 2, catchupOnly).map((s) => s.line))).to.deep.equal([
 			"CHATHISTORY LATEST",
 			"MARKREAD #two",
@@ -305,8 +353,8 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		h.transport.line(":alice!alice@host JOIN #two");
 		h.transport.line(":irc.test MARKREAD #two timestamp=2026-08-27T11:00:00.000Z");
 		h.sent(); // #seance's history went out with its JOIN
-		const lines = collect(h, 2).map((s) => s.line);
-		expect(commandsOf(lines), lines.join(" | ")).to.deep.equal([
+		const lines = collect(h, 3).map((s) => s.line);
+		expect(commandsOf(lines.filter((l) => !isTargets(l))), lines.join(" | ")).to.deep.equal([
 			"MODE #seance",
 			"CHATHISTORY LATEST",
 		]);
@@ -327,7 +375,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		expect(pendingCatchup(h.client).map((c) => c.name)).to.deep.equal(["#three", "#four"]);
 		// A channel that is merely no longer JOINED is skipped without spending a slot.
 		h.client.findChannel("#three")!.state = ChanState.PARTED;
-		const catchupOnly = (l: string) => /^(@\S+ )?(CHATHISTORY|MARKREAD #(three|four))/.test(l);
+		const catchupOnly = (l: string) => isFetch(l) || /^MARKREAD #(three|four)/.test(l);
 		expect(commandsOf(collect(h, 2, catchupOnly).map((s) => s.line))).to.deep.equal([
 			"CHATHISTORY LATEST",
 			"MARKREAD #four",
@@ -367,5 +415,225 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		expect(atRegistration).to.not.include("MARKREAD #seance");
 		h.transport.line(":alice!alice@host JOIN #seance");
 		expect(nextBackground(h)).to.deep.equal(["MODE #seance"]);
+	});
+
+	describe("ordered by CHATHISTORY TARGETS", function () {
+		/** Run the clock for `ms`, answering every history fetch (an empty page) and TARGETS (nothing listed). */
+		function settle(h: Harness, ms: number): void {
+			for (let t = 0; t < ms; t += 100) {
+				clock.tick(100);
+
+				for (const line of h.sent()) {
+					if (isTargets(line)) {
+						answerTargets(h, line, []);
+					} else if (isFetch(line)) {
+						h.transport.line(`@label=${/^@label=(\S+) /.exec(line)![1]} ACK`);
+					}
+				}
+			}
+		}
+
+		/** A first connection fully caught up, then one live message per channel at the given times. */
+		function heldThenDropped(times: Record<string, string>): Harness {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			settle(h, 60_000);
+
+			for (const [name, time] of Object.entries(times)) {
+				h.transport.line(
+					`@time=${time};msgid=m${name.slice(1)} :bob!bob@host PRIVMSG ${name} :hi`
+				);
+			}
+
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			return h;
+		}
+
+		const HELD = {
+			"#seance": "2026-08-27T12:00:30.000Z",
+			"#two": "2026-08-27T12:00:10.000Z",
+			"#three": "2026-08-27T12:00:20.000Z",
+			"#four": "2026-08-27T12:00:40.000Z",
+		};
+
+		it("on a reconnect fetches only the channels with something new, newest first", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			// From the oldest message held (#two's) less the skew allowance.
+			expect(targets).to.include("TARGETS timestamp=2026-08-27T12:00:05.000Z ");
+			answerTargets(h, targets, [
+				["#three", "2026-08-27T12:05:00.000Z"], // written to since
+				["#seance", "2026-08-27T12:04:00.000Z"], // the active one: served already
+				["#two", "2026-08-27T12:00:10.000Z"], // our newest is its newest
+				["bob", "2026-08-27T12:03:00.000Z"], // a private conversation: not ours to fetch here
+			]); // #four: not listed, nothing since 12:00:05
+			const lines = collect(h, 20).map((s) => s.line);
+			expect(fetched(lines)).to.deep.equal(["#three"]);
+			expect(pendingCatchup(h.client)).to.deep.equal([]);
+			expect(h.client.findChannel("bob")).to.equal(undefined);
+		});
+
+		it("judges by the newest line the server stamped, not a local line on our clock", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			settle(h, 60_000);
+			h.transport.line(
+				"@time=2026-08-27T12:00:10.000Z;msgid=m2 :bob!bob@host PRIVMSG #two :hi"
+			);
+			// The socket dies unnoticed; bob writes at 12:03 (we never see it);
+			// a local error line lands at 12:10 by our clock.
+			h.client.pushMessage(h.client.findChannel("#two")!, {
+				type: MessageType.ERROR,
+				text: "Not sent",
+				time: new Date("2026-08-27T12:10:00.000Z"),
+			});
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, [["#two", "2026-08-27T12:03:00.000Z"]]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.include("#two");
+		});
+
+		it("fetches a channel whose history never came, though it holds our last JOIN", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+
+			for (const name of CHANS) {
+				h.transport.line(
+					`@time=2026-08-27T12:00:00.000Z;msgid=j${name.slice(
+						1
+					)} :alice!alice@host JOIN ${name}`
+				);
+			}
+
+			// The socket drops before the catch-up got to the others; all they
+			// hold is the JOIN, stamped by the server.
+			collect(h, 1, isTargets);
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			expect(targets).to.include("TARGETS timestamp=1970-01-01T00:00:00.000Z ");
+			answerTargets(h, targets, []);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#two",
+				"#three",
+				"#four",
+			]);
+		});
+
+		it("skips nothing it cannot vouch for when the answer was cut short", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(
+				h,
+				targets,
+				[
+					["#three", "2026-08-27T12:05:00.000Z"],
+					["#two", "2026-08-27T12:00:10.000Z"],
+				],
+				false
+			);
+			// #two is still known to be quiet; #four may have been cut off.
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#four"]);
+		});
+
+		it("goes in JOIN order when the server refuses, and does not ask that server again", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			const label = /^@label=(\S+) /.exec(targets)![1];
+			const shown = (socket.dispatch as sinon.SinonSpy).callCount;
+			h.transport.line(
+				`@label=${label} :irc.test FAIL CHATHISTORY INVALID_PARAMS TARGETS :TARGETS requires timestamp references`
+			);
+			// Nobody typed it: the FAIL is not shown.
+			expect((socket.dispatch as sinon.SinonSpy).callCount).to.equal(shown);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#two",
+				"#three",
+				"#four",
+			]);
+
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			const again = collect(h, 20).map((s) => s.line);
+			expect(again.filter(isTargets)).to.deep.equal([]);
+			expect(fetched(again)).to.deep.equal(["#seance", "#two", "#three", "#four"].slice(1));
+		});
+
+		it("gives up on a silent server after a few seconds and ignores a late answer", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			const asked = Date.now();
+			const lines = collect(h, 20).map((s) => s.line);
+			expect(fetched(lines)).to.deep.equal(["#two", "#three", "#four"]);
+			expect(Date.now() - asked).to.be.at.least(TARGETS_TIMEOUT_MS);
+			answerTargets(h, targets, [["#four", "2026-08-27T12:00:00.000Z"]]);
+			clock.tick(60_000);
+			expect(h.sent().filter(isFetch)).to.deep.equal([]);
+		});
+
+		it("serves a channel opened while it waits for the answer at once", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			collect(h, 1, isTargets);
+			h.client.open(h.client.findChannel("#three")!.id);
+			expect(fetched(h.sent())).to.deep.equal(["#three"]);
+			expect(pendingCatchup(h.client).map((c) => c.name)).to.deep.equal(["#two", "#four"]);
+		});
+
+		it("fetches a channel joined after the question last, whatever the answer says", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			h.client.joinChannels([{name: "#five"}]);
+			h.sent(); // the user's JOIN: not background work
+			h.transport.line(":alice!alice@host JOIN #five");
+			answerTargets(h, targets, [["#three", "2026-08-27T12:05:00.000Z"]]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#five"]);
+		});
+
+		it("is not asked to order a single channel, nor while the server replays the gap", function () {
+			const one = setup({join: "#seance,#two", fakeLag: IRCU_FAKE_LAG});
+			register(one, CAPS);
+			one.client.open(one.client.findChannel("#seance")!.id);
+			one.transport.line(":alice!alice@host JOIN #seance");
+			one.transport.line(":alice!alice@host JOIN #two");
+			const lines = [...one.sent()];
+
+			for (let i = 0; i < 100; i++) {
+				clock.tick(100);
+				lines.push(...one.sent());
+			}
+
+			expect(lines.filter(isTargets)).to.deep.equal([]);
+			expect(fetched(lines)).to.deep.equal(["#seance", "#two"]);
+
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			h.client.serverReplay = true;
+			h.transport.line(":alice!alice@host JOIN #two");
+			h.transport.line(":alice!alice@host JOIN #three");
+			h.client.serverReplay = false;
+			expect(
+				collect(h, 20)
+					.map((s) => s.line)
+					.filter(isTargets)
+			).to.deep.equal([]);
+		});
 	});
 });
