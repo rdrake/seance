@@ -20,6 +20,7 @@ import {AWAY_STAR} from "../../client/js/irc/presence";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
 import {NO_FAKE_LAG} from "../../client/js/irc/fakelag";
+import {setup, type Harness as SupportHarness} from "./support";
 
 class FakeTransport implements Transport {
 	state: TransportState = "closed";
@@ -271,5 +272,203 @@ describe("attention and AWAY * (presence.ts)", function () {
 		expect(query.shared.totalMessages, "a star is not news in the query").to.equal(before);
 		h.transport.line(":bob!bob@host AWAY :lunch");
 		expect(query.shared.totalMessages, "a real away is").to.equal(before + 1);
+	});
+});
+
+/**
+ * `draft/pre-away`: a hidden page says `AWAY *` before registration, where
+ * it costs no fake lag, and nefarious2 (d9f806d) keeps it as the
+ * connection's own state on the fresh path and across a held session's
+ * revive. A revive keeps the ghost's away when the new socket declared
+ * none, so a page that is back after leaving the session starred clears it
+ * after 001.
+ */
+describe("pre-registration AWAY * (draft/pre-away)", function () {
+	const PRE_AWAY_CAPS = `${CAPS} draft/pre-away`;
+	const WELCOME = [
+		":irc.test 001 alice :Welcome to the SeanceDev IRC Network, alice",
+		":irc.test 005 alice CHANTYPES=#& PREFIX=(ov)@+ CHANMODES=b,k,l,imnpst CASEMAPPING=rfc1459 :are supported by this server",
+		":irc.test 422 alice :MOTD File is missing",
+	];
+
+	afterEach(function () {
+		sinon.restore();
+	});
+
+	/** Open the socket and answer CAP LS: the registration flush. */
+	function negotiate(h: SupportHarness, caps: string): string[] {
+		h.client.connect();
+		h.transport.open();
+		h.transport.line(`:irc.test CAP * LS :${caps}`);
+		return h.sent();
+	}
+
+	/** ACK the flush's REQ. */
+	function ack(h: SupportHarness, flush: string[]): void {
+		const req = flush.find((l) => l.startsWith("CAP REQ :"))!;
+		h.transport.line(`:irc.test CAP alice ACK :${req.slice("CAP REQ :".length)}`);
+	}
+
+	/** 001 to the end of the MOTD: what went out after registration. */
+	function welcome(h: SupportHarness): string[] {
+		h.transport.lines(...WELCOME);
+		return h.sent();
+	}
+
+	function register(h: SupportHarness, caps: string): string[] {
+		const flush = negotiate(h, caps);
+		ack(h, flush);
+		return [...flush, ...welcome(h)];
+	}
+
+	function hiddenClient(): SupportHarness {
+		const h = setup({join: ""});
+		h.client.setAttended(false);
+		return h;
+	}
+
+	it("requests the cap", function () {
+		const h = setup({join: ""});
+		const req = negotiate(h, PRE_AWAY_CAPS).find((l) => l.startsWith("CAP REQ :"))!;
+		expect(req.slice("CAP REQ :".length).split(" ")).to.include("draft/pre-away");
+	});
+
+	it("a hidden page says AWAY * right after CAP REQ, before CAP END, and nothing after 001", function () {
+		const h = hiddenClient();
+		const flush = negotiate(h, PRE_AWAY_CAPS);
+		expect(flush.map((l) => l.split(" ").slice(0, 2).join(" "))).to.deep.equal([
+			"CAP LS",
+			"NICK alice",
+			"USER alice",
+			"CAP REQ",
+			"AWAY *",
+			"CAP END",
+		]);
+		ack(h, flush);
+		// Applied in silence at registration: no command, no RPL_NOWAWAY.
+		expect(welcome(h)).to.deep.equal([]);
+		expect(h.client.presence.starSent).to.equal(true);
+		expect(h.client.presence.quietReplies).to.equal(0);
+		h.client.setAttended(true);
+		expect(h.sent()).to.deep.equal(["AWAY"]);
+	});
+
+	it("goes ahead of the SASL opener, not after the exchange", function () {
+		const h = setup({join: "", sasl: "plain", saslAccount: "alice", saslPassword: "s3cret"});
+		h.client.setAttended(false);
+		const flush = negotiate(h, `${PRE_AWAY_CAPS} sasl=PLAIN`);
+		const tail = flush.slice(flush.findIndex((l) => l.startsWith("CAP REQ :")));
+		expect(tail.map((l) => l.split(" ")[0])).to.deep.equal(["CAP", "AWAY", "AUTHENTICATE"]);
+		expect(tail[1]).to.equal("AWAY *");
+		ack(h, flush);
+		h.transport.line("AUTHENTICATE +");
+		h.sent();
+		h.transport.lines(
+			":irc.test 900 alice alice!alice@host alice :You are now logged in as alice",
+			":irc.test 903 alice :SASL authentication successful"
+		);
+		expect(h.sent()).to.deep.equal(["CAP END"]);
+		expect(welcome(h)).to.deep.equal([]);
+	});
+
+	it("an attended page says nothing before CAP END or after 001", function () {
+		const h = setup({join: ""});
+		expect(register(h, PRE_AWAY_CAPS).filter((l) => l.startsWith("AWAY"))).to.deep.equal([]);
+	});
+
+	it("a page that comes back during registration takes the AWAY * back after 001", function () {
+		const h = hiddenClient();
+		const flush = negotiate(h, PRE_AWAY_CAPS);
+		expect(flush).to.include("AWAY *");
+		ack(h, flush);
+		h.client.setAttended(true); // not registered: nothing can be sent yet
+		expect(h.sent()).to.deep.equal([]);
+		expect(welcome(h)).to.deep.equal(["AWAY"]);
+		expect(h.client.presence.starSent).to.equal(false);
+	});
+
+	it("says AWAY * after 001 when the cap was not enabled after all", function () {
+		const h = hiddenClient();
+		const flush = negotiate(h, PRE_AWAY_CAPS);
+		const req = flush.find((l) => l.startsWith("CAP REQ :"))!;
+		// The whole REQ refused: the server read our AWAY * without the cap
+		// and dropped it. The one-at-a-time retries go out after CAP END.
+		h.transport.line(`:irc.test CAP alice NAK :${req.slice("CAP REQ :".length)}`);
+		const retries = h.sent();
+		expect(retries).to.include("CAP REQ :draft/pre-away");
+		expect(retries).to.not.include("AWAY *");
+		h.transport.line(":irc.test CAP alice ACK :draft/pre-away");
+		expect(welcome(h)).to.deep.equal(["AWAY *"]);
+	});
+
+	it("a server without the cap gets AWAY * after 001, as before", function () {
+		const h = hiddenClient();
+		const all = register(h, CAPS);
+		expect(all.filter((l) => l.startsWith("AWAY"))).to.deep.equal(["AWAY *"]);
+		expect(all.indexOf("AWAY *")).to.be.greaterThan(all.indexOf("CAP END"));
+	});
+
+	describe("a held session revived", function () {
+		const HELD_CAPS = `${PRE_AWAY_CAPS} draft/persistence`;
+
+		/** Registered, hidden (AWAY * standing), then the socket lost. */
+		function starredThenDropped(caps = HELD_CAPS): SupportHarness {
+			const h = setup({join: ""});
+			register(h, caps);
+			h.client.setAttended(false);
+			expect(h.sent()).to.deep.equal(["AWAY *"]);
+			h.transport.closed();
+			return h;
+		}
+
+		it("clears the star the last socket left when the page is back", function () {
+			const h = starredThenDropped();
+			h.client.setAttended(true); // closed: nothing to send it on
+			const flush = negotiate(h, HELD_CAPS);
+			expect(flush.filter((l) => l.startsWith("AWAY"))).to.deep.equal([]);
+			ack(h, flush);
+			expect(welcome(h)).to.deep.equal(["AWAY"]);
+			// The reply to it is ours, not news.
+			const lobby = h.client.lobby;
+			const before = lobby.shared.totalMessages;
+			h.transport.line(":irc.test 305 alice :You are no longer marked as being away");
+			expect(lobby.shared.totalMessages).to.equal(before);
+		});
+
+		it("says it again before CAP END when the page is still hidden", function () {
+			const h = starredThenDropped();
+			const flush = negotiate(h, HELD_CAPS);
+			expect(flush.filter((l) => l.startsWith("AWAY"))).to.deep.equal(["AWAY *"]);
+			ack(h, flush);
+			expect(welcome(h)).to.deep.equal([]);
+			expect(h.client.presence.starSent).to.equal(true);
+		});
+
+		it("leaves the user's own /away to the revive", function () {
+			const h = setup({join: ""});
+			register(h, HELD_CAPS);
+			h.client.setAttended(false);
+			dispatchInput(h.client, h.client.lobby, "/away lunch");
+			h.sent();
+			h.transport.closed();
+			h.client.setAttended(true);
+			expect(register(h, HELD_CAPS).filter((l) => l.startsWith("AWAY"))).to.deep.equal([]);
+		});
+
+		it("sends nothing to a server that holds no sessions", function () {
+			const h = starredThenDropped(PRE_AWAY_CAPS);
+			h.client.setAttended(true);
+			expect(register(h, PRE_AWAY_CAPS).filter((l) => l.startsWith("AWAY"))).to.deep.equal(
+				[]
+			);
+		});
+
+		it("clears it only once", function () {
+			const h = starredThenDropped();
+			h.client.setAttended(true);
+			register(h, HELD_CAPS);
+			h.transport.closed();
+			expect(register(h, HELD_CAPS).filter((l) => l.startsWith("AWAY"))).to.deep.equal([]);
+		});
 	});
 });

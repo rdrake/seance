@@ -53,7 +53,9 @@ export interface CapResult {
  * see multiline.ts), `draft/webpush` likewise needs a `vapid=` value — a
  * server without its VAPID key cannot send pushes (see webpush.ts and
  * docs/projects/push-subscription.md) — and `draft/metadata-2` carries the
- * account settings push needs (payload tier, mute/snooze). Deliberately
+ * account settings push needs (payload tier, mute/snooze). `draft/pre-away`
+ * lets a hidden page say `AWAY *` before `CAP END`, where it costs no fake
+ * lag (presence.ts). Deliberately
  * absent: `draft/bouncer`, `no-implicit-names`.
  */
 export const SEANCE_CAPS: CapNegotiatorOptions = {
@@ -84,6 +86,7 @@ export const SEANCE_CAPS: CapNegotiatorOptions = {
 		"draft/authtoken",
 		"draft/metadata-2",
 		"draft/persistence",
+		"draft/pre-away",
 	],
 };
 
@@ -153,6 +156,13 @@ export class CapNegotiator {
 	 * `[]` ends negotiation immediately.
 	 */
 	beforeEnd?: () => string[];
+
+	/**
+	 * Called after each `CAP REQ` with the caps it names; lines it returns
+	 * go right behind it, ahead of the SASL opener or `CAP END` (`AWAY *`
+	 * under `draft/pre-away`, presence.ts: the server reads the REQ first).
+	 */
+	afterRequest?: (names: string[]) => string[];
 
 	private readonly required: string[];
 	private readonly wanted: string[];
@@ -347,7 +357,7 @@ export class CapNegotiator {
 			) {
 				this.nakRetried.add(name);
 				this.outstanding.add(name);
-				result.send.push(REQ_PREFIX + name);
+				result.send.push(REQ_PREFIX + name, ...(this.afterRequest?.([name]) ?? []));
 				continue;
 			}
 
@@ -424,6 +434,8 @@ export class CapNegotiator {
 		for (const chunk of splitMessage(REQ_PREFIX.length, names.join(" "), MAX_LINE_BYTES)) {
 			result.send.push(REQ_PREFIX + chunk);
 		}
+
+		result.send.push(...(this.afterRequest?.(names) ?? []));
 	}
 
 	private maybeEnd(result: CapResult): void {

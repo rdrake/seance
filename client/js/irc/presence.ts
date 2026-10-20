@@ -12,6 +12,13 @@
  * page that comes back says `AWAY`, and the server's attention rule (and
  * its away aggregation) does the rest.
  *
+ * A page hidden while it connects says `AWAY *` before `CAP END`, right
+ * behind the `CAP REQ` that asks for `draft/pre-away` (the server reads the
+ * REQ first): free there, where after 001 it costs fake lag. nefarious2
+ * keeps it as the connection's own state at registration, fresh or reviving
+ * a held session, since d9f806d; an older server loses it on a revive and
+ * clears it on the fresh path, so there the phone counts as attended.
+ *
  * Two things this must not do: clobber an away the user set with `/away`
  * (that is theirs until `/back`), and mark messages read while nobody is
  * there — `IrcClient.pushMessage` only schedules a MARKREAD for the open
@@ -24,6 +31,9 @@
 import type {IrcClient} from "./client";
 import {formatLine} from "./message";
 import {scheduleMarkRead} from "./handlers/markread";
+import {PERSISTENCE_CAP} from "./persistence";
+
+export const PRE_AWAY_CAP = "draft/pre-away";
 
 /** `draft/pre-away`: away for an unspecified reason. */
 export const AWAY_STAR = "*";
@@ -49,10 +59,29 @@ export interface PresenceState {
 	 * `/away` sent after ours is still acknowledged.
 	 */
 	quietReplies: number;
+	/**
+	 * This socket said `AWAY *` before `CAP END`. Whether the server took it
+	 * is known at 001: the cap must have ended up enabled.
+	 */
+	preAwaySent: boolean;
+	/**
+	 * A socket of ours closed with our `AWAY *` standing. A held session
+	 * keeps it: a revive copies the new socket's away only when it declared
+	 * one (`bounce_revive`), and a pre-registration bare `AWAY` declares
+	 * nothing, so only an `AWAY` after 001 clears it.
+	 */
+	starLeft: boolean;
 }
 
 export function initialPresence(): PresenceState {
-	return {attended: true, userAway: false, starSent: false, quietReplies: 0};
+	return {
+		attended: true,
+		userAway: false,
+		starSent: false,
+		quietReplies: 0,
+		preAwaySent: false,
+		starLeft: false,
+	};
 }
 
 function canSend(client: IrcClient): boolean {
@@ -132,8 +161,63 @@ export function userAwayChanged(client: IrcClient, away: boolean): void {
 	p.starSent = false;
 }
 
-/** Registration done: a page that is hidden while it connects says so. */
+/**
+ * `CapNegotiator.afterRequest`: a `CAP REQ` naming `draft/pre-away` went
+ * out. Before `CAP END` a hidden page says `AWAY *` behind it. A REQ after
+ * `CAP END` is a retry after the server refused the whole first one (or a
+ * `CAP NEW`): an `AWAY *` sent before it was read without the cap and
+ * dropped, so 001 has to say it after all.
+ */
+export function preRegistrationAway(client: IrcClient, names: string[]): string[] {
+	const p = client.presence;
+
+	if (!names.includes(PRE_AWAY_CAP)) {
+		return [];
+	}
+
+	if (client.caps.done || p.attended || p.userAway) {
+		p.preAwaySent = false;
+		return [];
+	}
+
+	// No quiet reply to count: the server answers a pre-registration AWAY
+	// with nothing, and applies it at registration in silence.
+	p.preAwaySent = true;
+	return [formatLine({command: "AWAY", params: [AWAY_STAR]})];
+}
+
+/** The socket closed: what it said is the session's now, if one is held. */
+export function presenceClosed(client: IrcClient): void {
+	const p = client.presence;
+	p.starLeft ||= p.starSent;
+	p.starSent = false;
+	p.preAwaySent = false;
+	// Replies to a dead socket never come.
+	p.quietReplies = 0;
+}
+
+/**
+ * Registration done. A page hidden while it connects says so, unless it
+ * already did before `CAP END` and the cap took. A page that is attended
+ * says `AWAY` if this socket starred the connection before it came back, or
+ * a lost socket may have left a held session starred (a server that offers
+ * `draft/persistence`; on any other a fresh connection has no away to clear).
+ * The user's own `/away` is theirs either way.
+ */
 export function presenceRegistered(client: IrcClient): void {
-	client.presence.starSent = false;
+	const p = client.presence;
+	const held = p.preAwaySent && client.caps.enabled.has(PRE_AWAY_CAP);
+	const left = p.starLeft && client.caps.available.has(PERSISTENCE_CAP);
+	p.preAwaySent = false;
+	p.starLeft = false;
+	p.starSent = held;
+
+	if (p.attended && !p.userAway && (held || left)) {
+		p.starSent = false;
+		p.quietReplies++;
+		client.send(formatLine({command: "AWAY", params: []}));
+		return;
+	}
+
 	sendStar(client);
 }

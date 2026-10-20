@@ -160,13 +160,30 @@ What changed:
   still gets asked. Also `PERSISTENCE SET ON` when the registration
   `STATUS` already says the account's setting is `ON` and in force (`SET ON`
   is what creates a missing session, so `ON OFF` still asks).
-- **Not moved before `CAP END`:** a page hidden while it connects still
-  says `AWAY *` after 001. Pre-registration lines are free (an unregistered
-  connection's cached lag rule is 0 until `register_user` resets it), but
-  nefarious2 drops a pre-registration `AWAY *` on a held session's revive
-  (`bounce_revive` returns before the pre-away block in `register_user`)
-  and clears `con_pre_away`, which the push attention rule reads, on the
-  fresh path, so the phone would count as attended and get no pushes.
+- **Moved before `CAP END`:** a page hidden while it connects says
+  `AWAY *` right behind the `CAP REQ` that asks for `draft/pre-away`, ahead
+  of the SASL opener or `CAP END` (`CapNegotiator.afterRequest`,
+  `presence.ts` `preRegistrationAway`). Pre-registration lines are free (an
+  unregistered connection's cached lag rule is 0 until `register_user`
+  resets it), and the server reads the REQ first, so the cap is on when it
+  reads the `AWAY` (`mu_away` ignores it otherwise). The server answers it
+  with nothing, then or at registration, so no reply is counted as ours.
+  This was tried once and reverted: nefarious2 dropped a pre-registration
+  `AWAY *` on a held session's revive and cleared `con_pre_away`, which the
+  push attention rule reads, on the fresh path. Both are fixed in
+  nefarious2 `d9f806d` (2026-10-20): the revive copies the new socket's
+  declared away and both paths apply it as the connection's own state. On a
+  server older than that a hidden phone that reconnects counts as attended.
+  What still goes after 001: `AWAY *` when the cap did not end up enabled
+  (refused, or a whole-REQ NAK whose retry came after `CAP END`); `AWAY`
+  when the page came back before 001; and `AWAY` when the page is attended
+  and a socket of ours closed with `AWAY *` standing on a server that offers
+  `draft/persistence` (`PresenceState.starLeft`) — a revive copies the new
+  socket's away only when it declared one (`bounce_revive`), and a
+  pre-registration bare `AWAY` declares nothing, so a page that is back
+  would otherwise stay starred in the session it revived. A `/away` the
+  user set is left to the revive. A page reloaded after going hidden does
+  not know what its last socket said and clears nothing.
 
 Server side, for MrLenin: the lag is per connection class
 (`fakelagminimum` / `fakelagfactor` in a `Class` block, `class.c`

@@ -51,7 +51,14 @@ import {
 	markReadAt,
 	scheduleMarkRead,
 } from "./handlers/markread";
-import {PresenceState, initialPresence, presenceRegistered, setAttended} from "./presence";
+import {
+	PresenceState,
+	initialPresence,
+	preRegistrationAway,
+	presenceClosed,
+	presenceRegistered,
+	setAttended,
+} from "./presence";
 import {abortHistory, retryLostHistory} from "./history";
 import {
 	cancelCatchup,
@@ -995,6 +1002,7 @@ export class IrcClient {
 			caps.beforeEnd = () => this.startSasl(mechanism);
 		}
 
+		caps.afterRequest = (names) => preRegistrationAway(this, names);
 		return caps;
 	}
 
@@ -1112,6 +1120,7 @@ export class IrcClient {
 		this.welcomed = false;
 		this.fakeLag.stop();
 		this.background.clear();
+		presenceClosed(this);
 		// The wait before the transport's retry, for the UI to count down;
 		// an immediate retry has nothing worth counting.
 		this.retryAt =
