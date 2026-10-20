@@ -7,7 +7,7 @@ import {
 	TARGETS_TIMEOUT_MS,
 } from "../../client/js/irc/catchup";
 import {BACKGROUND_BUDGET_MS, IRCU_FAKE_LAG} from "../../client/js/irc/fakelag";
-import {MARKREAD_DEBOUNCE_MS} from "../../client/js/irc/handlers/markread";
+import {MARKREAD_DEBOUNCE_MS, MARKREAD_JUMP_GAP_MS} from "../../client/js/irc/handlers/markread";
 import {ChanState} from "../../shared/types/chan";
 import {MessageType} from "../../shared/types/msg";
 import {ALL_CAPS, Harness, register, setup} from "./support";
@@ -335,6 +335,83 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		h.sent();
 		h.client.markRead("#two", "2026-08-27T12:00:02.000Z");
 		expect(h.sent()).to.deep.equal(["MARKREAD #two timestamp=2026-08-27T12:00:02.000Z"]);
+	});
+
+	for (const [who, every] of [
+		["alice", 4000], // our own lines, echoed
+		["bob", 2000], // someone else's, in the open channel
+	] as const) {
+		it(`a line from ${who} every ${
+			every / 1000
+		} s in the open channel does not starve the catch-up`, function () {
+			const h = connected();
+			const seance = h.client.findChannel("#seance")!;
+			h.client.open(seance.id);
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, []); // every channel waits for its fetch
+			const caughtUp: string[] = [];
+			const markers: string[] = [];
+
+			// For longer than the catch-up needs on its own.
+			for (let n = 1; n <= 40000 / every; n++) {
+				if (who === "alice") {
+					h.client.send(`PRIVMSG #seance :line ${n}`);
+				}
+
+				const time = new Date(Date.now()).toISOString();
+				h.transport.line(
+					`@time=${time};msgid=l${n} :${who}!${who}@host PRIVMSG #seance :line ${n}`
+				);
+
+				for (let i = 0; i < every / 100; i++) {
+					clock.tick(100);
+
+					for (const l of h.sent()) {
+						if (isFetch(l)) {
+							caughtUp.push(l.replace(/^@\S+ /, "").split(" ")[2]);
+						} else if (l.startsWith("MARKREAD #seance timestamp=")) {
+							markers.push(l);
+						}
+					}
+				}
+			}
+
+			expect(caughtUp).to.include.members(["#two", "#three", "#four"]);
+			// The marker keeps following the conversation all the same.
+			expect(markers.length).to.be.at.least(3);
+		});
+	}
+
+	it("lets a channel's marker jump the catch-up once per MARKREAD_JUMP_GAP_MS", function () {
+		const h = connected();
+		const seance = h.client.findChannel("#seance")!;
+		h.client.open(seance.id);
+		joinAll(h);
+		const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+		answerTargets(h, targets, []);
+		const first = (l: string) => l.startsWith("MARKREAD #seance") || isFetch(l);
+		const bob = (n: number) =>
+			h.transport.line(
+				`@time=${new Date(
+					Date.now()
+				).toISOString()};msgid=b${n} :bob!bob@host PRIVMSG #seance :${n}`
+			);
+
+		// What goes first once the marker is queued (the debounce is over).
+		const next = (n: number): string => {
+			bob(n);
+			clock.tick(MARKREAD_DEBOUNCE_MS - 100);
+			h.sent();
+			return collect(h, 1, first)[0].line;
+		};
+
+		expect(next(1)).to.match(/^MARKREAD #seance /);
+		// Too soon after the last jump: behind the waiting fetches.
+		expect(next(2)).to.satisfy(isFetch);
+		clock.tick(MARKREAD_JUMP_GAP_MS);
+		h.sent();
+		expect(next(3)).to.match(/^MARKREAD #seance /);
 	});
 
 	it("never renews a push registration after it was unregistered", function () {

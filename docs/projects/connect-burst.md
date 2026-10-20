@@ -103,13 +103,13 @@ second container of the same image with those lines removed (ports 18443 /
 16667, `SEANCE_IRC_PORT` / `SEANCE_IRC_PLAIN_PORT`). The send → echo time
 under `echo-message` is when the server read the line:
 
-|                                  | develop                                                      | this change              |
-| -------------------------------- | ------------------------------------------------------------ | ------------------------ |
-| typed lines, fresh connect       | waited 0, 6.1, 14.3, 18.3, 22.4 s; 6 of 11 unread after 45 s | all 11 read within 0.1 s |
-| typed lines, reconnect           | waited 0, 4.1, 8.1, 17.3, 20.3 s; 6 of 11 unread after 45 s  | all 11 read within 0.1 s |
-| server clock peak (with typing)  | 63 s ahead                                                   | 6 s                      |
-| clock peak, no typing (dev ircd) | 9.9 s, held at 7.9–9.9 s for the whole catch-up              | 4.0 s                    |
-| marker queries on reconnect      | one per channel, every time                                  | none once answered       |
+|                                  | develop                                                      | this change                 |
+| -------------------------------- | ------------------------------------------------------------ | --------------------------- |
+| typed lines, fresh connect       | waited 0, 6.1, 14.3, 18.3, 22.4 s; 6 of 11 unread after 45 s | all 11 read within 0.1 s    |
+| typed lines, reconnect           | waited 0, 4.1, 8.1, 17.3, 20.3 s; 6 of 11 unread after 45 s  | all 11 read within 0.1 s    |
+| server clock peak (with typing)  | 63 s ahead                                                   | 6 s                         |
+| clock peak, no typing (dev ircd) | 9.9 s, held at 7.9–9.9 s for the whole catch-up              | 4.0 s                       |
+| marker queries on reconnect      | one per channel, every time                                  | none once answered (guests) |
 
 One of three runs of this change saw no echo at all on its connection
 (not even for the first line, while the clock was low) — most likely
@@ -128,8 +128,12 @@ What changed:
   only gets its catch-up a little later than it could have.
 - **On the queue:** other channels' catch-up (`catchup.ts`, one job per
   channel; opening a waiting one runs it at once), marker queries (front),
-  the open channel's `MODE` (in arrival order, cosmetic), debounced `MARKREAD` sets (front: the other devices close
-  their notifications on them), and the connect-time `WEBPUSH REGISTER`
+  the open channel's `MODE` (in arrival order, cosmetic), debounced `MARKREAD` sets (front, since the other devices close
+  their notifications on them, but a channel's at most once per 10 s,
+  `MARKREAD_JUMP_GAP_MS`: in a channel where a line arrives or is typed
+  every few seconds, each line's marker at the front starved the catch-up —
+  measured on AfterNET 2026-10-20, a channel went 45 s without its history
+  while a line was typed every 4 s), and the connect-time `WEBPUSH REGISTER`
   renewal (`renewal: true` on the bus emit; a Settings subscribe still goes
   at once — nefarious2 keeps a registration 90 days, `WEBPUSH_EXPIRE`).
   Steady state is still one channel per ~4 s, but it starts once the burst
@@ -147,7 +151,9 @@ What changed:
   worse than none.
 - **Not sent at all:** the `MARKREAD <chan>` query when the server has
   already answered for that channel, `*` included (`Channel.markerAnswered`;
-  `*` used to read as "no answer" and was asked again every connect). The
+  `*` used to read as "no answer" and was asked again every connect; a
+  logged-in account's `*` is forgotten on disconnect, since it may read the
+  channel on another device meanwhile). The
   query is a background job of its own that checks again when its turn
   comes, so on a server that volunteers the marker after JOIN (nefarious2
   for a logged-in account) it is never sent, and a server that does not

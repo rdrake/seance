@@ -1155,6 +1155,13 @@ export class IrcClient {
 
 			cancelMarkRead(chan);
 
+			// An account may read it on another device meanwhile: a `*`
+			// answer no longer holds (a server that volunteers the marker
+			// after JOIN still drops the query, catchup.ts).
+			if (this.options.saslAccount) {
+				chan.markerAnswered = false;
+			}
+
 			if (chan.type === ChanType.CHANNEL) {
 				// Dropped, not our QUIT: the re-JOIN is state, not news (Channel.rejoining).
 				chan.rejoining = chan.state === ChanState.JOINED && !this.quitting;

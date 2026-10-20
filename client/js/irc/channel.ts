@@ -103,6 +103,8 @@ export class Channel {
 	/** A debounced `MARKREAD` came due while the connection was not
 	 * registered; sent once it is (`flushDeferredMarkRead`). */
 	markReadDeferred = false;
+	/** When this channel's marker last went ahead of the catch-up (ms; handlers/markread.ts). */
+	markReadJumpedAt = 0;
 	private readonly fold: Casefold;
 
 	constructor(

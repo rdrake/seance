@@ -123,7 +123,7 @@ interface Harness {
 const BASE_CAPS = "batch message-tags server-time echo-message extended-join draft/chathistory";
 
 /** A registered client (not yet in any channel). */
-function setup(opts: {readMarker?: boolean} = {}): Harness {
+function setup(opts: {readMarker?: boolean; account?: string} = {}): Harness {
 	const transport = new FakeTransport();
 	const client = new IrcClient({
 		host: "irc.test",
@@ -132,7 +132,7 @@ function setup(opts: {readMarker?: boolean} = {}): Harness {
 		nick: "alice",
 		join: "#seance",
 		sasl: "",
-		saslAccount: "",
+		saslAccount: opts.account ?? "",
 		saslPassword: "",
 		ids: new IdAllocator(),
 		transportFactory: () => transport,
@@ -422,6 +422,25 @@ describe("Read markers (handlers/markread.ts)", function () {
 				"MARKREAD #seance timestamp=2026-08-25T12:02:00.000Z",
 			]);
 		});
+
+		for (const account of ["alice", ""]) {
+			it(`${account ? "asks" : "does not ask"} again after a reconnect for ${
+				account ? "an account (read elsewhere meanwhile)" : "a guest"
+			}`, function () {
+				const h = setup({account});
+				expect(join(h)).to.include("MARKREAD #seance");
+				marker(h, "timestamp=*");
+
+				h.transport.drop();
+				reopen(h);
+				welcome(h);
+				// The server says nothing after the re-JOIN: an account's is asked.
+				const out = [...h.sent(), ...join(h)];
+				clock.tick(30_000);
+				out.push(...h.sent());
+				expect(markreads(out).includes("MARKREAD #seance")).to.equal(!!account);
+			});
+		}
 
 		it("asks for no marker or history page before 001", function () {
 			const h = setup();

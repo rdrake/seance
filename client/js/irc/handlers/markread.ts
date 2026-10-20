@@ -143,6 +143,8 @@ export function scheduleMarkRead(client: IrcClient, chan: Channel): void {
 
 /** One command: what a background marker send is reckoned to cost. */
 const MARKREAD_COST_MS = 2000;
+/** A channel's marker goes ahead of the catch-up at most this often. */
+export const MARKREAD_JUMP_GAP_MS = 10_000;
 
 function sendMarkRead(client: IrcClient, chan: Channel): void {
 	if (!chan.readMarker) {
@@ -166,12 +168,24 @@ function sendMarkRead(client: IrcClient, chan: Channel): void {
 	// Nobody waits on the marker the moment it moves: it is background work
 	// (fakelag.ts), sent with whatever is newest when the clock has room —
 	// ahead of the catch-up, since the account's other devices close their
-	// notifications on it. Deferred until then, so a socket that closes
-	// first hands it to flushDeferredMarkRead on the next registration.
+	// notifications on it, but at most once per MARKREAD_JUMP_GAP_MS for a
+	// channel: in an open channel where a line arrives (or is typed) every
+	// few seconds, each line's marker at the front would take all the
+	// clock's room and the catch-up would never run. Deferred until sent,
+	// so a socket that closes first hands it to flushDeferredMarkRead on
+	// the next registration.
+	const key = `markread:${chan.id}`;
+	const front = Date.now() - chan.markReadJumpedAt >= MARKREAD_JUMP_GAP_MS;
+
+	if (front) {
+		client.background.take(key); // one queued at the back moves up
+		chan.markReadJumpedAt = Date.now();
+	}
+
 	chan.markReadDeferred = true;
 	client.background.add(
 		{
-			key: `markread:${chan.id}`,
+			key,
 			cost: MARKREAD_COST_MS,
 			run() {
 				chan.markReadDeferred = false;
@@ -186,7 +200,7 @@ function sendMarkRead(client: IrcClient, chan: Channel): void {
 				}
 			},
 		},
-		{front: true}
+		{front}
 	);
 }
 
