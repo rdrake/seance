@@ -65,6 +65,14 @@ const TARGETS_LIMIT = 100;
  */
 const TARGETS_AHEAD_MS = 86_400_000;
 
+/**
+ * An answer slower than this may be a federated one the server cut short
+ * when a storage server did not answer in its own 5 s: nefarious2 still
+ * marks it complete (complete_targets_fed). It orders the catch-up but
+ * skips nothing.
+ */
+const TARGETS_TRUST_MS = 3000;
+
 /** Fewer channels than this behind the active one are not worth a command to order. */
 const TARGETS_MIN_CHANNELS = 2;
 
@@ -95,10 +103,16 @@ interface TargetsState {
 	status: "queued" | "asked" | "done";
 	/** Catch-up steps held until the answer, in JOIN order. */
 	parked: PendingCatchup[];
-	/** The steps parked when the command went out: the channels the server answered for. */
-	covered: Set<PendingCatchup>;
+	/**
+	 * Channels (casefolded) whose JOIN went out after the command. The server
+	 * reads our lines in order, so every other channel whose JOIN echo comes
+	 * before the answer was a member when it answered; these may not have been.
+	 */
+	late: Set<string>;
 	label?: string;
 	timer?: ReturnType<typeof setTimeout>;
+	/** When the command went out (ms). */
+	sentAt?: number;
 }
 
 const targetsOf = new WeakMap<IrcClient, TargetsState>();
@@ -158,6 +172,10 @@ export function enqueueCatchup(
 ): void {
 	const prefetched = chan.catchupPrefetched;
 	chan.catchupPrefetched = false;
+	unpark(client, chan); // a stale step from an earlier JOIN of this connection
+	// Until this JOIN's catch-up is through, what the channel holds proves
+	// nothing about the gap: a live line now is not the end of the missed ones.
+	chan.historyFilled = false;
 
 	if (chan.id === client.activeChannelId) {
 		const queued = takePending(client, chan);
@@ -199,6 +217,8 @@ function queueStep(client: IrcClient, pending: PendingCatchup, history = true): 
 
 /** The user opened `chan`: if it is still waiting, serve it immediately. */
 export function prioritiseCatchup(client: IrcClient, chan: Channel): void {
+	// A reconnect walk waiting for its next page: the user is waiting now.
+	client.background.take(`page:${chan.id}`)?.run();
 	const parked = unpark(client, chan);
 
 	if (parked) {
@@ -327,13 +347,16 @@ function parkForTargets(client: IrcClient, pending: PendingCatchup): boolean {
 
 	if (!state) {
 		if (!canAskTargets(client)) {
-			targetsOf.set(client, {status: "done", parked: [], covered: new Set()});
+			targetsOf.set(client, {status: "done", parked: [], late: new Set()});
 			return false;
 		}
 
-		state = {status: "queued", parked: [], covered: new Set()};
+		// Parked before the command is queued: with room on the clock it goes
+		// out at once, and it covers what is parked when it does.
+		state = {status: "queued", parked: [pending], late: new Set()};
 		targetsOf.set(client, state);
 		queueTargets(client, state);
+		return true;
 	}
 
 	if (state.status === "done") {
@@ -416,8 +439,17 @@ function sendTargets(client: IrcClient, state: TargetsState): void {
 	}
 
 	state.status = "asked";
-	state.covered = new Set(state.parked);
+	state.sentAt = Date.now();
 	state.timer = setTimeout(() => release(client, state, undefined), TARGETS_TIMEOUT_MS);
+}
+
+/** `IrcClient.joinChannels` sent JOINs for `names`: an answer still to come does not speak for them. */
+export function noteJoinsSent(client: IrcClient, names: string[]): void {
+	const state = targetsOf.get(client);
+
+	if (state?.status === "asked") {
+		names.forEach((name) => state.late.add(client.casefold(name)));
+	}
 }
 
 function unpark(client: IrcClient, chan: Channel): PendingCatchup | undefined {
@@ -437,12 +469,12 @@ function unpark(client: IrcClient, chan: Channel): PendingCatchup | undefined {
  *
  * - listed, newest message later than ours (or we hold none): fetched,
  *   the most recently written channel first;
- * - listed, newest message the one we hold: nothing new, no fetch;
- * - not listed, and the answer is complete: no message in the window,
- *   which starts at our oldest held message, so nothing new either — unless
- *   we hold nothing, then it is fetched last for its scrollback;
- * - not listed in an incomplete answer, or parked after the command went
- *   out (not covered): fetched last, as before.
+ * - listed, newest message the one we hold: nothing new, no fetch — unless
+ *   the answer was slow enough to be a truncated federated one;
+ * - not listed, or its JOIN followed the command: fetched last, as before.
+ *   Not listed while we hold its history means its newest message is older
+ *   than the window or was never stored where the server looked, and a
+ *   federated answer can say complete when it is not: never a skip.
  *
  * A skipped channel still gets its marker query and any page the last
  * connection lost; only the history fetch is left out.
@@ -462,6 +494,7 @@ function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer |
 		return;
 	}
 
+	const trusted = Date.now() - (state.sentAt ?? 0) <= TARGETS_TRUST_MS;
 	const busy: {pending: PendingCatchup; newest: number}[] = [];
 	const rest: PendingCatchup[] = [];
 	const quiet: PendingCatchup[] = [];
@@ -470,21 +503,19 @@ function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer |
 		const newest = answer.rows.get(client.casefold(pending.chan.name));
 		const held = pending.held?.time.getTime();
 
-		if (!state.covered.has(pending)) {
+		if (state.late.has(client.casefold(pending.chan.name))) {
 			rest.push(pending);
-		} else if (newest !== undefined) {
-			if (held !== undefined && newest <= held) {
-				quiet.push(pending);
-			} else {
-				busy.push({pending, newest});
-			}
-		} else if (held !== undefined && answer.complete) {
-			quiet.push(pending);
+		} else if (newest === undefined) {
+			rest.push(pending);
+		} else if (held !== undefined && newest <= held) {
+			(trusted ? quiet : rest).push(pending);
 		} else {
-			rest.push(pending);
+			busy.push({pending, newest});
 		}
 	}
 
+	// Nothing missed up to now: as good as a completed fill.
+	quiet.forEach((p) => (p.chan.historyFilled = true));
 	busy.sort((a, b) => b.newest - a.newest);
 	busy.forEach(({pending}) => queueStep(client, pending));
 	rest.forEach((p) => queueStep(client, p));
@@ -494,9 +525,11 @@ function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer |
 /** A closed `draft/chathistory-targets` batch: the answer, if it is ours. */
 export const targetsBatch: BatchHandler = (client, batch) => {
 	const state = targetsOf.get(client);
-	const label = batch.tags.get("label");
+	const label = batch.tags.get("label") ?? batch.parent?.tags.get("label");
 
-	if (state?.status !== "asked" || (label !== undefined && label !== state.label)) {
+	// Ours carries our label when the server labels; a batch without it
+	// answers somebody's `/quote CHATHISTORY TARGETS`, and is theirs.
+	if (state?.status !== "asked" || label !== state.label) {
 		return;
 	}
 
@@ -534,7 +567,7 @@ export function targetsFailed(client: IrcClient, msg: IrcMessage): boolean {
 		return false;
 	}
 
-	if (label !== undefined ? label !== state.label : !/^TARGETS\b/i.test(context)) {
+	if (state.label !== undefined ? label !== state.label : !/^TARGETS\b/i.test(context)) {
 		return false;
 	}
 

@@ -84,7 +84,6 @@ export const SEANCE_CAPS: CapNegotiatorOptions = {
 		"draft/authtoken",
 		"draft/metadata-2",
 		"draft/persistence",
-		"draft/pre-away",
 	],
 };
 
@@ -155,13 +154,6 @@ export class CapNegotiator {
 	 */
 	beforeEnd?: () => string[];
 
-	/**
-	 * Lines to send immediately before `CAP END`, whenever it goes out: the
-	 * last moment a command is free of the server's fake lag (`AWAY *` under
-	 * `draft/pre-away`, presence.ts). Called once.
-	 */
-	lastWords?: () => string[];
-
 	private readonly required: string[];
 	private readonly wanted: string[];
 	private readonly accept?: (name: string, value: string) => boolean;
@@ -190,7 +182,7 @@ export class CapNegotiator {
 
 		this.ended = true;
 		this.pendingEnd = false;
-		return [...(this.lastWords?.() ?? []), "CAP END"];
+		return ["CAP END"];
 	}
 
 	/** True once `CAP END` has been emitted. */
@@ -322,7 +314,7 @@ export class CapNegotiator {
 		}
 
 		this.ended = true;
-		result.send.push(...(this.lastWords?.() ?? []), "CAP END");
+		result.send.push("CAP END");
 	}
 
 	private onAck(caps: [string, string][]): void {
@@ -454,6 +446,6 @@ export class CapNegotiator {
 		}
 
 		this.ended = true;
-		result.send.push(...(this.lastWords?.() ?? []), "CAP END");
+		result.send.push("CAP END");
 	}
 }

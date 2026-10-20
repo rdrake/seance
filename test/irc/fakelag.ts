@@ -37,6 +37,21 @@ describe("Fake-lag clock and background queue (irc/fakelag.ts)", function () {
 			expect(lag.ahead()).to.equal(6000);
 		});
 
+		it("charges a multiline batch's opener, not its lines, and a flat 2 s at its close", function () {
+			const lag = new FakeLagClock(IRCU_FAKE_LAG);
+			lag.start();
+			lag.charge("@label=s1 BATCH +m1 draft/multiline #seance");
+			expect(lag.ahead()).to.equal(2000);
+
+			for (let i = 0; i < 10; i++) {
+				lag.charge(`@batch=m1 PRIVMSG #seance :line ${i}`);
+			}
+
+			expect(lag.ahead()).to.equal(2000);
+			lag.charge("BATCH -m1");
+			expect(lag.ahead()).to.equal(4000);
+		});
+
 		it("never runs behind wall time, so idle time is not banked", function () {
 			const lag = new FakeLagClock(IRCU_FAKE_LAG);
 			lag.start();

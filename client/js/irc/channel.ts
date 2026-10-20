@@ -78,9 +78,11 @@ export class Channel {
 	/** History has been requested at least once (so `newestRef` is a valid catch-up reference). */
 	historyRequested = false;
 	/**
-	 * A history request has been answered (a batch or an empty ACK): what we
-	 * hold reaches back past this connection's JOIN, so the newest line the
-	 * server stamped can stand for "everything up to here" (catchup.ts).
+	 * Everything up to the newest line the server stamped is held: the
+	 * JOIN's fill (or a reconnect's walk) was answered in full, or TARGETS
+	 * said nothing was new. Cleared when a JOIN's catch-up is scheduled and
+	 * set again when it completes, so a catch-up the socket cut short is
+	 * never taken for one that finished (catchup.ts).
 	 */
 	historyFilled = false;
 	/** A `more` page the connection died on; asked again once we are back (history.ts). */

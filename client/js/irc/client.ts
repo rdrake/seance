@@ -51,13 +51,7 @@ import {
 	markReadAt,
 	scheduleMarkRead,
 } from "./handlers/markread";
-import {
-	PresenceState,
-	initialPresence,
-	preRegistrationAway,
-	presenceRegistered,
-	setAttended,
-} from "./presence";
+import {PresenceState, initialPresence, presenceRegistered, setAttended} from "./presence";
 import {abortHistory, retryLostHistory} from "./history";
 import {
 	cancelCatchup,
@@ -344,6 +338,8 @@ export class IrcClient {
 	 * push renewal — sent only while {@link fakeLag} leaves the user room.
 	 */
 	readonly background: BackgroundQueue;
+	/** Tells {@link whenRoom}'s jobs apart. */
+	private roomWaits = 0;
 	private announced = false;
 	private quitting = false;
 	/** Last transport error text for the close report; browsers say nothing useful. */
@@ -997,7 +993,6 @@ export class IrcClient {
 			caps.beforeEnd = () => this.startSasl(mechanism);
 		}
 
-		caps.lastWords = () => preRegistrationAway(this);
 		return caps;
 	}
 
@@ -1396,7 +1391,9 @@ export class IrcClient {
 	whenRoom(key: string, cost = 2000): Promise<void> {
 		return new Promise((resolve) => {
 			this.background.add({
-				key,
+				// Never in place of an earlier wait on the same key: that
+				// promise would never resolve.
+				key: `${key}#${++this.roomWaits}`,
 				cost,
 				run: () => {
 					resolve();
@@ -1700,6 +1697,16 @@ export class IrcClient {
 	}
 
 	private sendTyping(target: string, key: string, state: TypingState): void {
+		// A transition is held to the same room as `active` (typing above);
+		// the other side lets an unended session lapse on its own.
+		if (state !== "active" && !this.background.fits(TYPING_COST_MS)) {
+			if (state === "done") {
+				this.typingState.delete(key);
+			}
+
+			return;
+		}
+
 		if (!this.connected || !this.sendTagmsg(target, {[TYPING_TAG]: state})) {
 			return;
 		}

@@ -470,7 +470,8 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				["#seance", "2026-08-27T12:04:00.000Z"], // the active one: served already
 				["#two", "2026-08-27T12:00:10.000Z"], // our newest is its newest
 				["bob", "2026-08-27T12:03:00.000Z"], // a private conversation: not ours to fetch here
-			]); // #four: not listed, nothing since 12:00:05
+				["#four", "2026-08-27T12:00:40.000Z"], // our newest is its newest
+			]);
 			const lines = collect(h, 20).map((s) => s.line);
 			expect(fetched(lines)).to.deep.equal(["#three"]);
 			expect(pendingCatchup(h.client)).to.deep.equal([]);
@@ -528,6 +529,100 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				"#three",
 				"#four",
 			]);
+		});
+
+		it("does not take a catch-up the socket cut short for one that finished", function () {
+			const h = heldThenDropped(HELD);
+			collect(h, 1, isTargets);
+			// Back, but before #two's turn: a live line, then the socket goes again.
+			h.transport.line(
+				"@time=2026-08-27T12:20:00.000Z;msgid=live :bob!bob@host PRIVMSG #two :still here"
+			);
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, [["#two", "2026-08-27T12:20:00.000Z"]]);
+			// What #two missed before that live line is still to fetch.
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.include("#two");
+		});
+
+		it("lands the pages a reconnect walk had gathered when the socket goes mid-walk", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, [["#three", "2026-08-27T12:59:00.000Z"]]);
+			const [fetch] = collect(h, 1, isFetch).map((s) => s.line);
+			const label = /^@label=(\S+) /.exec(fetch)![1];
+			// The user is talking: the next page has to wait for room.
+			h.client.send("PRIVMSG #seance :one");
+			h.client.send("PRIVMSG #seance :two");
+			const limit = Number(fetch.split(" ").at(-1));
+			h.transport.line(`@label=${label} :irc.test BATCH +p chathistory #three`);
+
+			for (let i = 0; i < limit; i++) {
+				const time = new Date(Date.parse("2026-08-27T12:30:00.000Z") + i * 1000);
+				h.transport.line(
+					`@batch=p;time=${time.toISOString()};msgid=w${i} :bob!bob@host PRIVMSG #three :line ${i}`
+				);
+			}
+
+			h.transport.line(":irc.test BATCH -p");
+			// A full page newer than what we hold: the next page waits for the clock.
+			expect(h.client.background.keys()).to.include(
+				`page:${h.client.findChannel("#three")!.id}`
+			);
+			h.transport.closed();
+			expect(h.client.findChannel("#three")!.idByMsgid.has("w0")).to.equal(true);
+		});
+
+		it("asks even when the clock has room for it the moment the first channel waits", function () {
+			const h = connected(); // the lobby is open: no channel is served first
+			joinAll(h);
+			const lines = h.sent();
+			const targets = lines.find(isTargets);
+			expect(targets, lines.join(" | ")).to.not.equal(undefined);
+			answerTargets(h, targets!, [["#three", "2026-08-27T11:59:00.000Z"]]);
+			expect(fetched(collect(h, 20).map((s) => s.line))[0]).to.equal("#three");
+		});
+
+		it("is not answered by somebody else's unlabeled TARGETS", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			// A typed `/quote CHATHISTORY TARGETS` over a narrower window.
+			answerTargets(h, "CHATHISTORY TARGETS", []);
+			expect(pendingCatchup(h.client).map((c) => c.name)).to.have.members([
+				"#two",
+				"#three",
+				"#four",
+			]);
+			answerTargets(h, targets, [
+				["#four", "2026-08-27T12:50:00.000Z"],
+				["#three", "2026-08-27T12:00:20.000Z"],
+				["#two", "2026-08-27T12:00:10.000Z"],
+			]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#four"]);
+		});
+
+		it("walks the open channel's gap back without waiting for the queue", function () {
+			const h = heldThenDropped(HELD);
+			const fetch = [...h.transport.sent].reverse().find((l) => /LATEST #seance /.test(l))!;
+			const label = /^@label=(\S+) /.exec(fetch)![1];
+			const limit = Number(fetch.split(" ").at(-1));
+			clock.tick(2000);
+			h.transport.line(`@label=${label} :irc.test BATCH +s chathistory #seance`);
+
+			for (let i = 0; i < limit; i++) {
+				const time = new Date(Date.parse("2026-08-27T12:30:00.000Z") + i * 1000);
+				h.transport.line(
+					`@batch=s;time=${time.toISOString()};msgid=s${i} :bob!bob@host PRIVMSG #seance :line ${i}`
+				);
+			}
+
+			h.transport.line(":irc.test BATCH -s");
+			// Room for it under the ceiling, none under the background budget.
+			expect(h.client.fakeLag.ahead()).to.be.above(BACKGROUND_BUDGET_MS - 2000);
+			expect(h.sent().filter((l) => /CHATHISTORY BEFORE #seance /.test(l))).to.have.length(1);
 		});
 
 		it("skips nothing it cannot vouch for when the answer was cut short", function () {
@@ -603,8 +698,28 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			h.client.joinChannels([{name: "#five"}]);
 			h.sent(); // the user's JOIN: not background work
 			h.transport.line(":alice!alice@host JOIN #five");
-			answerTargets(h, targets, [["#three", "2026-08-27T12:05:00.000Z"]]);
+			answerTargets(h, targets, [
+				["#three", "2026-08-27T12:05:00.000Z"],
+				["#four", "2026-08-27T12:00:40.000Z"],
+				["#two", "2026-08-27T12:00:10.000Z"],
+			]);
 			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#five"]);
+		});
+
+		it("never skips a channel the answer leaves out, nor on an answer slow enough to be cut short", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			// Federated and late: nefarious2 marks a timed-out merge complete.
+			clock.tick(3500);
+			answerTargets(h, targets, [
+				["#three", "2026-08-27T12:05:00.000Z"],
+				["#two", "2026-08-27T12:00:10.000Z"],
+			]); // #four left out
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#three",
+				"#two",
+				"#four",
+			]);
 		});
 
 		it("is not asked to order a single channel, nor while the server replays the gap", function () {

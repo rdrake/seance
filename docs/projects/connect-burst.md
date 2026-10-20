@@ -153,11 +153,13 @@ What changed:
   for a logged-in account) it is never sent, and a server that does not
   still gets asked. Also `PERSISTENCE SET ON` when the registration
   `STATUS` already says the account's setting is `ON`.
-- **Moved before `CAP END`, where it is free:** a page hidden while it
-  connects says `AWAY *` under `draft/pre-away` (requested now;
-  `CapNegotiator.lastWords`, `presence.ts` `preRegistrationAway`). The
-  server applies it silently at registration; a page that comes back before
-  then sends `AWAY` once registered.
+- **Not moved before `CAP END`:** a page hidden while it connects still
+  says `AWAY *` after 001. Pre-registration lines are free (an unregistered
+  connection's cached lag rule is 0 until `register_user` resets it), but
+  nefarious2 drops a pre-registration `AWAY *` on a held session's revive
+  (`bounce_revive` returns before the pre-away block in `register_user`)
+  and clears `con_pre_away`, which the push attention rule reads, on the
+  fresh path, so the phone would count as attended and get no pushes.
 
 Server side, for MrLenin: the lag is per connection class
 (`fakelagminimum` / `fakelagfactor` in a `Class` block, `class.c`
@@ -183,18 +185,29 @@ parked until it answers (`catchup.ts`):
   would lose exactly the channel just written to. The limit is 100 (capped
   by ISUPPORT `CHATHISTORY`); nefarious2 lists only channels we are a
   member of, so it is asked once the JOINs are in, newest first.
-- The answer (`draft/chathistory-targets` batch, `draft/chathistory-end` on
-  the opener when nothing was cut) orders the parked channels: written to
-  since what we hold, newest first; then those we hold nothing for, and
-  those an incomplete answer may have left out, in JOIN order. A channel
-  listed with the newest message we already hold, or not listed in a
-  complete answer while we hold its history, has nothing new and gets no
-  fetch at all (its marker query and a lost `more` page still go).
+- The answer (`draft/chathistory-targets` batch, labelled; a batch without
+  our label is somebody's typed query and is left alone) orders the parked
+  channels: written to since what we hold, newest first; then the rest in
+  JOIN order. A channel listed with the newest message we already hold has
+  nothing new and gets no fetch at all (its marker query and a lost `more`
+  page still go). A channel the answer leaves out is always fetched:
+  nefarious2 marks a federated answer complete even when a storage server
+  timed out (`complete_targets_fed` ignores `fed_truncated`), and under
+  `CHATHISTORY_STRICT_PRESENCE` it leaves out channels whose newest message
+  we were not present for. For the same reason an answer slower than 3 s
+  (`TARGETS_TRUST_MS`, which a federation timeout would be) orders the
+  catch-up and skips nothing.
 - "What we hold" is the newest message the server stamped (one with a
-  msgid, `Channel.newestServerRef`) before this JOIN, and only once a
-  history request for the channel has been answered (`historyFilled`): a
-  local line is on our clock and can be later than lines we never got, and
-  a channel whose fill never came holds nothing but our own last JOIN.
+  msgid, `Channel.newestServerRef`) before this JOIN, and only once that
+  channel's catch-up has completed (`historyFilled`: cleared when a JOIN's
+  catch-up is scheduled, set when its fill or walk is answered in full or
+  TARGETS calls it quiet). A local line is on our clock and can be later
+  than lines we never got; a channel whose fill never came holds nothing but
+  our own last JOIN; and a catch-up the socket cut short, with a live line
+  seen meanwhile, must not read as finished.
+- Every channel parked before the answer arrives is answered for, since the
+  server reads our lines in order, except those whose JOIN we sent after the
+  command (`noteJoinsSent`).
 - No answer within `TARGETS_TIMEOUT_MS` (5 s), or a `FAIL`: JOIN order, as
   before. A `FAIL` saying the server does not know the subcommand stops it
   being asked again for the page; our own `FAIL` is not shown. Not asked
@@ -211,12 +224,23 @@ helper wrote three lines to `#lag10` while the page was offline fetched
 The cost: one command (2 s on the server's clock) on every connect that has
 two or more channels behind the open one, so the first background fetch
 starts about 2 s later on a fresh connect, where nothing can be skipped.
-Under `CHATHISTORY_STRICT_PRESENCE` the server leaves out a channel whose
-newest message we were not present for, even when an older one in the gap
-was sent while we were (a socket that died without our noticing): a
-reconnect cannot tell that apart from "nothing new" and skips the channel,
-where the old `LATEST` fetch would have shown that older line. The feature
-is off by default.
+What a skipped channel can miss, all on nefarious2:
+
+- **Events.** Only PRIVMSG, NOTICE, TAGMSG and multiline move a target's
+  timestamp (`history.c`); REDACT, TOPIC, KICK, MODE, JOIN, PART and QUIT
+  do not. A message deleted while we were away in an otherwise quiet
+  channel stays visible until the page is reloaded, and the joins and
+  parts of the gap are not shown (the user list is right: NAMES). Worth
+  asking MrLenin to let REDACT bump the index.
+- **A message stamped at or before the newest one we hold** that reached the
+  store after we dropped (S2S lag, a netsplit's other side), or a second
+  message in the same millisecond: the index keeps the max, so the row
+  equals what we hold. The old `LATEST` walk caught these.
+
+Also in this round: the open channel's reconnect walk (`CHATHISTORY BEFORE` pages) goes at once while the server's clock stays under 6 s
+(`PAGE_NOW_LIMIT_MS`) instead of waiting for the background budget, and
+opening a channel runs its queued page; a walk the socket cuts short still
+lands the pages it gathered (`abortHistory`).
 
 ## Follow-ups
 

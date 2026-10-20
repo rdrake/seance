@@ -94,6 +94,16 @@ export class FakeLagClock {
 			return 0;
 		}
 
+		// Inside a multiline batch the server charges nothing per line and a
+		// flat minimum when the batch closes (parse.c, m_batch.c).
+		if (/^@(\S*;)?batch=/.test(line)) {
+			return 0;
+		}
+
+		if (/^(@\S+ )?BATCH -/.test(line)) {
+			return this.model.min * 1000;
+		}
+
 		const bytes = new TextEncoder().encode(line).length + 2; // CRLF
 		return (this.model.min + Math.floor(bytes / this.model.factor)) * 1000;
 	}
@@ -234,7 +244,15 @@ export class BackgroundQueue {
 					return;
 				}
 
-				this.jobs.shift()!.run();
+				const job = this.jobs.shift()!;
+
+				try {
+					job.run();
+				} catch (err: unknown) {
+					// One bad job must not strand the ones behind it.
+					// eslint-disable-next-line no-console
+					console.error(`[irc] background job ${job.key} failed`, err);
+				}
 
 				if (this.timer !== null) {
 					return; // the job yielded its turn (yieldTurn)
