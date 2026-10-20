@@ -242,8 +242,12 @@ What a skipped channel can miss, all on nefarious2:
 Also in this round: a queued push renewal is dropped when its endpoint is
 unregistered (it would have re-registered it); the open channel's reconnect walk (`CHATHISTORY BEFORE` pages) goes at once while the server's clock stays under 6 s
 (`PAGE_NOW_LIMIT_MS`) instead of waiting for the background budget, and
-opening a channel runs its queued page; a walk the socket cuts short still
-lands the pages it gathered (`abortHistory`).
+opening a channel runs its queued page (both under that ceiling); and a
+walk the socket cuts short between pages is dropped whole, undelivered, so
+the next connection walks the same gap from the same floor (landing its
+newest pages would have moved the floor past the older part). A walk that
+stops at the page cap or on a short page without the end tag does not
+vouch for the gap.
 
 ## Follow-ups
 

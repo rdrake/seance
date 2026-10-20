@@ -31,7 +31,13 @@ import type {Channel, MsgRef} from "./channel";
 import type {IrcClient} from "./client";
 import type {BatchHandler} from "./handlers/batch";
 import {fetchReadMarker} from "./handlers/markread";
-import {historyEnabled, historyLimit, requestChannelHistory, retryLostHistory} from "./history";
+import {
+	historyEnabled,
+	historyLimit,
+	pageFitsNow,
+	requestChannelHistory,
+	retryLostHistory,
+} from "./history";
 import {formatLine, type IrcMessage} from "./message";
 
 /** What one channel's step is reckoned to cost: its history fetch (the marker query is a job of its own). */
@@ -211,8 +217,13 @@ function queueStep(client: IrcClient, pending: PendingCatchup, history = true): 
 
 /** The user opened `chan`: if it is still waiting, serve it immediately. */
 export function prioritiseCatchup(client: IrcClient, chan: Channel): void {
-	// A reconnect walk waiting for its next page: the user is waiting now.
-	client.background.take(`page:${chan.id}`)?.run();
+	// A reconnect walk waiting for its next page: the user is waiting now,
+	// as long as the clock stays clear of the ceiling (else it is at the
+	// front already and goes first).
+	if (pageFitsNow(client)) {
+		client.background.take(`page:${chan.id}`)?.run();
+	}
+
 	const parked = unpark(client, chan);
 
 	if (parked) {

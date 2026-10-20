@@ -65,6 +65,11 @@ export const CATCHUP_FUZZ_MS = 5_000;
 /** The open channel's next page goes at once while the server's clock stays under this (ms). */
 const PAGE_NOW_LIMIT_MS = 6_000;
 
+/** A page for the channel being looked at can go now without nearing the ceiling. */
+export function pageFitsNow(client: IrcClient): boolean {
+	return client.fakeLag.ahead() + PAGE_COST_MS <= PAGE_NOW_LIMIT_MS;
+}
+
 export type HistorySubcommand = "LATEST" | "BEFORE" | "AFTER";
 
 export interface HistorySpec {
@@ -286,15 +291,6 @@ export function requestChannelHistory(
 	});
 }
 
-/** A catch-up walk between pages: what it has gathered, until its next page goes out. */
-interface ParkedWalk {
-	chan: Channel;
-	gap: SharedMsg[];
-	gapAfter: (() => void)[];
-}
-
-const walksOf = new WeakMap<IrcClient, Set<ParkedWalk>>();
-
 /**
  * Transport closed: answer every pending request with nothing. A `more`
  * page among them is parked on its channel and asked again once the
@@ -312,18 +308,11 @@ export function abortHistory(client: IrcClient): void {
 
 		resolve(client, request, null, "timeout");
 	}
-
 	// A walk waiting for its next page in the background queue (which the
-	// close empties) still lands the pages it has.
-	const walks = walksOf.get(client);
-	walksOf.delete(client);
-
-	for (const walk of walks ?? []) {
-		if (client.channels.includes(walk.chan)) {
-			deliverAppend(client, walk.chan, walk.gap);
-			runAfter(walk.gapAfter);
-		}
-	}
+	// close empties) is dropped whole, its pages undelivered: what the
+	// channel holds has not moved, so the next connection walks the same gap
+	// from the same floor. Landing its newest pages would have moved it, and
+	// that walk would stop at them with the older part never fetched.
 }
 
 /**
@@ -575,20 +564,10 @@ function resolve(
 				floor: request.floor,
 			};
 			const {gap, gapAfter} = request;
-			const walk: ParkedWalk = {chan, gap, gapAfter};
-			let walks = walksOf.get(client);
-
-			if (!walks) {
-				walks = new Set();
-				walksOf.set(client, walks);
-			}
-
-			walks.add(walk);
 			const job = {
 				key: `page:${chan.id}`,
 				cost: PAGE_COST_MS,
 				run() {
-					walksOf.get(client)?.delete(walk);
 					const next = requestHistory(client, chan, spec);
 
 					if (next) {
@@ -605,10 +584,7 @@ function resolve(
 			// The channel being looked at is the user waiting: its pages go at
 			// once while the clock stays clear of the ceiling (two lines'
 			// room); anyone else's, and that one past it, wait their turn.
-			if (
-				chan.id === client.activeChannelId &&
-				client.fakeLag.ahead() + PAGE_COST_MS <= PAGE_NOW_LIMIT_MS
-			) {
+			if (chan.id === client.activeChannelId && pageFitsNow(client)) {
 				job.run();
 			} else {
 				client.background.add(job, {front: true});
@@ -619,8 +595,10 @@ function resolve(
 
 		// Done (or the next page could not be asked for): deliver what we
 		// gathered, in order. A FAIL or timeout mid-walk still lands the
-		// newer pages already received, but leaves the gap unvouched for.
-		if (answered) {
+		// newer pages already received. Only a walk that met what we hold, or
+		// that the server said is the end, vouches for the whole gap: the page
+		// cap and a short page (nefarious2 filters pages) stop it short.
+		if (answered && (reached || end)) {
 			chan.historyFilled = true;
 		}
 

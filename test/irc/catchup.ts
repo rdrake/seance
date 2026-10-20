@@ -610,7 +610,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			expect(fetched(collect(h, 20).map((s) => s.line))).to.include("#two");
 		});
 
-		it("lands the pages a reconnect walk had gathered when the socket goes mid-walk", function () {
+		it("drops a reconnect walk the socket cuts short whole, and walks it again", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
 			answerTargets(h, targets, [["#three", "2026-08-27T12:59:00.000Z"]]);
@@ -630,12 +630,46 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			}
 
 			h.transport.line(":irc.test BATCH -p");
-			// A full page newer than what we hold: the next page waits for the clock.
-			expect(h.client.background.keys()).to.include(
-				`page:${h.client.findChannel("#three")!.id}`
-			);
+			const three = h.client.findChannel("#three")!;
+			expect(h.client.background.keys()).to.include(`page:${three.id}`);
 			h.transport.closed();
-			expect(h.client.findChannel("#three")!.idByMsgid.has("w0")).to.equal(true);
+			// Landing the newest pages would make the next walk stop at them.
+			expect(three.idByMsgid.has("w0")).to.equal(false);
+
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			const [again] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, again, [["#three", "2026-08-27T12:59:00.000Z"]]);
+			const next = collect(h, 1, isFetch).map((s) => s.line);
+			expect(fetched(next)).to.deep.equal(["#three"]);
+		});
+
+		it("does not vouch for a gap a short page stopped the walk in", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, [["#three", "2026-08-27T12:59:00.000Z"]]);
+			const [fetch] = collect(h, 1, isFetch).map((s) => s.line);
+			const label = /^@label=(\S+) /.exec(fetch)![1];
+			// Three lines, newer than what we hold, no end tag: a filtered page.
+			h.transport.line(`@label=${label} :irc.test BATCH +q chathistory #three`);
+
+			for (let i = 0; i < 3; i++) {
+				h.transport.line(
+					`@batch=q;time=2026-08-27T12:5${i}:00.000Z;msgid=q${i} :bob!bob@host PRIVMSG #three :line ${i}`
+				);
+			}
+
+			h.transport.line(":irc.test BATCH -q");
+			expect(h.client.findChannel("#three")!.idByMsgid.has("q2")).to.equal(true);
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			const [again] = collect(h, 1, isTargets).map((s) => s.line);
+			// Its newest is the one we hold now; what came before may not be.
+			answerTargets(h, again, [["#three", "2026-08-27T12:52:00.000Z"]]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.include("#three");
 		});
 
 		it("asks even when the clock has room for it the moment the first channel waits", function () {

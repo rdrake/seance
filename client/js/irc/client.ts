@@ -57,6 +57,7 @@ import {
 	cancelCatchup,
 	dropFromCatchup,
 	enqueueCatchup,
+	noteJoinsSent,
 	prefetchCatchup,
 	prioritiseCatchup,
 	queueModes,
@@ -1955,6 +1956,7 @@ export class IrcClient {
 
 		const flush = () => {
 			if (names.length > 0) {
+				noteJoinsSent(this, names);
 				this.send(lineFor(names, keys));
 				names = [];
 				keys = [];
