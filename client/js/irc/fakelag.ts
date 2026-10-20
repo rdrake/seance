@@ -6,9 +6,11 @@
  * unless the connection class sets `fakelagminimum`/`fakelagfactor`) onto a
  * per-client clock, `cli_since`, which never runs behind wall time
  * (`s_bsd.c` pulls it up to now on every read). Once the clock is
- * {@link FakeLagModel.ceiling} seconds ahead the server stops reading the
- * socket: whatever we send next waits, and a line the user typed waits
- * with it.
+ * {@link FakeLagModel.ceiling} seconds ahead the server stops parsing what
+ * we sent: it still reads the socket, but the lines wait in its receive
+ * queue, tried again on a 2 s timer or the next read, and a line the user
+ * typed waits with them. A receive queue that outgrows the class's limit
+ * meanwhile is "Excess Flood" and a disconnect (`s_bsd.c` `read_packet`).
  *
  * Fixed pacing does not see that. Two catch-up commands every 4 s cost
  * exactly what drains in 4 s, so after the JOIN burst the clock sat at the
@@ -24,7 +26,11 @@
  * The model is deliberately the conservative one: it charges opers too
  * (most commands are `MFLG_SLOW`, charged whoever sends them) and counts
  * the whole line, tags included. A server with a gentler flood rule just
- * gets its catch-up a little later than it could have. One undercount: the
+ * gets its catch-up a little later than it could have. That includes
+ * nefarious2's POSTREG_GRACE (99fdaff): a logged-in account's first 20 s of
+ * charges after registration are absorbed by a credit, which the server
+ * does not advertise on purpose and this clock ignores on purpose — it only
+ * ever makes the server's clock lower than ours. One undercount: the
  * transport's own PONGs and probe PINGs (transport.ts) bypass
  * `IrcClient.send`, so the server charges them and we do not — about 2 s
  * each, inside the headroom the budget leaves. Vue-free; tests run it on
@@ -39,15 +45,21 @@ export interface FakeLagModel {
 	 * does. 0 turns fake lag off, as `fakelagfactor = 0` does in a Class block.
 	 */
 	factor: number;
-	/** Seconds ahead at which the server stops reading the socket. */
+	/** Seconds ahead at which the server stops parsing our lines. */
 	ceiling: number;
 }
 
 /** ircu / nefarious2 defaults (`parse.c`, `s_bsd.c`). */
 export const IRCU_FAKE_LAG: FakeLagModel = {min: 2, factor: 120, ceiling: 10};
 
-/** A class without fake lag (`fakelagfactor = 0`): nothing is charged. */
+/**
+ * A class without fake lag (`fakelagfactor = 0`): no command is charged,
+ * but a multiline batch's close still is ({@link MULTILINE_CLOSE_MS}).
+ */
 export const NO_FAKE_LAG: FakeLagModel = {min: 0, factor: 0, ceiling: 10};
+
+/** What closing a multiline batch adds to the server's clock, in ms (m_batch.c). */
+export const MULTILINE_CLOSE_MS = 2000;
 
 /**
  * How far ahead background senders may push the clock. With the ceiling at
@@ -90,18 +102,20 @@ export class FakeLagClock {
 
 	/** What `line` would cost, in ms. */
 	cost(line: string): number {
+		// A multiline batch's close is charged a constant 2 s
+		// (MULTILINE_COOLDOWN_BASE, m_batch.c), whatever the class's rule and
+		// with fake lag off too: only MULTILINE_COOLDOWN_DISCOUNT = 0 skips it.
+		if (/^(@\S+ )?BATCH -/.test(line)) {
+			return MULTILINE_CLOSE_MS;
+		}
+
 		if (this.model.factor <= 0) {
 			return 0;
 		}
 
-		// Inside a multiline batch the server charges nothing per line and a
-		// flat minimum when the batch closes (parse.c, m_batch.c).
+		// Inside the batch the server charges nothing per line (parse.c).
 		if (/^@(\S*;)?batch=/.test(line)) {
 			return 0;
-		}
-
-		if (/^(@\S+ )?BATCH -/.test(line)) {
-			return this.model.min * 1000;
 		}
 
 		const bytes = new TextEncoder().encode(line).length + 2; // CRLF

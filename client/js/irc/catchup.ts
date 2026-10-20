@@ -3,7 +3,7 @@
  * (`CHATHISTORY`) and the read-marker fetch (`MARKREAD`) for each channel.
  *
  * Why paced: ircu-family servers (nefarious2 included) charge every command
- * from a non-oper about 2 s of "fake lag" and stop reading the socket once
+ * from a non-oper about 2 s of "fake lag" and stop parsing its lines once
  * the client is 10 s ahead (fakelag.ts). Firing MODE + CHATHISTORY +
  * MARKREAD for every autojoined channel the moment its JOIN echoes back put
  * ~65 commands on the wire for 15 channels and the user's first message

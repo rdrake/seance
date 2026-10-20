@@ -52,6 +52,20 @@ describe("Fake-lag clock and background queue (irc/fakelag.ts)", function () {
 			expect(lag.ahead()).to.equal(4000);
 		});
 
+		it("charges a multiline close 2 s whatever the class says, fake lag off included", function () {
+			// m_batch.c MULTILINE_COOLDOWN_BASE: a constant, added to the
+			// clock with no regard to fakelagminimum or fakelagfactor.
+			for (const model of [{min: 5, factor: 120, ceiling: 10}, NO_FAKE_LAG]) {
+				const lag = new FakeLagClock(model);
+				lag.start();
+				lag.charge("@label=s1 BATCH +m1 draft/multiline #seance");
+				lag.charge("@batch=m1 PRIVMSG #seance :line");
+				const before = lag.ahead();
+				lag.charge("BATCH -m1");
+				expect(lag.ahead() - before, `min ${model.min}`).to.equal(2000);
+			}
+		});
+
 		it("never runs behind wall time, so idle time is not banked", function () {
 			const lag = new FakeLagClock(IRCU_FAKE_LAG);
 			lag.start();
@@ -64,7 +78,7 @@ describe("Fake-lag clock and background queue (irc/fakelag.ts)", function () {
 			expect(lag.ahead()).to.equal(2000);
 		});
 
-		it("charges nothing with fake lag off (fakelagfactor = 0) or after the close", function () {
+		it("charges no command with fake lag off (fakelagfactor = 0), nor after the close", function () {
 			const off = new FakeLagClock(NO_FAKE_LAG);
 			off.start();
 			off.charge("JOIN #a");

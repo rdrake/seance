@@ -21,13 +21,15 @@ Chromium against the dev ircd (`Network.webSocketFrameSent` timestamps),
 
 Why: ircu-family fake lag. nefarious2 (`ircd/parse.c` ~L1620) charges every
 command from a non-oper `lag = lagmin + len / lagfactor` seconds
-(`2 + len/120` by default) onto `cli_since`, and `ircd/s_bsd.c` ~L1339 stops
-reading the client's socket while `cli_since - CurrentTime >= 10`. So after
-the first ~5 commands the budget is gone; 65 commands put the client ~2
-minutes "ahead", the server ignores the socket until wall-clock time catches
-up, and the queued lines (including the user's first message) drain only
-then. The same applies on every reconnect. Exceeding the recvq while blocked
-is "Excess Flood" and a disconnect.
+(`2 + len/120` by default) onto `cli_since`, and `ircd/s_bsd.c`
+(`read_packet`, ~L1515) stops parsing the client's lines while
+`cli_since - CurrentTime >= 10`. It still reads the socket: the lines wait
+in the client's receive queue and are tried again on a 2 s timer or the
+next read. So after the first ~5 commands the budget is gone; 65 commands
+put the client ~2 minutes "ahead", the queued lines (including the user's
+first message) are parsed only as wall-clock time catches up, and the same
+applies on every reconnect. A receive queue that outgrows the class's
+limit meanwhile is "Excess Flood" and a disconnect (~L1511).
 
 ## What changed (2026-08-27)
 
@@ -90,8 +92,8 @@ reconnect.
 The 4 s pacing above was wrong in a way the August measurement did not
 show: two commands cost 4 s and the interval was 4 s, so the catch-up
 drained exactly as fast as it was charged and the server's clock never came
-back down. Ten seconds is where the server stops reading, not a limit on the
-wait: every line still in its buffer adds 2 s more, so each line typed
+back down. Ten seconds is where the server stops parsing, not a limit on the
+wait: every line still in its receive queue adds 2 s more when it is parsed, so each line typed
 during the catch-up grew a backlog that only the end of the catch-up
 drained. That is the "far more than 10 seconds" opening Seance.
 
@@ -140,8 +142,8 @@ What changed:
   has drained (~10 s in) instead of at 4 s, and a reconnect's channel whose
   marker is already known costs one command, so those go every 2 s.
 - **Also on the queue, because each could push the clock far past 10 s on
-  its own** (10 s is where the server stops reading, not a cap: every line
-  still in its buffer adds 2 s more): the reconnect walk's `CHATHISTORY BEFORE` pages (front, one channel's walk at a time — they used to go out
+  its own** (10 s is where the server stops parsing, not a cap: every line
+  still in its receive queue adds 2 s more): the reconnect walk's `CHATHISTORY BEFORE` pages (front, one channel's walk at a time — they used to go out
   as each reply landed, ~10 s per busy channel), the `MODE` a channel's
   first open asks for (clicking through channels during the catch-up cost
   ~8 s each), and the oper-up queries (`PRIVS`, the snomask, `GET`s, the
@@ -192,6 +194,22 @@ without a code change. Read-only fetches (`CHATHISTORY`, a `MARKREAD`
 query, a `MODE` query) charged less than a `PRIVMSG` would still be the
 better fix.
 
+Two charges the clock models apart from the class's rule, and one it
+leaves out:
+
+- **A multiline batch's close** is a constant 2 s (`m_batch.c`
+  `MULTILINE_COOLDOWN_BASE`, added to the clock in
+  `multiline_apply_cooldown`), whatever `fakelagminimum` says and with fake
+  lag off too; only `MULTILINE_COOLDOWN_DISCOUNT = 0` skips it. The lines
+  inside the batch are not charged. `fakelag.ts` `MULTILINE_CLOSE_MS`.
+- **`POSTREG_GRACE`** (nefarious2 `99fdaff`, default 20): a connection that
+  registers logged in (SASL) gets a 20 s credit that its first charges
+  spend before the clock moves — fresh registration, a revive and an alias
+  attach alike; an anonymous one keeps the classic ~5-command burst. The
+  server does not advertise it, on purpose, and the clock ignores it on
+  purpose: it only ever leaves the server's clock below ours, so the
+  catch-up goes a little later than it could, never into the wait.
+
 ## Ordered by `CHATHISTORY TARGETS` (2026-10-19)
 
 The background catch-up used to go in JOIN order, so the channel that had
@@ -208,8 +226,11 @@ parked until it answers (`catchup.ts`):
   now because nefarious2 drops a target whose newest message is later than
   it (`filter_targets_window`), and a server clock ahead of ours would lose
   exactly the channel just written to. The limit is 100 (capped by ISUPPORT
-  `CHATHISTORY`); nefarious2 lists only channels we are a member of, so it
-  is asked once the JOINs are in, newest first.
+  `CHATHISTORY`). nefarious2 lists the channels we may read history of:
+  those we are a member of, and `+H` (public history) channels without
+  membership (`check_history_access`). So it is asked once the JOINs are
+  in, newest first; a listed `+H` channel we are not in is simply not
+  among the parked ones.
 - The answer (`draft/chathistory-targets` batch, labelled; a batch without
   our label is somebody's typed query and is left alone) orders the parked
   channels: written to since what we hold, newest first; then the rest in
@@ -265,12 +286,16 @@ two or more channels behind the open one, so the first background fetch
 starts about 2 s later on a fresh connect, where nothing can be skipped.
 What a skipped channel can miss, all on nefarious2:
 
-- **Events.** Only PRIVMSG, NOTICE, TAGMSG and multiline move a target's
-  timestamp (`history.c`); REDACT, TOPIC, KICK, MODE, JOIN, PART and QUIT
-  do not. A message deleted while we were away in an otherwise quiet
-  channel stays visible until the page is reloaded, and the joins and
-  parts of the gap are not shown (the user list is right: NAMES). Worth
-  asking MrLenin to let REDACT bump the index.
+- **Events.** Only PRIVMSG, NOTICE, TAGMSG, multiline and `HISTORY_GAP`
+  (a message not stored because its sender opted out with `+Y`/`+y`) move
+  a target's timestamp (`history.c`); REDACT, TOPIC, KICK, MODE, JOIN, PART
+  and QUIT do not. A gap row moving it is the safe direction — an extra
+  fetch (it brings back the server's gap marker), never a missed one — so
+  it needs nothing here. REDACT not moving it is not: a redaction made while we were away in a channel the answer
+  calls quiet is never fetched, and the message stays visible until the
+  page is reloaded. The joins and parts of the gap are not shown either
+  (the user list is right: NAMES). Worth asking MrLenin to let REDACT bump
+  the index.
 - **A message stamped at or before the newest one we hold** that reached the
   store after we dropped (S2S lag, a netsplit's other side), or a second
   message in the same millisecond: the index keeps the max, so the row
