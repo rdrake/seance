@@ -174,10 +174,12 @@ What changed:
   `AWAY *` on a held session's revive and cleared `con_pre_away`, which the
   push attention rule reads, on the fresh path. Both are fixed in
   nefarious2 `d9f806d` (2026-10-20): the revive copies the new socket's
-  declared away and both paths apply it as the connection's own state. On a
-  server older than that a hidden phone that reconnects counts as attended.
-  What still goes after 001: `AWAY *` when the cap did not end up enabled
-  (refused, or a whole-REQ NAK whose retry came after `CAP END`); `AWAY`
+  declared away and both paths apply it as the connection's own state. A
+  server older than that still offers the cap, and nothing tells the two
+  apart, so a hidden page says `AWAY *` again after 001 (one command, only
+  on a connect while hidden); AfterNET runs a build from 2026-09-18
+  (checked 2026-10-20). Take that second line out once the networks we
+  serve run `d9f806d` or later. Also after 001: `AWAY`
   when the page came back before 001; and `AWAY` when the page is attended
   and a socket of ours closed with `AWAY *` standing on a server that offers
   `draft/persistence` (`PresenceState.starLeft`) — a revive copies the new

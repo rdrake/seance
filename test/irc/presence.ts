@@ -333,7 +333,7 @@ describe("pre-registration AWAY * (draft/pre-away)", function () {
 		expect(req.slice("CAP REQ :".length).split(" ")).to.include("draft/pre-away");
 	});
 
-	it("a hidden page says AWAY * right after CAP REQ, before CAP END, and nothing after 001", function () {
+	it("a hidden page says AWAY * right after CAP REQ, before CAP END, and again after 001", function () {
 		const h = hiddenClient();
 		const flush = negotiate(h, PRE_AWAY_CAPS);
 		expect(flush.map((l) => l.split(" ").slice(0, 2).join(" "))).to.deep.equal([
@@ -345,10 +345,11 @@ describe("pre-registration AWAY * (draft/pre-away)", function () {
 			"CAP END",
 		]);
 		ack(h, flush);
-		// Applied in silence at registration: no command, no RPL_NOWAWAY.
-		expect(welcome(h)).to.deep.equal([]);
+		// Said again after 001 for a server before nefarious2 d9f806d, which
+		// offers the cap but loses it on a revive: its reply stays quiet.
+		expect(welcome(h)).to.deep.equal(["AWAY *"]);
 		expect(h.client.presence.starSent).to.equal(true);
-		expect(h.client.presence.quietReplies).to.equal(0);
+		expect(h.client.presence.quietReplies).to.equal(1);
 		h.client.setAttended(true);
 		expect(h.sent()).to.deep.equal(["AWAY"]);
 	});
@@ -368,7 +369,7 @@ describe("pre-registration AWAY * (draft/pre-away)", function () {
 			":irc.test 903 alice :SASL authentication successful"
 		);
 		expect(h.sent()).to.deep.equal(["CAP END"]);
-		expect(welcome(h)).to.deep.equal([]);
+		expect(welcome(h)).to.deep.equal(["AWAY *"]);
 	});
 
 	it("an attended page says nothing before CAP END or after 001", function () {
@@ -440,7 +441,7 @@ describe("pre-registration AWAY * (draft/pre-away)", function () {
 			const flush = negotiate(h, HELD_CAPS);
 			expect(flush.filter((l) => l.startsWith("AWAY"))).to.deep.equal(["AWAY *"]);
 			ack(h, flush);
-			expect(welcome(h)).to.deep.equal([]);
+			expect(welcome(h)).to.deep.equal(["AWAY *"]);
 			expect(h.client.presence.starSent).to.equal(true);
 		});
 

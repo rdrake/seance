@@ -210,14 +210,17 @@ export function presenceRegistered(client: IrcClient): void {
 	const left = p.starLeft && client.caps.available.has(PERSISTENCE_CAP);
 	p.preAwaySent = false;
 	p.starLeft = false;
-	p.starSent = held;
+	p.starSent = false;
 
 	if (p.attended && !p.userAway && (held || left)) {
-		p.starSent = false;
 		p.quietReplies++;
 		client.send(formatLine({command: "AWAY", params: []}));
 		return;
 	}
 
+	// Said again after 001 even when the pre-registration one took: a
+	// server before nefarious2 d9f806d offers the cap but loses it on a
+	// held session's revive, and nothing tells the two apart. Take this
+	// out once the networks we serve run d9f806d or later.
 	sendStar(client);
 }
