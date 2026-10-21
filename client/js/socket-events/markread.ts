@@ -5,10 +5,6 @@ import {store} from "../store";
 // (`draft/read-marker`): sync the unread badge and marker like `open` does,
 // but only up to the message the marker points at.
 socket.on("markread", function (data) {
-	if (store.state.activeChannel && store.state.activeChannel.channel.id === data.chan) {
-		return;
-	}
-
 	const channel = store.getters.findChannel(data.chan);
 
 	if (!channel) {
@@ -17,6 +13,11 @@ socket.on("markread", function (data) {
 
 	channel.channel.unread = data.unread;
 	channel.channel.highlight = data.highlight;
+
+	// The open conversation's new-messages line stays put while it is read.
+	if (store.state.activeChannel && store.state.activeChannel.channel.id === data.chan) {
+		return;
+	}
 
 	if (data.firstUnread !== 0) {
 		channel.channel.firstUnread = data.firstUnread;

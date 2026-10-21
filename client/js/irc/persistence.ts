@@ -38,6 +38,7 @@ import type {Channel, MsgRef} from "./channel";
 import type {IrcClient} from "./client";
 import type {BatchHandler, OpenBatch} from "./handlers/batch";
 import {formatLine, IrcMessage, utf8ByteLength} from "./message";
+import {presenceResumed} from "./presence";
 
 /** The persistence cap, and the profile every account has implicitly. */
 export const PERSISTENCE_CAP = "draft/persistence";
@@ -187,6 +188,8 @@ export const persistenceBatch: BatchHandler = (client, batch) => {
 	if (waiting) {
 		client.autojoin();
 	}
+
+	presenceResumed(client);
 };
 
 // ------------------------------------------------------- the ATTACH cursor
@@ -311,6 +314,8 @@ export const bouncerReplayBatch: BatchHandler = (client, batch) => {
 	for (const msg of batch.messages) {
 		client.handleMessage(msg);
 	}
+
+	presenceResumed(client);
 };
 
 /**

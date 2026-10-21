@@ -4,7 +4,6 @@
 		:network="activeChannel.network"
 		:channel="activeChannel.channel"
 		:focused="parseInt(String(route.query.focused), 10)"
-		@channel-changed="channelChanged"
 	/>
 </template>
 
@@ -12,7 +11,6 @@
 import {watch, computed, defineComponent, onMounted} from "vue";
 import {useRoute} from "vue-router";
 import {useStore} from "../js/store";
-import {ClientChan} from "../js/types";
 
 // Temporary component for routing channels and lobbies
 import Chat from "./Chat.vue";
@@ -46,20 +44,9 @@ export default defineComponent({
 			setActiveChannel();
 		});
 
-		const channelChanged = (channel: ClientChan) => {
-			const chanId = channel.id;
-			const chanInStore = store.getters.findChannel(chanId);
-
-			if (chanInStore?.channel) {
-				chanInStore.channel.unread = 0;
-				chanInStore.channel.highlight = 0;
-			}
-		};
-
 		return {
 			route,
 			activeChannel,
-			channelChanged,
 		};
 	},
 });

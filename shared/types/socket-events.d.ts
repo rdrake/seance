@@ -1,6 +1,13 @@
 import {SharedMention} from "./mention";
 import {ChanState, SharedChan} from "./chan";
-import {ServicesConfig, SharedNetwork, SharedServerOptions} from "./network";
+import {
+	ServicesConfig,
+	SharedNetwork,
+	SharedNetworkPresence,
+	SharedNetworkMode,
+	SharedPresenceMode,
+	SharedServerOptions,
+} from "./network";
 import {SharedMsg, LinkPreview, TypingState} from "./msg";
 import {SharedUser} from "./user";
 import {SharedChangelogData} from "./changelog";
@@ -67,6 +74,15 @@ interface ServerToClientEvents {
 
 	network: EventHandler<{network: SharedNetwork}>;
 	"network:options": EventHandler<{network: string; serverOptions: SharedServerOptions}>;
+	"network:presence": EventHandler<{network: string; presence: SharedNetworkPresence}>;
+	"network:presence-shared": EventHandler<{
+		network: string;
+		mode: SharedNetworkMode;
+		at: number;
+	}>;
+	"mode:shared": EventHandler<{network: string; mode: "online" | "auto" | "away"; at: number}>;
+	/** Another device removed the shared do-not-disturb entry while this one wanted it. */
+	"dnd:cleared": EventHandler<{network: string}>;
 	"network:status": EventHandler<{
 		network: string;
 		connected: boolean;
@@ -269,7 +285,7 @@ interface ClientToServerEvents {
 		renewal?: boolean;
 	}>;
 	"webpush:unregister": EventHandler<{network: string; endpoint: string}>;
-	/** Account metadata write for webpush settings (payload tier, mute/snooze). An empty value deletes the key. */
+	/** Account metadata write for webpush settings (payload tier; the mute list is irc/pushMute.ts's). An empty value deletes the key. */
 	"webpush:metadata": EventHandler<{network: string; key: string; value: string}>;
 	/** Ask the server for the account's bouncer session(s) (`PERSISTENCE LIST`); the reply arrives as `persistence:sessions`. The network is optional — any connected client sees the same session. */
 	"persistence:sessions:list": EventHandler<{network?: string}>;
@@ -346,6 +362,7 @@ interface ClientToServerEvents {
 	"network:get": (uuid: string) => void;
 	// TODO typing
 	"network:edit": (data: Record<string, any>) => void;
+	"network:presence-mode": (data: {network: string; mode: SharedNetworkMode}) => void;
 	"network:new": (data: Record<string, any>) => void;
 
 	"sign-out": (token?: string) => void;

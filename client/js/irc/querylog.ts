@@ -79,6 +79,12 @@ interface LoggedQuery {
 	name: string;
 	/** Epoch ms of the newest line. */
 	touched: number;
+	/**
+	 * Epoch ms this device last knew the query read up to (its read marker);
+	 * 0 for a query never read here. Absent in a log written before it was
+	 * kept, where nothing is known to be unread.
+	 */
+	read?: number;
 	messages: LoggedMsg[];
 }
 
@@ -263,6 +269,7 @@ function parse(raw: string | null): LoggedQuery[] {
 			.map((q) => ({
 				name: q.name,
 				touched: typeof q.touched === "number" ? q.touched : 0,
+				...(typeof q.read === "number" ? {read: q.read} : {}),
 				messages: q.messages.filter(validEntry),
 			}));
 	} catch {
@@ -312,6 +319,22 @@ export class QueryLog {
 				(m.aka ?? []).map((a): [string, number] => [a, i])
 			) ?? []
 		);
+	}
+
+	/** The time query `name` was last known read up to, if it was. */
+	readUpTo(name: string): Date | undefined {
+		const read = this.find(name)?.read;
+		return read === undefined ? undefined : new Date(read);
+	}
+
+	/** Query `name` was read up to `time` (its read marker moved). */
+	setRead(name: string, time: Date): void {
+		const query = enabled ? this.find(name) : undefined;
+
+		if (query && (query.read ?? 0) < time.getTime()) {
+			query.read = time.getTime();
+			this.changed();
+		}
 	}
 
 	/** Keep `msg` (a line shown in query `name`); anything not a message is ignored. */
@@ -468,7 +491,7 @@ export class QueryLog {
 		let query = this.find(name);
 
 		if (!query) {
-			query = {name, touched: 0, messages: []};
+			query = {name, touched: 0, read: 0, messages: []};
 			this.load().push(query);
 		}
 

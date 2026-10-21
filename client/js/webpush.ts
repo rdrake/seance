@@ -1227,6 +1227,43 @@ function renew(uuid: string): void {
 	void subscribe(uuid);
 }
 
+/** The networks the stash in IndexedDB carries a login for (an account and
+ * a remembered password): what the worker can sign in with when no page is
+ * left. Seeded from the stash itself at boot, since a reloaded page needs
+ * it before its own first write, and replaced by every write. Read
+ * synchronously at `pagehide` ({@link hasStashedLogin}). */
+const stashedLogins = new Set<string>();
+let stashWritten = false;
+
+function noteStashedLogins(
+	networks: {uuid?: unknown; saslAccount?: unknown; saslPassword?: unknown}[]
+): void {
+	stashedLogins.clear();
+
+	for (const net of networks) {
+		if (typeof net.uuid === "string" && net.saslAccount && net.saslPassword) {
+			stashedLogins.add(net.uuid);
+		}
+	}
+}
+
+/** Whether the service worker holds a login for `uuid` (presence.ts
+ * `leavesAwayToWorker`: the deferred `AWAY *` of a closing page). */
+export function hasStashedLogin(uuid: string): boolean {
+	return stashedLogins.has(uuid);
+}
+
+if (typeof indexedDB !== "undefined") {
+	void idbGet<{networks?: unknown}>("stash")
+		.then((stash) => {
+			// A write that landed first is newer: keep it.
+			if (!stashWritten && Array.isArray(stash?.networks)) {
+				noteStashedLogins(stash.networks);
+			}
+		})
+		.catch(() => undefined);
+}
+
 /** Stash what the service workers need: for every push-enabled network
  * that announced a key or holds an entry, its uuid, connection details and
  * the key its subscription was made against — that is how a worker
@@ -1256,6 +1293,8 @@ async function writeStash(): Promise<void> {
 
 	try {
 		await idbSet("stash", {vapid: anyVapid() ?? null, networks});
+		stashWritten = true;
+		noteStashedLogins(networks);
 	} catch (error) {
 		// eslint-disable-next-line no-console
 		console.warn("[webpush] could not write the service worker stash", error);
@@ -1299,31 +1338,6 @@ async function unsubscribe(uuid: string): Promise<void> {
 		console.warn("[webpush] unsubscription failed", error);
 	} finally {
 		refreshState();
-	}
-}
-
-/**
- * Snooze pushes for `ms` (0 = clear the snooze): account-wide, enforced by
- * the ircd's mute gate, so every device stops being woken up. Per-channel
- * mutes ride the same metadata key (see /pushmute).
- */
-function setSnooze(ms: number): void {
-	if (anyVapid() === undefined) {
-		return;
-	}
-
-	const until = ms > 0 ? Math.floor(Date.now() / 1000) + Math.floor(ms / 1000) : 0;
-
-	for (const [uuid, server] of servers) {
-		if (server.vapid === undefined || !pushOn(uuid)) {
-			continue;
-		}
-
-		socket.emit("webpush:metadata", {
-			network: uuid,
-			key: "draft/webpush/mute",
-			value: until > 0 ? `*:${until}` : "",
-		});
 	}
 }
 
@@ -1688,7 +1702,6 @@ export default {
 	subscribe,
 	renew,
 	unsubscribe,
-	setSnooze,
 	refresh,
 	onNetworkSaved,
 	networkPushInfo,

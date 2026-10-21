@@ -161,6 +161,21 @@ describe("Fake-lag clock and background queue (irc/fakelag.ts)", function () {
 			expect(sent).to.deep.equal(["a2"]);
 		});
 
+		it("keeps a `last` job behind every other, however late those are queued", function () {
+			const {lag, q, job} = queue();
+			lag.charge("X");
+			lag.charge("Y");
+			lag.charge("Z"); // nothing goes out yet
+			q.add({...job("q1"), last: true});
+			q.add(job("a"));
+			q.add({...job("q2"), last: true});
+			q.add(job("b"));
+			q.add(job("c"), {ahead: (k) => k === "b"});
+			q.add(job("front"), {front: true});
+			q.add(job("d"), {ahead: (k) => k === "nothing"});
+			expect(q.keys()).to.deep.equal(["front", "a", "c", "b", "d", "q1", "q2"]);
+		});
+
 		it("waits while the socket cannot take commands, and sends on the next pump", function () {
 			let ready = false;
 			const {q, sent, job} = queue(() => ready);

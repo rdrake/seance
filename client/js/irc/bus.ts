@@ -13,6 +13,7 @@ import {request} from "./request";
 import * as saved from "./saved-networks";
 import {checkServices, servicesBan} from "./services";
 import type {ConnectOptions} from "./types";
+import type {NetworkMode} from "../helpers/dnd";
 import {REPLY_TAG} from "./wire";
 
 export interface ClientRegistry {
@@ -134,8 +135,9 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 		}
 	});
 
-	// Account metadata writes for webpush settings (payload tier, mute/
-	// snooze list). SET with an empty value deletes the key.
+	// Account metadata writes for webpush settings (the payload tier; the
+	// mute list is pushMute.ts's, written private). SET with an empty value
+	// deletes the key.
 	bus.handle("webpush:metadata", ({network, key, value}) => {
 		const client = registry.clientForNetwork(network);
 
@@ -288,9 +290,26 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 			return;
 		}
 
-		// Unsaved live network (e.g. `/connect host`): seed from its options.
-		const base = existing ?? saved.normalize({...(client?.editableInfo ?? {}), uuid});
+		// Unsaved live network (e.g. `/connect host`): seed from its options,
+		// and the mode the lobby dot set (the form posts none it was not given).
+		const base =
+			existing ??
+			saved.normalize({
+				...(client?.editableInfo ?? {}),
+				uuid,
+				presenceMode: client?.presenceMode,
+			});
 		const next = saved.fromForm(data, base);
+		// A different mode from the form is a choice made now (shared,
+		// irc/presenceShare.ts); the same mode posted again is not.
+		const was = client?.presenceMode ?? saved.presenceModeOf(existing);
+		const modeChosen = saved.presenceModeOf(next) !== was;
+
+		// The time is never the form's: its defaults may be from before a
+		// choice made since (another device's, adopted, or the dot's).
+		const kept = client?.presenceAt ?? existing?.presenceAt;
+		next.presenceAt = modeChosen ? Date.now() : kept;
+
 		saved.save(next);
 
 		if (client) {
@@ -310,12 +329,59 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 
 			// Services support applies at once: the feed and the ban path read it live.
 			client.setServices(next.services);
+			client.setPresenceMode(
+				saved.presenceModeOf(next),
+				modeChosen ? next.presenceAt : undefined
+			);
 		}
 
 		const info = networkInfo(registry, uuid);
 
 		if (info) {
 			bus.dispatch("network:info", info);
+		}
+	});
+
+	// The lobby row's presence dot (NetworkLobby.vue), the network form and
+	// another device's DND Off: a choice made on this device, applied at
+	// once, stamped with its time and shared (irc/presenceShare.ts), and
+	// saved when the network is a saved one.
+	const setPresenceMode = (network: string, mode: NetworkMode): void => {
+		const client = registry.clientForNetwork(network);
+		const existing = saved.get(network);
+		const at = Date.now();
+
+		if (existing) {
+			saved.save({
+				...existing,
+				presenceMode: mode === "global" ? undefined : mode,
+				presenceAt: at,
+			});
+		}
+
+		client?.setPresenceMode(mode, at);
+	};
+
+	bus.handle("network:presence-mode", ({network, mode}) => setPresenceMode(network, mode));
+
+	// `dnd:cleared` (another device's DND Off, irc/pushMute.ts) leaves the
+	// network modes alone: a mode is the shared choice (irc/presenceShare.ts),
+	// and a device that leaves mode dnd sends its new mode itself. Turning it
+	// to auto here stamped a newer choice than the one that cleared the mute,
+	// and every device adopted auto. client/js/dnd.ts turns this device's own
+	// DND off on it.
+
+	// A newer choice from another device, adopted (irc/presenceShare.ts):
+	// saved, so the next load declares it.
+	bus.on("network:presence-shared", ({network, mode, at}) => {
+		const existing = saved.get(network);
+
+		if (existing) {
+			saved.save({
+				...existing,
+				presenceMode: mode === "global" ? undefined : mode,
+				presenceAt: at,
+			});
 		}
 	});
 

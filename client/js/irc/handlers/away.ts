@@ -14,7 +14,7 @@ const away: Handler = (client, msg) => {
 	const nick = msg.source?.name ?? "";
 	const raw = msg.params[0] ?? "";
 	// `draft/pre-away`: `*` is away for an unspecified reason — away, no text.
-	const text = raw === "*" ? "" : raw;
+	const text = raw === AWAY_STAR ? "" : raw;
 	const type = raw ? MessageType.AWAY : MessageType.BACK;
 	const time = client.timeOf(msg);
 
@@ -34,23 +34,29 @@ const away: Handler = (client, msg) => {
 
 	for (const chan of client.channels) {
 		if (chan.type === ChanType.QUERY) {
-			if (!client.namesEqual(chan.name, nick) || chan.userAway === text) {
+			// The state keeps the star itself (not "" — that is present), so
+			// "lunch" → `*` → back still ends with an "is back" line.
+			if (!client.namesEqual(chan.name, nick) || chan.userAway === raw) {
 				continue;
 			}
 
-			chan.userAway = text;
+			chan.userAway = raw;
 
 			// Someone else's star is their client saying it is not looking
 			// (`draft/pre-away`); the server only shows it to us because we
-			// speak pre-away too. State, not news: no line in the query.
-			if (raw !== AWAY_STAR) {
-				client.pushMessage(chan, {type, time, text, from: chan.userRef(nick)});
+			// speak pre-away too. State, not news: no line in the query, and
+			// no "is back" for a return from it either.
+			if (raw === AWAY_STAR || (type === MessageType.BACK && !chan.awayShown)) {
+				continue;
 			}
+
+			chan.awayShown = type === MessageType.AWAY;
+			client.pushMessage(chan, {type, time, text, from: chan.userRef(nick)});
 		} else if (chan.type === ChanType.CHANNEL) {
 			const user = chan.findUser(nick);
 
 			if (user) {
-				user.away = text;
+				user.away = raw;
 			}
 		}
 	}

@@ -25,6 +25,7 @@
 				>
 					🐞
 				</button>
+				<PresencePill />
 			</div>
 			<NetworkList />
 		</div>
@@ -78,12 +79,14 @@ import {computed, defineComponent, nextTick, onMounted, onUnmounted, PropType, r
 import {useRoute} from "vue-router";
 import {useStore} from "../js/store";
 import NetworkList from "./NetworkList.vue";
+import PresencePill from "./PresencePill.vue";
 import {devtoolsAvailable, toggleDevtools} from "../js/devtools";
 
 export default defineComponent({
 	name: "Sidebar",
 	components: {
 		NetworkList,
+		PresencePill,
 	},
 	props: {
 		overlay: {type: Object as PropType<HTMLElement | null>, required: true},

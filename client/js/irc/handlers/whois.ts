@@ -11,6 +11,7 @@ import {MessageType} from "../../../../shared/types/msg";
 import type {IrcClient} from "../client";
 import type {IrcMessage} from "../message";
 import type {Handler} from "../types";
+import {AWAY_STAR} from "../presence";
 
 export interface WhoisData {
 	nick: string;
@@ -345,21 +346,30 @@ const away: Handler = (client, msg) => {
 		return;
 	}
 
-	const text = last(msg) || "is away";
+	const raw = last(msg);
+	// `draft/pre-away`: nefarious2 hands a viewer that speaks it the bare
+	// `*` (away, no reason given) where others get its stock message. It is
+	// kept as the star: the whois card shows "Away" with no message for it,
+	// the query "is away" with none.
+	const star = raw === AWAY_STAR;
+	const state = star ? AWAY_STAR : raw || "is away";
 	const inProgress = pendingFor(client).get(client.casefold(nick));
 
 	if (inProgress) {
-		inProgress.away = text;
+		inProgress.away = state;
 		return;
 	}
 
 	const chan = client.findChannel(nick);
+	const text = star ? "" : state;
 
-	if (!chan || chan.type !== ChanType.QUERY || chan.userAway === text) {
+	// The query keeps the star as the AWAY handler does (handlers/away.ts).
+	if (!chan || chan.type !== ChanType.QUERY || chan.userAway === state) {
 		return;
 	}
 
-	chan.userAway = text;
+	chan.userAway = state;
+	chan.awayShown = true;
 	client.pushMessage(chan, {
 		type: MessageType.AWAY,
 		time: client.timeOf(msg),

@@ -36,6 +36,7 @@ import {hasVirtualKeyboard} from "./helpers/device";
 import {followSystemAccessibility} from "./helpers/systemAccessibility";
 import {lowerStatusBarTintAfterLaunch} from "./helpers/statusBarTint";
 import {onLaunch, openInstallGuideAtStart} from "./pwa";
+import dnd from "./dnd";
 // Also registers the IRC layer's bus handlers (input, names, more, network:*).
 import {autoconnectSavedNetworks, clientForNetwork, createNetwork} from "./irc/manager";
 
@@ -111,6 +112,10 @@ export async function boot(): Promise<void> {
 	installThemeSceneHooks();
 	installInputModality(document.documentElement, hasVirtualKeyboard() ? "touch" : "pointer");
 	installViewportHooks();
+
+	// After the stored settings, before any network dials: the first AWAY *
+	// decision already knows about do-not-disturb.
+	dnd.start();
 
 	store.commit("appLoaded");
 

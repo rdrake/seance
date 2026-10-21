@@ -276,6 +276,29 @@ the server tab on new connection"
 				</div>
 			</div>
 
+			<div class="connect-row">
+				<label for="connect:presenceMode">Presence</label>
+				<div class="input-wrap">
+					<!-- The dot menu's four words; what each means is the hint. -->
+					<select
+						id="connect:presenceMode"
+						v-model="presenceMode"
+						class="input"
+						name="presenceMode"
+						aria-describedby="connect-presence-hint"
+					>
+						<option value="global">Same as global</option>
+						<option value="online">Online</option>
+						<option value="auto">Auto</option>
+						<option value="away">Away</option>
+						<option value="dnd">Do not disturb</option>
+					</select>
+					<div id="connect-presence-hint" class="presence-mode-hint">
+						{{ presenceHint }}
+					</div>
+				</div>
+			</div>
+
 			<!--
 				Services support (docs/projects/oper-tools.md): shown once this
 				network is connected and opered. The package's conventional names
@@ -344,6 +367,12 @@ the server tab on new connection"
 </template>
 
 <style>
+.presence-mode-hint {
+	margin-block-start: 0.25rem;
+	font-size: 0.8125rem;
+	color: var(--body-color-muted);
+}
+
 .push-stale-hint {
 	margin-bottom: 8px;
 	font-size: 90%;
@@ -453,7 +482,15 @@ import {
 	ref,
 	watch,
 } from "vue";
-import {displayName, parseCommands, SavedNetwork, SERVICE_ROLES} from "../js/irc/saved-networks";
+import {
+	displayName,
+	parseCommands,
+	presenceModeOf,
+	SavedNetwork,
+	SERVICE_ROLES,
+} from "../js/irc/saved-networks";
+import type {NetworkMode} from "../js/helpers/dnd";
+import dnd from "../js/dnd";
 import {SERVICES_PROFILES, servicesProfileById} from "../js/irc/services/index";
 import {describeServiceCheck} from "../js/irc/services";
 import {servicesCheck} from "../js/helpers/operRequest";
@@ -461,6 +498,14 @@ import {isOperOn} from "../js/helpers/operMenu";
 import {useStore} from "../js/store";
 import webpush from "../js/webpush";
 import type {ServicesConfig, SharedNetworkStatus} from "../../shared/types/network";
+// What each presence mode means, under the select (the dot menu's words).
+const PRESENCE_HINTS: Record<NetworkMode, string> = {
+	global: "Follows the global mode under the logo.",
+	online: "Never away.",
+	auto: "Away when you're not looking.",
+	away: "Always away.",
+	dnd: "Away and silenced.",
+};
 
 /** The services roles as the form shows them, in order. */
 const SERVICE_ROLE_FIELDS: {
@@ -531,6 +576,38 @@ export default defineComponent({
 		// this network is connected and opered (nothing to set up before).
 		const liveNetwork = computed(() =>
 			props.defaults.uuid ? store.getters.findNetwork(props.defaults.uuid) : undefined
+		);
+		// The network's presence mode (the lobby dot's four, client/js/dnd.ts).
+		// Until the select is touched it shows the live mode, which the dot
+		// may have changed since this form was filled, and the field is not
+		// posted, so saving the form keeps what is stored. Same as global is
+		// no key at all, hence presenceModeOf; a pick is posted as is, and
+		// "global" clears the key.
+		const presenceTouched = ref(false);
+		const presenceMode = computed<NetworkMode>({
+			get: () =>
+				presenceTouched.value
+					? presenceModeOf(props.defaults)
+					: liveNetwork.value?.presence?.mode ?? presenceModeOf(props.defaults),
+			set(mode) {
+				presenceTouched.value = true;
+				props.defaults.presenceMode = mode;
+			},
+		});
+		// Same as global names what the global mode is now.
+		const presenceHint = computed(() =>
+			presenceMode.value === "global"
+				? `Follows the global mode under the logo, now ${
+						{online: "Online", auto: "Auto", away: "Away"}[dnd.state.mode.value]
+				  }.`
+				: PRESENCE_HINTS[presenceMode.value]
+		);
+		// Another network (or a fresh copy of this one) is a fresh form.
+		watch(
+			() => props.defaults,
+			() => {
+				presenceTouched.value = false;
+			}
 		);
 		const showServices = computed(
 			() => !!props.defaults.uuid && !!props.status?.connected && isOperOn(liveNetwork.value)
@@ -702,6 +779,11 @@ export default defineComponent({
 				services: showServices.value ? servicesValue() : props.defaults.services,
 			};
 			delete (data as NetworkFormDefaults).connected;
+
+			if (!presenceTouched.value) {
+				delete data.presenceMode;
+			}
+
 			return data;
 		};
 
@@ -741,6 +823,8 @@ export default defineComponent({
 		};
 
 		return {
+			presenceMode,
+			presenceHint,
 			pushInfo,
 			renewPush,
 			onNotifyToggle,

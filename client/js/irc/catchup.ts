@@ -30,7 +30,7 @@ import {ChanState, ChanType} from "../../../shared/types/chan";
 import type {Channel, MsgRef} from "./channel";
 import type {IrcClient} from "./client";
 import type {BatchHandler} from "./handlers/batch";
-import {fetchReadMarker} from "./handlers/markread";
+import {fetchReadMarker, markReadEnabled} from "./handlers/markread";
 import {
 	historyEnabled,
 	historyLimit,
@@ -40,7 +40,7 @@ import {
 } from "./history";
 import {formatLine, type IrcMessage} from "./message";
 
-/** What one channel's step is reckoned to cost: its history fetch (the marker query is a job of its own). */
+/** What one channel's history fetch is reckoned to cost (its marker query, when sent with it, adds MARKER_COST_MS). */
 export const CATCHUP_STEP_COST_MS = 2000;
 
 /** A mode query is one command. */
@@ -80,6 +80,8 @@ interface PendingCatchup {
 	 * with to tell that nothing is new.
 	 */
 	held: MsgRef | undefined;
+	/** Its marker query is a job of its own, queued right ahead of this step. */
+	markerQueued?: boolean;
 }
 
 /** The newest message per channel (casefolded name → ms), from a TARGETS answer. */
@@ -131,6 +133,13 @@ function pendingMap(client: IrcClient): Map<string, PendingCatchup> {
 
 const keyOf = (chan: Channel): string => `catchup:${chan.id}`;
 const modeKeyOf = (chan: Channel): string => `mode:${chan.id}`;
+/** A marker fetch: a query's (enqueueMarkerFetch), or a queued channel's, right ahead of its step. */
+const markerKeyOf = (chan: Channel): string => `marker:${chan.id}`;
+
+/** The marker is still unknown: neither stored nor answered (`*`) on this connection. */
+function needsMarker(chan: Channel): boolean {
+	return !chan.readMarker && !chan.markerAnswered;
+}
 
 /** Channels still waiting for their catch-up, in order (tests / diagnostics). */
 export function pendingCatchup(client: IrcClient): readonly Channel[] {
@@ -197,7 +206,32 @@ export function enqueueCatchup(
 function queueStep(client: IrcClient, pending: PendingCatchup, history = true): void {
 	const key = keyOf(pending.chan);
 	const map = pendingMap(client);
+	const chan = pending.chan;
 	map.set(key, pending);
+
+	// The marker query goes first, so its answer is in before the history it
+	// decides the unread count of (deliverPrepend): the server replies in
+	// order. A job of its own, so a server that volunteers the marker after
+	// JOIN (nefarious2 does for a logged-in account, `*` when none is
+	// stored) has done so by its turn and the query is dropped; and each
+	// job is one command, which fits the clock's room sooner than two.
+	if (needsMarker(chan)) {
+		pending.markerQueued = true;
+		client.background.add({
+			key: markerKeyOf(chan),
+			cost: MARKER_COST_MS,
+			run() {
+				if (
+					needsMarker(chan) &&
+					chan.state === ChanState.JOINED &&
+					client.transport.state === "open"
+				) {
+					fetchReadMarker(client, chan);
+				}
+			},
+		});
+	}
+
 	client.background.add({
 		key,
 		cost: CATCHUP_STEP_COST_MS,
@@ -206,6 +240,110 @@ function queueStep(client: IrcClient, pending: PendingCatchup, history = true): 
 			step(client, pending, history);
 		},
 	});
+}
+
+/**
+ * After registration: ask for a query's read marker, so a private message
+ * read on another device while this one was away stops counting here.
+ * Queries are never JOINed, so nothing else asks, and the server volunteers
+ * markers only for channels. Behind every channel (a `last` job, so the
+ * channels' catch-up queued after it still goes first), and skipped when
+ * its turn comes if the query has nothing unread to lower. Never queued
+ * for a server without the cap, and once per connection: `autojoin()`
+ * runs again after a held session's restoration, by when a replay may
+ * have asked already.
+ */
+export function enqueueMarkerFetch(client: IrcClient, chan: Channel): void {
+	const asked = askedOf(client);
+
+	if (!markReadEnabled(client) || asked.has(chan)) {
+		return;
+	}
+
+	// Registration: the autojoin's echoes have not queued their channels
+	// yet, and a job queued now would run ahead of them on an empty queue.
+	if (joinsInFlight(client)) {
+		holdMarker(client, chan);
+		return;
+	}
+
+	queueMarker(client, chan);
+}
+
+function queueMarker(client: IrcClient, chan: Channel): void {
+	const asked = askedOf(client);
+	client.background.add({
+		key: markerKeyOf(chan),
+		cost: MARKER_COST_MS,
+		last: true,
+		run() {
+			if (
+				chan.shared.unread > 0 &&
+				client.channels.includes(chan) &&
+				client.transport.state === "open"
+			) {
+				asked.add(chan);
+				fetchReadMarker(client, chan);
+			}
+		},
+	});
+}
+
+/** Longest a query's marker waits for the autojoin's echoes (a JOIN refused never echoes). */
+export const MARKER_HOLD_MS = 5000;
+
+/** Queries whose marker went out on this connection: asked once, like a channel's history. */
+const askedMarkers = new WeakMap<IrcClient, Set<Channel>>();
+/** Query markers waiting for the autojoin's echoes. */
+const heldMarkers = new WeakMap<
+	IrcClient,
+	{chans: Set<Channel>; timer: ReturnType<typeof setTimeout>}
+>();
+
+function askedOf(client: IrcClient): Set<Channel> {
+	let asked = askedMarkers.get(client);
+
+	if (!asked) {
+		asked = new Set();
+		askedMarkers.set(client, asked);
+	}
+
+	return asked;
+}
+
+/** An autojoin channel whose JOIN has not echoed yet. */
+function joinsInFlight(client: IrcClient): boolean {
+	return client.channels.some(
+		(c) => c.type === ChanType.CHANNEL && c.autoJoin && c.state === ChanState.PARTED
+	);
+}
+
+function holdMarker(client: IrcClient, chan: Channel): void {
+	let held = heldMarkers.get(client);
+
+	if (!held) {
+		const timer = setTimeout(() => releaseMarkers(client, true), MARKER_HOLD_MS);
+		held = {chans: new Set(), timer};
+		heldMarkers.set(client, held);
+	}
+
+	held.chans.add(chan);
+}
+
+/** Queue the held markers once every autojoin echo is in (or the hold ran out). */
+export function releaseMarkers(client: IrcClient, force = false): void {
+	const held = heldMarkers.get(client);
+
+	if (!held || (!force && joinsInFlight(client))) {
+		return;
+	}
+
+	clearTimeout(held.timer);
+	heldMarkers.delete(client);
+
+	for (const chan of held.chans) {
+		queueMarker(client, chan);
+	}
 }
 
 /** The user opened `chan`: if it is still waiting, serve it immediately. */
@@ -227,8 +365,16 @@ export function prioritiseCatchup(client: IrcClient, chan: Channel): void {
 	const job = client.background.take(keyOf(chan));
 
 	if (job) {
+		// Its marker query first, if it is still waiting ahead of it.
+		client.background.take(markerKeyOf(chan))?.run();
 		job.run();
 	}
+
+	// A query's marker fetch (enqueueMarkerFetch) keeps its turn: opened
+	// with someone looking, the query is read (IrcClient.open) and the job
+	// sends nothing at its turn on `unread === 0`; with nobody looking the
+	// open reads nothing, so the server's marker is still wanted. A PM that
+	// lands after the user leaves again is the case the fetch is for.
 }
 
 /** Forget a channel we left / removed while it was waiting. */
@@ -236,13 +382,16 @@ export function dropFromCatchup(client: IrcClient, chan: Channel): void {
 	unpark(client, chan);
 	takePending(client, chan);
 	client.background.take(modeKeyOf(chan));
-	client.background.take(`marker:${chan.id}`);
+	client.background.take(markerKeyOf(chan));
 	client.background.take(`page:${chan.id}`);
 }
 
 /** Transport closed: nothing queued survives (the reconnect re-JOINs). */
 export function cancelCatchup(client: IrcClient): void {
 	pendingMap(client).clear();
+	askedOf(client).clear();
+	clearTimeout(heldMarkers.get(client)?.timer);
+	heldMarkers.delete(client);
 	client.background.drop((key) => /^(catchup|mode|marker|page|targets):/.test(key));
 	clearTimeout(targetsOf.get(client)?.timer);
 	targetsOf.delete(client);
@@ -252,7 +401,12 @@ function takePending(client: IrcClient, chan: Channel): PendingCatchup | undefin
 	const key = keyOf(chan);
 	const pending = pendingMap(client).get(key);
 	pendingMap(client).delete(key);
-	client.background.take(key);
+
+	if (client.background.take(key)) {
+		// Whoever takes the step sends its marker query with it (fetchFor).
+		client.background.take(markerKeyOf(chan));
+	}
+
 	return pending;
 }
 
@@ -288,7 +442,7 @@ function step(client: IrcClient, next: PendingCatchup, history = true): void {
 	}
 
 	if (!next.prefetched) {
-		fetchFor(client, next.chan, next.before, history);
+		fetchFor(client, next.chan, next.before, history, !next.markerQueued);
 	}
 
 	if (next.chan.id === client.activeChannelId) {
@@ -300,37 +454,24 @@ function fetchFor(
 	client: IrcClient,
 	chan: Channel,
 	before: MsgRef | undefined,
-	history = true
+	history = true,
+	marker = true
 ): void {
+	// nefarious2 volunteers the marker after a logged-in account's JOIN (`*`
+	// when none is stored), a held session's restore included: then it has
+	// an answer and costs nothing. Else ask, once per connection, and first,
+	// so the answer is in before the history it decides the unread count of
+	// (deliverPrepend): the server replies in order. A queued step's marker
+	// query went (or was dropped) in its own job just ahead (queueStep).
+	if (marker && needsMarker(chan)) {
+		fetchReadMarker(client, chan);
+	}
+
 	if (history) {
 		requestChannelHistory(client, chan, before);
 	}
 
 	retryLostHistory(client, chan);
-
-	// Some servers volunteer the marker after JOIN (nefarious2 does for a
-	// logged-in account, `*` when none is stored). So the query waits in the
-	// background queue — by the time the clock has room, a volunteered
-	// marker has arrived and the query is dropped; a server that says
-	// nothing is asked. Once per channel, `*` counting as an answer.
-	if (!chan.readMarker && !chan.markerAnswered) {
-		client.background.add(
-			{
-				key: `marker:${chan.id}`,
-				cost: MARKER_COST_MS,
-				run() {
-					if (
-						!chan.readMarker &&
-						!chan.markerAnswered &&
-						chan.state === ChanState.JOINED
-					) {
-						fetchReadMarker(client, chan);
-					}
-				},
-			},
-			{front: true}
-		);
-	}
 }
 
 // ------------------------------------------------------------ TARGETS

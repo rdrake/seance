@@ -1,7 +1,7 @@
 import {expect} from "chai";
 import sinon from "sinon";
 import {momentAt} from "../../../client/js/scenes/ps/engine";
-import {sceneClasses} from "../../../client/js/scenes/ps/markup";
+import {moonShape, sceneClasses} from "../../../client/js/scenes/ps/markup";
 import {paletteAt} from "../../../client/js/scenes/ps/palette";
 import {mount, RELEASE_MS} from "../../../client/js/scenes/psng/scene";
 import {NG_STILL_CSS} from "../../../client/js/scenes/psng/styles";
@@ -217,9 +217,18 @@ describe("ps NG scene: mount (psng/scene.ts, on a stand-in page)", function () {
 		});
 	});
 
-	// Captured from NG when classic was deleted (2026-10-17), where it matched classic exactly.
+	// Captured from NG when classic was deleted (2026-10-17), where it matched
+	// classic exactly. The moon is read from the engine, not pinned: everything
+	// else runs on the local clock, so this local noon publishes the same in
+	// every zone, while the phase is the absolute instant's (engine.ts
+	// moonPhase on epochDays) and local noon that day is 16:00Z where this was
+	// captured, 19:00Z on the Pacific coast and 12:00Z under TZ=UTC, each a
+	// different rx. The phase itself is held to true full and new moons in
+	// test/scenes/ps/engine.ts, the shape rule in test/scenes/ps/scene.ts.
 	it("publishes the noon of 21 June 2026", function () {
-		withPage(new Date(2026, 5, 21, 12, 0), (page) => {
+		const at = new Date(2026, 5, 21, 12, 0);
+		const lit = moonShape(momentAt(at).phase);
+		withPage(at, (page) => {
 			const meta = page.plantMeta(THEME_COLOR);
 			const scene = mountOn(page);
 			expect(published(page, meta)).to.deep.equal({
@@ -320,8 +329,8 @@ describe("ps NG scene: mount (psng/scene.ts, on a stand-in page)", function () {
 					"--ps-db-ink": "#3a3436",
 				},
 				moon: {
-					rx: "1.46",
-					fill: "#000",
+					rx: lit.rx.toFixed(2),
+					fill: lit.fill,
 				},
 				meta: "#4291e6",
 			});

@@ -53,9 +53,11 @@ export interface CapResult {
  * see multiline.ts), `draft/webpush` likewise needs a `vapid=` value — a
  * server without its VAPID key cannot send pushes (see webpush.ts and
  * docs/projects/push-subscription.md) — and `draft/metadata-2` carries the
- * account settings push needs (payload tier, mute/snooze). `draft/pre-away`
- * lets a hidden page say `AWAY *` before `CAP END`, where it costs no fake
- * lag (presence.ts). Deliberately
+ * account settings push needs (payload tier, the push mute list (do not
+ * disturb)), and
+ * `draft/pre-away` lets the away state be declared before `CAP END`, so a
+ * resumed bouncer session is never announced as back (presence.ts
+ * `registrationAwayLine`). Deliberately
  * absent: `draft/bouncer`, `no-implicit-names`.
  */
 export const SEANCE_CAPS: CapNegotiatorOptions = {
@@ -158,11 +160,11 @@ export class CapNegotiator {
 	beforeEnd?: () => string[];
 
 	/**
-	 * Called after each `CAP REQ` with the caps it names; lines it returns
-	 * go right behind it, ahead of the SASL opener or `CAP END` (`AWAY *`
-	 * under `draft/pre-away`, presence.ts: the server reads the REQ first).
+	 * Lines sent immediately before `CAP END`, in the same flush, whichever
+	 * way negotiation ends (pipelined, after a late ACK/NAK, or after SASL):
+	 * the `draft/pre-away` declaration of the away state (presence.ts).
 	 */
-	afterRequest?: (names: string[]) => string[];
+	finalLines?: () => string[];
 
 	private readonly required: string[];
 	private readonly wanted: string[];
@@ -192,7 +194,7 @@ export class CapNegotiator {
 
 		this.ended = true;
 		this.pendingEnd = false;
-		return ["CAP END"];
+		return this.endLines();
 	}
 
 	/** True once `CAP END` has been emitted. */
@@ -324,7 +326,11 @@ export class CapNegotiator {
 		}
 
 		this.ended = true;
-		result.send.push("CAP END");
+		result.send.push(...this.endLines());
+	}
+
+	private endLines(): string[] {
+		return [...(this.finalLines?.() ?? []), "CAP END"];
 	}
 
 	private onAck(caps: [string, string][]): void {
@@ -357,7 +363,7 @@ export class CapNegotiator {
 			) {
 				this.nakRetried.add(name);
 				this.outstanding.add(name);
-				result.send.push(REQ_PREFIX + name, ...(this.afterRequest?.([name]) ?? []));
+				result.send.push(REQ_PREFIX + name);
 				continue;
 			}
 
@@ -434,8 +440,6 @@ export class CapNegotiator {
 		for (const chunk of splitMessage(REQ_PREFIX.length, names.join(" "), MAX_LINE_BYTES)) {
 			result.send.push(REQ_PREFIX + chunk);
 		}
-
-		result.send.push(...(this.afterRequest?.(names) ?? []));
 	}
 
 	private maybeEnd(result: CapResult): void {
@@ -458,6 +462,6 @@ export class CapNegotiator {
 		}
 
 		this.ended = true;
-		result.send.push("CAP END");
+		result.send.push(...this.endLines());
 	}
 }

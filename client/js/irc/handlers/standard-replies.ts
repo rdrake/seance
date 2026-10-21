@@ -18,6 +18,7 @@ import {targetsFailed} from "../catchup";
 import {chatHistoryFailed} from "../history";
 import {multilineCooldown, multilineRejected} from "../multiline";
 import {inRestorationWindow, noteRestorationActivity, persistenceFailed} from "../persistence";
+import {isOwnMetadataKey} from "./metadata";
 import type {Handler} from "../types";
 import type {IrcClient} from "../client";
 import type {IrcMessage} from "../message";
@@ -217,6 +218,14 @@ function reply(kind: "FAIL" | "WARN" | "NOTE"): Handler {
 			return; // a refused / unknown catch-up cursor: nothing for the user
 		}
 
+		if (kind === "FAIL" && command.toUpperCase() === "METADATA" && isOwnMetadataKey(rest[0])) {
+			// A key this client keeps by itself (the push mute, the shared
+			// presence): a server with draft/metadata-2 that does not take the
+			// name refuses every SUB and GET on each connect. Nothing the user
+			// asked for, and nothing written follows a read that failed.
+			return;
+		}
+
 		if (kind === "NOTE" && command.toUpperCase() === "BOUNCER") {
 			// The bouncer talks to us while it reattaches us to a held
 			// session; its channel-state burst follows. Keep the autojoin
@@ -224,6 +233,10 @@ function reply(kind: "FAIL" | "WARN" | "NOTE"): Handler {
 			// phone it would arrive on every switch back to the app.
 			const routine = inRestorationWindow(client);
 			noteRestorationActivity(client);
+
+			if (code.toUpperCase() === "ALIAS_ATTACHED") {
+				client.bouncerAlias = true;
+			}
 
 			if (routine && code.toUpperCase() === "ALIAS_ATTACHED") {
 				return;

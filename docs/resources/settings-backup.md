@@ -45,6 +45,7 @@ file from a newer version is refused with a message.
 | `thelounge.media.trusted`      | trusted media hosts / channels / accounts  |
 | `thelounge.reactions.recent`   | the reaction picker's recents              |
 | `thelounge.aliases`            | command aliases (Settings → Aliases)       |
+| `thelounge.dnd`                | do not disturb: the switch and its window  |
 | `thelounge.ignore.<uuid>`      | ignore list per network                    |
 
 Left out on purpose: `thelounge.sts` (a cache), `thelounge.push*` (this

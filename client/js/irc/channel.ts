@@ -12,6 +12,28 @@ import type {HistorySpec} from "./history";
 
 export type Casefold = (s: string) => string;
 
+/**
+ * Lines someone says. Our own mean we read the channel (draft/read-marker);
+ * someone else's count as unread, live or caught up.
+ */
+export const SAID_TYPES: ReadonlySet<MessageType> = new Set([
+	MessageType.MESSAGE,
+	MessageType.ACTION,
+	MessageType.NOTICE,
+]);
+
+/**
+ * A line delivered without a live `pushMessage` (a history page, a restored
+ * query log) counts as unread past the read marker when a live one would
+ * have: something someone else said, not an edit, or a highlight.
+ */
+export function countsAsUnread(msg: SharedMsg): boolean {
+	return (
+		!msg.self &&
+		((SAID_TYPES.has(msg.type ?? MessageType.MESSAGE) && !msg.editOf) || !!msg.highlight)
+	);
+}
+
 /** What a CHATHISTORY request can point at: a message's msgid and/or time. */
 export interface MsgRef {
 	msgid?: string;
@@ -63,8 +85,17 @@ export class Channel {
 	modeText: string | undefined = undefined;
 	/** The user asked for the modes (`/mode #chan`): show the next 324 even if it is unchanged. */
 	modesAsked = false;
-	/** Last away message seen for the peer of a query window. */
+	/**
+	 * Last away state seen for the peer of a query window: their message,
+	 * `*` (`draft/pre-away`: away, no reason given), "" once back.
+	 */
 	userAway: string | undefined = undefined;
+	/**
+	 * The query's last away line was an "is away": only then does the peer's
+	 * return get an "is back" (a pre-away peer's tab-switch star → back
+	 * showed nothing on the way out, so it shows nothing on the way back).
+	 */
+	awayShown = false;
 	/** Reference of every message handed to the UI, by id (`more` cursor lookup). */
 	readonly msgRefs = new Map<number, MsgRef>();
 	/**

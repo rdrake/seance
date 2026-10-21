@@ -1,7 +1,11 @@
 // UI cleanup verification for the push-notification settings work:
 //
-//   corepack yarn build && python3 -m http.server -d public 8100 &
+//   corepack yarn build && python3 -m http.server -d public 8001 &
 //   node tools/browser-drive.mjs tools/scenarios/ui-cleanup.mjs
+//
+// SEANCE_URL (default http://127.0.0.1:8001/) points it at another build;
+// SEANCE_SASL_ACCOUNT / SEANCE_SASL_PASSWORD at another account (default
+// pushtest1, the testnet's push test account).
 //
 // Checks, in a real browser against the testnet ircd (SASL + draft/webpush):
 //   1. the connect-time "enable push notifications?" prompt appears once the
@@ -10,16 +14,25 @@
 //   3. "Never" closes it and it stays closed across reloads (device-local);
 //   4. the Settings → Notifications screen no longer renders the Session
 //      panel (list / Refresh / Force logout are gone);
-//   5. the snooze buttons sit in their own block with margins between the
-//      buttons (a fake subscription is planted in localStorage to reach the
-//      subscribed state — headless Chromium has no FCM to make a real one).
+//   5. subscribed, Settings still only hints at the network editor (the
+//      Push API is faked, lib/fake-push.mjs, with notifications granted —
+//      headless Chromium has no FCM to make a real one). The snooze
+//      row it used to measure is gone: do not disturb replaced it
+//      (docs/projects/do-not-disturb.md).
 
-const IRCD = "ws://127.0.0.1:8067/";
+import {FAKE_PUSH_API, pushScope, storedSubs, waitFrame} from "./lib/fake-push.mjs";
 
+const ORIGIN = new URL(process.env.SEANCE_URL ?? "http://127.0.0.1:8001/").origin;
+const ACCOUNT = process.env.SEANCE_SASL_ACCOUNT ?? "pushtest1";
+const PASSWORD = process.env.SEANCE_SASL_PASSWORD ?? "pushtest1-pass";
+const STORE = `document.querySelector("[data-v-app]").__vue_app__.config.globalProperties.$store`;
+
+// A link never carries the password (link approval, helpers/linkTarget.ts):
+// the first load fills it into the connect form, remembered, and every later
+// load is the app's own URL, where the saved network autoconnects.
 export const url =
-	`http://127.0.0.1:8100/?host=127.0.0.1&port=8067&tls=false` +
-	`&nick=puiclean&join=%23seance&sasl=plain&saslAccount=testaccount&saslPassword=mypassword` +
-	`&autoconnect=1`;
+	`${ORIGIN}/?host=127.0.0.1&port=8067&tls=false` +
+	`&nick=puiclean&join=%23seance&sasl=plain&saslAccount=${encodeURIComponent(ACCOUNT)}`;
 
 const frameText = (f) => (typeof f.payloadData === "string" ? f.payloadData : "");
 
@@ -65,7 +78,20 @@ const openSettings = `(() => {
 export default async function run(page) {
 	// --- pass 1: fresh profile, prompt appears, "No" closes it ------------
 	let before = page.wsFrames.length;
-	await page.goto(page.url, {waitForSelector: "#chat"});
+	await page.goto(page.url, {waitForSelector: "#connect form"});
+	await page.fill('#connect input[name="saslPassword"]', PASSWORD);
+
+	for (const name of ["rememberPassword", "autoconnect"]) {
+		if (
+			!(await page.evaluate(
+				`document.querySelector('#connect input[name="${name}"]')?.checked ?? true`
+			))
+		) {
+			await page.click(`#connect input[name="${name}"]`);
+		}
+	}
+
+	await page.click('#connect button[type="submit"]');
 	await waitRegistered(page, before);
 
 	await page.waitFor(promptOpened, {label: "the push subscribe prompt to open"});
@@ -79,7 +105,7 @@ export default async function run(page) {
 
 	// --- pass 2: reload → "No" means it asks again -------------------------
 	before = page.wsFrames.length;
-	await page.goto(page.url, {waitForSelector: "#chat"});
+	await page.goto(`${ORIGIN}/`, {waitForSelector: "#chat"});
 	await waitRegistered(page, before);
 	await page.waitFor(promptOpened, {label: "the prompt to ask again after 'No'"});
 	page.check("'No' is not sticky: the prompt asks again on the next connect", true);
@@ -91,7 +117,7 @@ export default async function run(page) {
 
 	// --- pass 3: reload → "Never" is sticky --------------------------------
 	before = page.wsFrames.length;
-	await page.goto(page.url, {waitForSelector: "#chat"});
+	await page.goto(`${ORIGIN}/`, {waitForSelector: "#chat"});
 	await waitRegistered(page, before);
 	await page.sleep(1500); // give any (wrongly) shown prompt its moment
 	await page.waitFor(`!(${promptOpened})`, {label: "the prompt to stay closed"});
@@ -114,28 +140,30 @@ export default async function run(page) {
 	);
 	await page.screenshot("2-settings-unsubscribed");
 
-	// --- snooze block with margins (fake subscription → subscribed) -------
-	await page.evaluate(
-		`localStorage.setItem("thelounge.push", JSON.stringify({
-			"fake-vapid-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef": {
-				endpoint: "https://fcm.googleapis.com/fcm/send/fake",
-				keys: {p256dh: "B".repeat(88), auth: "A".repeat(22)},
-			},
-		}))`
-	);
+	// --- subscribed (the faked Push API, permission granted) -------------
+	// Never only stops the asking: forget it, grant the permission, and the
+	// next connect subscribes without a prompt (webpush.ts).
+	await page.evaluate(`localStorage.removeItem("thelounge.push.neverAsk")`);
+	await page.grantPermissions(["notifications"], ORIGIN);
+	await page.addInitScript(FAKE_PUSH_API);
 	before = page.wsFrames.length;
-	await page.goto(page.url, {waitForSelector: "#chat"});
+	await page.goto(`${ORIGIN}/`, {waitForSelector: "#chat"});
 	await waitRegistered(page, before);
+	await page.waitFor(`${STORE}.state.pushNotificationState === "subscribed"`, {
+		label: "push subscribed",
+		timeout: 30000,
+	});
 	await page.waitFor(`!(${promptOpened})`, {label: "no prompt while subscribed"});
 	await page.waitFor(openSettings, {label: "the settings window again"});
 
-	await page.waitFor(`!!document.querySelector(".push-snooze")`, {
-		label: "the snooze row to render",
-	});
+	await page.waitFor(
+		`!!document.querySelector(".dnd-schedule") && ${STORE}.state.pushNotificationState === "subscribed"`,
+		{label: "the notification settings, subscribed"}
+	);
 
 	// Enrollment moved into the network editor: the panel keeps only the
-	// hint, the snooze row and the browser-level warnings - no rows, no
-	// global toggle, no status dot.
+	// hint, the do-not-disturb schedule and the browser-level warnings - no
+	// rows, no global toggle, no status dot.
 	const pushPanel = await page.evaluate(
 		`(() => JSON.stringify({
 			rows: document.querySelectorAll(".push-network").length,
@@ -153,25 +181,35 @@ export default async function run(page) {
 		})()
 	);
 
-	const spacing = await page.evaluate(
-		`(() => {
-			const row = document.querySelector(".push-snooze");
-			const btns = row ? [...row.querySelectorAll("button")] : [];
-			const second = btns[1];
-
-			return JSON.stringify({
-				count: btns.length,
-				block: row ? getComputedStyle(row).display !== "inline" : false,
-				gap: second ? getComputedStyle(second).marginLeft : "none",
-			});
-		})()`
-	);
-	page.check(
-		"snooze buttons render as their own block with margins between them",
-		spacing === JSON.stringify({count: 4, block: true, gap: "8px"})
-	);
 	await page.screenshot("3-settings-subscribed");
 
-	// Leave the profile clean of the fake subscription.
-	await page.evaluate(`localStorage.removeItem("thelounge.push")`);
+	// Leave the account with no endpoint: push off for the network
+	// unsubscribes it and drops its registration (as push-renew.mjs ends).
+	const uuid = await page.evaluate(
+		`JSON.parse(localStorage.getItem("thelounge.networks"))[0].uuid`
+	);
+	const mark = page.wsFrames.length;
+	await page.evaluate(`location.hash = "#/edit-network/${uuid}"`);
+	await page.waitFor(`!!document.querySelector('input[name="pushEnabled"]')`, {
+		label: "the push checkbox in Edit network",
+	});
+
+	for (const selector of ['input[name="pushEnabled"]', 'button[type="submit"]']) {
+		await page.evaluate(
+			`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block: "center"})`
+		);
+		await page.click(selector);
+	}
+
+	await waitFrame(page, mark, "out", /^WEBPUSH UNREGISTER /, "the cleanup UNREGISTER");
+	await page.waitFor(
+		`navigator.serviceWorker.getRegistrations().then((rs) => !rs.some((r) => r.scope === ${JSON.stringify(
+			pushScope(ORIGIN, uuid)
+		)}))`,
+		{label: "the network's registration to be dropped"}
+	);
+	page.check(
+		"cleanup: push off unsubscribed the network",
+		Object.keys(await storedSubs(page)).length === 0
+	);
 }

@@ -12,7 +12,9 @@
  *   `socket-events/more.ts` as one `more` event, oldest first, with ids
  *   below everything the channel already shows (`IdAllocator.historyIds`).
  *   A replayed mention keeps `highlight` (the line renders highlighted),
- *   but history never notifies and never counts as unread.
+ *   but history never notifies; what it holds past a known read marker
+ *   counts as unread (the first page after a JOIN is often all the
+ *   catch-up there is).
  * - **Catch-up** (re-JOIN after a reconnect): the spec's own gap-filling
  *   loop (chathistory.md, "Client pseudocode"): `CHATHISTORY LATEST`, then
  *   `BEFORE <oldest of the page>` back until a page overlaps what we already
@@ -24,9 +26,9 @@
  *   by an anchor the server can no longer see (a presence gap, retention,
  *   a clock disagreement): it stops where the server's history meets ours.
  *   The pages are gathered and appended once, oldest first, as ordinary
- *   `msg` events flagged `replay` (shown with their highlights, but no
- *   unread / notification side effects). The server
- *   can drive the same thing itself off a `PERSISTENCE ATTACH` cursor, in
+ *   `msg` events flagged `replay`: counted as unread like live ones
+ *   (`IrcClient.pushMessage`), but no notification or mention entry. The
+ *   server can drive the same thing itself off a `PERSISTENCE ATTACH` cursor, in
  *   which case its `chathistory` batches arrive unasked inside a
  *   `evilnet.github.io/bouncer-replay` wrapper and take the same path
  *   (persistence.ts).
@@ -42,6 +44,8 @@ import type {SharedMsg} from "../../../shared/types/msg";
 import type {Channel, MsgRef} from "./channel";
 import type {IrcClient, ReplayCollection} from "./client";
 import type {BatchHandler} from "./handlers/batch";
+import {countPageUnread, scheduleMarkRead} from "./handlers/markread";
+import {enqueueMarkerFetch} from "./catchup";
 import {formatLine, IrcMessage} from "./message";
 import {settlePendingLabel} from "./pending";
 import {inBouncerReplay, inServerCatchup} from "./persistence";
@@ -420,8 +424,8 @@ function replay(client: IrcClient, chan: Channel, lines: IrcMessage[]): Replayed
 		}
 
 		// msg.highlight is kept: a replayed mention renders highlighted.
-		// Delivery is what stays silent (no counters, no notification) —
-		// deliverAppend pushes with `replay` and `more` never notifies.
+		// Delivery is what stays silent (no notification) — deliverAppend
+		// pushes with `replay` and `more` never notifies.
 		messages.push(msg);
 	}
 
@@ -449,10 +453,18 @@ function deliverPrepend(
 ): void {
 	const ids = client.historyIds(messages.length);
 	let lastRef: MsgRef | undefined;
+	// The first page after a JOIN is the only catch-up when the server had
+	// no cursor to replay from, and the read marker (sent right after the
+	// JOIN) is known by then: what someone else said past it is unread.
+	const marker = chan.readMarker;
+	const looking = chan.id === client.activeChannelId && client.presence.attended;
+	const page: Array<[SharedMsg, MsgRef]> = [];
 
 	messages.forEach((msg, i) => {
 		msg.id = ids[i];
 		lastRef = chan.remember(msg);
+		page.push([msg, lastRef]);
+
 		// Older by definition, but a LATEST fill can still hold the newest
 		// line we have seen; noteCursor only ever moves forward.
 		client.noteCursor(msg);
@@ -466,6 +478,11 @@ function deliverPrepend(
 		chan.newestRef = lastRef;
 	}
 
+	if (looking && messages.length > 0) {
+		// Shown to someone looking: read, as a live line would be.
+		scheduleMarkRead(client, chan);
+	}
+
 	chan.shared.totalMessages += messages.length;
 	// `moreAvailable` is the decision (end tag / full page / retryable
 	// timeout); it used to travel as totalMessages+1 and be re-derived by
@@ -476,14 +493,25 @@ function deliverPrepend(
 	// other way. Send the boolean; totalMessages stays for other readers.
 	const totalMessages = chan.shared.totalMessages + (moreAvailable ? 1 : 0);
 	client.dispatch("more", {chan: chan.id, messages, totalMessages, moreAvailable});
+
+	if (marker && !looking) {
+		countPageUnread(client, chan, page, marker);
+	}
 }
 
-/** Append catch-up messages as live ones, without unread / notification effects. */
+/** Append catch-up messages as live ones: counted as unread, never notified. */
 function deliverAppend(client: IrcClient, chan: Channel, messages: SharedMsg[]): void {
 	for (const msg of messages) {
 		// pushMessage copies; write the id back so post-replay work
 		// (`afterReplay` closures hold the collected objects) can find it.
 		msg.id = client.pushMessage(chan, msg, false, {replay: true}).id;
+	}
+
+	// Unread against this device's read point only: another device may have
+	// read it. The autojoin's ask for the query's marker may already have
+	// been skipped, with nothing unread then (catchup.ts).
+	if (chan.type === ChanType.QUERY && chan.shared.unread > 0) {
+		enqueueMarkerFetch(client, chan);
 	}
 }
 
@@ -664,9 +692,9 @@ export const chathistoryBatch: BatchHandler = (client, batch) => {
 
 /**
  * One inner batch of the server-driven catch-up (persistence.ts): appended
- * like the gathered pages of our own catch-up — highlights kept but silent
- * (`replay`), no unread, msgid dedupe against what the channel already shows. A PM from someone we have
- * no window for opens one, as a live message would.
+ * like the gathered pages of our own catch-up — counted as unread but silent
+ * (`replay`), msgid dedupe against what the channel already shows. A PM from
+ * someone we have no window for opens one, as a live message would.
  */
 function deliverCatchup(client: IrcClient, target: string, lines: IrcMessage[]): void {
 	if (!target) {

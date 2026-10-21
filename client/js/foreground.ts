@@ -12,9 +12,10 @@
 // The same moments are when a window that stayed open should look for a
 // newer build (pwa.ts checkForUpdate, throttled there).
 
-import {reconnectAll, setAttendedAll} from "./irc/manager";
+import {networksLeavingAwayToWorker, reconnectAll, setAttendedAll} from "./irc/manager";
 import {UNFOCUSED_AWAY_MS} from "./irc/presence";
 import {checkForUpdate} from "./pwa";
+import {hasStashedLogin} from "./webpush";
 
 function wake(): void {
 	reconnectAll();
@@ -30,6 +31,9 @@ export function installForegroundHooks(): void {
 	// is a phone switching apps; a visible page that lost focus waits
 	// UNFOCUSED_AWAY_MS so an alt-tab does not flap `AWAY *`.
 	let unfocusedTimer: ReturnType<typeof setTimeout> | null = null;
+	// The networks whose `AWAY *` the service worker took over as the page
+	// unloads (below): the visibilitychange that follows leaves them alone.
+	let handedOff: ReadonlySet<string> = new Set();
 
 	const attend = () => {
 		if (unfocusedTimer !== null) {
@@ -53,7 +57,36 @@ export function installForegroundHooks(): void {
 				unfocusedTimer = null;
 			}
 
-			setAttendedAll(false);
+			setAttendedAll(false, handedOff);
+		}
+	});
+
+	// A close and a reload look the same here, and the `AWAY *` a present
+	// user's page sends as it goes makes them blink away and back to
+	// everyone when it was a reload. So a network that qualifies
+	// (presence.ts leavesAwayToWorker) is handed to the service worker,
+	// which says it only if no window of the app is open a few seconds on.
+	// pagehide comes before the unload's visibilitychange. Without a
+	// controlling worker nothing is handed over and the star goes now; the
+	// back/forward cache keeps the page, which is a plain hide.
+	window.addEventListener("pagehide", (ev: PageTransitionEvent) => {
+		const worker = navigator.serviceWorker?.controller;
+
+		if (ev.persisted || !worker) {
+			return;
+		}
+
+		const networks = networksLeavingAwayToWorker(hasStashedLogin);
+
+		if (networks.length === 0) {
+			return;
+		}
+
+		try {
+			worker.postMessage({type: "away-on-close", networks});
+			handedOff = new Set(networks);
+		} catch {
+			// The star goes from here after all.
 		}
 	});
 	window.addEventListener("blur", () => {
@@ -76,6 +109,10 @@ export function installForegroundHooks(): void {
 	});
 
 	window.addEventListener("pageshow", (ev: PageTransitionEvent) => {
+		// A page restored from the back/forward cache is this document again:
+		// whatever it handed over is its own to say once more.
+		handedOff = new Set();
+
 		if (ev.persisted) {
 			wake();
 		}

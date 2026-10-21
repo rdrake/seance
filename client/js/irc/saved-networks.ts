@@ -18,7 +18,11 @@ import storage from "../localStorage";
 import {forgetNetworkLog} from "./querylog";
 import {forgetNoticeLog} from "./noticelog";
 import {forgetOperPrefs} from "./operprefs";
+import {forgetMuteMemory} from "./muteMemory";
+import {forgetPresenceSync} from "./presenceSync";
+import {forgetUserAway} from "./userAwayStore";
 import type {ConnectOptions} from "./types";
+import {PRESENCE_MODES, type NetworkMode, type PresenceMode} from "../helpers/dnd";
 import type {ServicesConfig} from "../../../shared/types/network";
 
 export const STORAGE_KEY = "thelounge.networks";
@@ -65,6 +69,14 @@ export type SavedNetwork = ConnectOptions & {
 	 * bots by role, set in the edit form once opered. Absent means none.
 	 */
 	services?: ServicesConfig;
+	/** Online / Auto / Away / Do not disturb; absent = Same as global (docs/projects/shared-presence-modes.md §2). */
+	presenceMode?: PresenceMode;
+	/**
+	 * When the user chose `presenceMode` (Unix ms, on the device that chose
+	 * it); absent for a mode never chosen. Shared between devices, the most
+	 * recent choice winning (docs/projects/shared-presence-modes.md).
+	 */
+	presenceAt?: number;
 };
 
 /** The subset of the localStorage wrapper this module needs. */
@@ -247,7 +259,24 @@ export function normalize(raw: Record<string, unknown>): SavedNetwork | undefine
 		net.services = services;
 	}
 
+	const mode = raw.presenceMode;
+
+	if (typeof mode === "string" && PRESENCE_MODES.includes(mode as PresenceMode)) {
+		net.presenceMode = mode as PresenceMode;
+	}
+
+	const at = raw.presenceAt;
+
+	if (typeof at === "number" && Number.isSafeInteger(at) && at > 0) {
+		net.presenceAt = at;
+	}
+
 	return net;
+}
+
+/** The network's own presence mode; absent or unknown is Same as global. */
+export function presenceModeOf(net: Pick<SavedNetwork, "presenceMode"> | undefined): NetworkMode {
+	return net?.presenceMode ?? "global";
 }
 
 /** Whether a network takes part in Web Push (`draft/webpush`): the saved
@@ -441,6 +470,9 @@ export function remove(uuid: string): void {
 	forgetNetworkLog(uuid); // its private conversations go with it
 	forgetNoticeLog(uuid); // and its server notices
 	forgetOperPrefs(uuid);
+	forgetMuteMemory(uuid); // and what this device wrote to its push mute list
+	forgetPresenceSync(uuid); // and when it was last in sync with the shared presence
+	forgetUserAway(uuid); // and the /away it would declare at the next registration
 }
 
 /** Mark an entry as the most recently used one. */

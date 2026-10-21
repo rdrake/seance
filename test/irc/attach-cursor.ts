@@ -9,6 +9,7 @@ import {expect} from "chai";
 import sinon from "ts-sinon";
 import {CURSOR_SAVE_INTERVAL_MS} from "../../client/js/irc/client";
 import {requestHistory, requestMore} from "../../client/js/irc/history";
+import {MARKREAD_DEBOUNCE_MS} from "../../client/js/irc/handlers/markread";
 import * as saved from "../../client/js/irc/saved-networks";
 import type {StorageBackend} from "../../client/js/irc/saved-networks";
 import {MessageType, SharedMsg} from "../../shared/types/msg";
@@ -189,6 +190,25 @@ describe("PERSISTENCE ATTACH catch-up cursor (irc/persistence.ts)", function () 
 				msgid: "r1",
 				time: Date.parse("2026-08-28T11:30:00.000Z"),
 			});
+		});
+
+		it("counts the catch-up as unread, through our own JOIN at its end", function () {
+			const h = setup();
+			joined(h);
+			const chan = h.client.findChannel("#seance")!;
+			h.client.open(h.client.lobby.id);
+			const lastRead = chan.shared.firstUnread;
+
+			bouncerReplay(h, "#seance", [
+				"@time=2026-08-28T11:30:00.000Z;msgid=r1 :bob!bob@host PRIVMSG #seance :missed",
+				"@time=2026-08-28T11:31:00.000Z;msgid=r2 :bob!bob@host PRIVMSG #seance :alice: you there?",
+				"@time=2026-08-28T11:32:00.000Z;msgid=r3 :alice!alice@host JOIN #seance",
+			]);
+			expect(chan.shared.unread).to.equal(2);
+			expect(chan.shared.highlight).to.equal(1);
+			expect(chan.shared.firstUnread, "the new-messages line stays above them").to.equal(
+				lastRead
+			);
 		});
 	});
 
@@ -380,6 +400,26 @@ describe("PERSISTENCE ATTACH catch-up cursor (irc/persistence.ts)", function () 
 			return h;
 		}
 
+		it("history arriving in the channel being looked at marks it read", function () {
+			const h = saslClient();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			authenticate(h, `${SASL_CAPS} draft/read-marker`);
+			h.transport.line(":irc.test PERSISTENCE ATTACH default");
+			finishRegistration(h, HOLD);
+			restore(h); // a quiet JOIN: no line of its own to read
+			batch(
+				h,
+				[
+					"@time=2026-08-28T11:00:00.000Z;msgid=h1 :bob!bob@host PRIVMSG #seance :one",
+					"@time=2026-08-28T11:01:00.000Z;msgid=h2 :bob!bob@host PRIVMSG #seance :two",
+				],
+				{label: labelOf(h.transport.sent)}
+			);
+			h.sent();
+			clock.tick(MARKREAD_DEBOUNCE_MS);
+			expect(h.sent()).to.include("MARKREAD #seance timestamp=2026-08-28T11:01:00.000Z");
+		});
+
 		it("appends the replay as messages, not as older history, and dedupes by msgid", function () {
 			const h = resumed();
 			const id = h.client.findChannel("#seance")!.id;
@@ -414,6 +454,29 @@ describe("PERSISTENCE ATTACH catch-up cursor (irc/persistence.ts)", function () 
 			const query = h.client.findChannel("bob")!;
 			expect(query, "query window opened").to.not.equal(undefined);
 			expect(h.messages(query.id).map((m) => m.text)).to.deep.equal(["you there?"]);
+		});
+
+		it("asks for a query's read marker once the replay leaves it unread", function () {
+			store({msgid: "m9", time: Date.parse("2026-08-28T11:00:00.000Z")});
+			const h = saslClient();
+			authenticate(h, `${SASL_CAPS} draft/read-marker`);
+			h.transport.line(":irc.test PERSISTENCE ATTACH default");
+			finishRegistration(h, HOLD);
+			restore(h);
+			clock.tick(MARKREAD_DEBOUNCE_MS * 10);
+			h.sent();
+
+			// The private message was read on another device: only the
+			// server's marker can say so.
+			bouncerReplay(h, "bob", [
+				"@time=2026-08-28T11:30:00.000Z;msgid=p1 :bob!bob@host PRIVMSG alice :you there?",
+			]);
+			const query = h.client.findChannel("bob")!;
+			expect(query.shared.unread).to.equal(1);
+			clock.tick(MARKREAD_DEBOUNCE_MS * 10);
+			expect(h.sent()).to.include("MARKREAD bob");
+			h.transport.line(":irc.test MARKREAD bob timestamp=2026-08-28T11:30:00.000Z");
+			expect(query.shared.unread).to.equal(0);
 		});
 
 		it("hides the closing NOTICE while the session is settling, and shows it later", function () {
@@ -516,9 +579,20 @@ describe("PERSISTENCE ATTACH catch-up cursor (irc/persistence.ts)", function () 
 
 			expect(h.client.serverReplay).to.equal(false);
 			expect(chathistory(h.sent())).to.have.length(1);
-			expect(h.transport.sent[h.transport.sent.length - 2]).to.match(
-				/CHATHISTORY LATEST #seance \* \d+$/
-			);
+			// The resumed session's AWAY (presence.ts: no mute list to wait
+			// for here) goes out once on the reconnect, at registration: after
+			// CAP END and before what the registration starts (PERSISTENCE
+			// SET, the catch-up).
+			const all = h.transport.sent;
+			const end = all.lastIndexOf("CAP END");
+			expect(all.slice(end).filter((l) => l === "AWAY")).to.have.length(1);
+			expect(all.slice(end, end + 3)).to.deep.equal([
+				"CAP END",
+				"AWAY",
+				"PERSISTENCE SET ON",
+			]);
+			const sent = all.filter((l) => l !== "AWAY");
+			expect(sent[sent.length - 2]).to.match(/CHATHISTORY LATEST #seance \* \d+$/);
 		});
 
 		it("keeps the old dance when the server has no attach-cursor token", function () {

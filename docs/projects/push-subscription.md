@@ -410,7 +410,7 @@ decide _who gets told about it_:
   touchpoint: `autoRegister` (no REGISTER on connect), `subscribe` (no
   registration loop membership, and the "at least one account" guard only
   counts enabled networks), `setSnooze` (mute metadata only to enabled
-  networks), the connect-time prompt (only offered for enabled networks),
+  networks; (superseded: the snooze is gone, do not disturb replaced it — docs/projects/do-not-disturb.md §4)), the connect-time prompt (only offered for enabled networks),
   and the SW stash (`writeStash` — a disabled network's credentials are
   dropped from quick-reply/renewal). `webpush.onNetworkSaved()` — called
   from NetworkEdit after `network:edit` — reacts to toggles: off sends
@@ -420,7 +420,7 @@ decide _who gets told about it_:
   connected, else via the next `webpush:available`).
 - **Settings → Notifications** keeps only what is genuinely browser-global:
   the diagnostics (permission, iOS install hint, unsupported browser,
-  server-refused) and the account-wide snooze, plus a hint pointing at the
+  server-refused) and the account-wide snooze (superseded: the snooze is gone, do not disturb replaced it — docs/projects/do-not-disturb.md §4), plus a hint pointing at the
   network settings (2026-09-03: the read-only Settings list and the status
   dot were removed; an editor status line was added the same day and then
   dropped as redundant — the **sidebar bell** is the per-network status
@@ -431,7 +431,9 @@ decide _who gets told about it_:
 - **Scenarios.** `tools/scenarios/push-network-setting.mjs` drives the
   checkbox ↔ storage ↔ editor-status round-trip headlessly;
   `tools/scenarios/ui-cleanup.mjs` asserts the Settings panel keeps only
-  the hint/snooze/warnings (no rows, no status dot, no global toggle).
+  the hint/snooze/warnings (no rows, no status dot, no global toggle;
+  the snooze row is gone since, do not disturb replaced it —
+  docs/projects/do-not-disturb.md §4).
 
 The register/unregister, subscription map and stash behaviour are unchanged
 for every network that does not explicitly opt out — the flag gates
@@ -545,6 +547,8 @@ Left as it was:
   enforces, `ircd/webpush_mute.c`). That makes a mute account-wide (the
   phone stops too), and has to merge with `setSnooze`, which today writes
   the whole key as `*:<until>`, and with mutes set on other devices.
+  (Superseded: `setSnooze` is gone; do not disturb owns the `*` entry and
+  keeps every other one, docs/projects/do-not-disturb.md §4.)
 
 Harness: "service worker page notifications on a push worker"; browser
 check: `tools/scenarios/push-page-notification.mjs` (seeded subscription on
@@ -755,7 +759,8 @@ natural complement of Reply: "seen, no answer needed".
   recounted: the tap is never a no-op.
 - **Removed:** `swMute`, `mergeMuteEntry`, the `mute30` action and the
   harness's mute-list scripting. Settings' account-wide snooze
-  (`webpush.setSnooze`, page-side metadata) is untouched.
+  (`webpush.setSnooze`, page-side metadata) is untouched. (Since replaced
+  by do not disturb, docs/projects/do-not-disturb.md §4.)
 - **What the OS cannot do instead:** an OS mute is per site or app, never
   per channel across devices — the one thing Mute 30m did that nothing else
   does. Judged not worth the slot.
@@ -908,7 +913,7 @@ Settings still said subscribed — a silent failure. Now:
 - **Visible in Settings, renewed per network.** `refreshState` reports
   **`stale`** (before the "stored means subscribed" rule) whenever any
   connected network's entry is stale; Settings → Notifications shows the explanation
-  instead of the snooze row and points at the network's settings, so the
+  instead of the snooze row (superseded: the snooze is gone, do not disturb replaced it — docs/projects/do-not-disturb.md §4) and points at the network's settings, so the
   problem stays visible after _Never_ and has a way out. The **Renew** button
   is in the Edit-network form (`#pushRenew` → `webpush.renew(uuid)` →
   `subscribe(<that network's key>)`), shown when `networkPushInfo(uuid).stale`

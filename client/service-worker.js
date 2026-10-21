@@ -284,6 +284,12 @@ async function networkOrCache(event) {
 // worker shows for it. The server's read push only follows a message it
 // pushed, so a notification the page put here is closed by the page.
 self.addEventListener("message", function (event) {
+	if (event.data && event.data.type === "away-on-close" && Array.isArray(event.data.networks)) {
+		const networks = event.data.networks.filter((uuid) => typeof uuid === "string");
+		event.waitUntil(awayOnClose(networks));
+		return;
+	}
+
 	if (event.data && event.data.type === "read" && typeof event.data.target === "string") {
 		const {target, ts} = event.data;
 
@@ -451,8 +457,10 @@ function randomNick() {
  * `onReady(ws, done, ctx)` at 001.  `pre` lines go out after SASL completes
  * but before CAP END.  `ctx.nick` is what the server calls us after
  * registration (the account's session nick when the bouncer attached us to
- * it); `ctx.onLine(fn)` sees every later line.  Resolves through done(ok):
- * false on any SASL/registration failure, a close, or the timeout.
+ * it); `ctx.onLine(fn)` sees every later line.  `pre` may be a function of
+ * `ctx`, called at 903 once the optional caps' answer is known.  Resolves
+ * through done(ok): false on any SASL/registration failure, a close, or the
+ * timeout.
  */
 function swIrcOpen(net, pre, onReady, optional = []) {
 	return new Promise((resolve) => {
@@ -594,7 +602,7 @@ function swIrcOpen(net, pre, onReady, optional = []) {
 			if (stage === 3 && / 903 /.test(l)) {
 				stage = 4;
 
-				for (const line of pre) {
+				for (const line of typeof pre === "function" ? pre(ctx) : pre) {
 					ws.send(line);
 				}
 
@@ -855,6 +863,144 @@ function swMarkRead(net, target, time) {
 			grace = setTimeout(() => finish(true), MARKREAD_GRACE_MS);
 		},
 		[READMARKER_CAP]
+	);
+}
+
+// --- the away state of a closed page ---------------------------------------
+// A page that unloads cannot tell a reload from a close, and the `AWAY *` it
+// would send then makes a present user blink away and back to everyone on
+// every reload. So a page on Auto whose session nefarious2's bouncer holds
+// hands its networks here instead (client/js/foreground.ts, presence.ts
+// `leavesAwayToWorker`): after a few seconds, if no window of the app is
+// open (a reload's new document is one at once), log in as the account and
+// say `AWAY *` to the held session — before CAP END for the alias path, and
+// again after 001, since resuming a held session as its primary connection
+// drops the pre-registration one — then QUIT, which the bouncer holds.
+
+const AWAY_ON_CLOSE_DELAY_MS = 5000;
+/** After the post-001 AWAY: how long to wait for its 306 before QUIT. */
+const AWAY_REPLY_MS = 2000;
+/** Mirrors PRE_AWAY_CAP in client/js/irc/presence.ts. */
+const PRE_AWAY_CAP = "draft/pre-away";
+
+/** Windows of this app: `includeUncontrolled` reports every window on the
+ * origin, and a github.io origin holds other projects' pages too. */
+async function appWindows() {
+	const all = await self.clients.matchAll({type: "window", includeUncontrolled: true});
+	return all.filter((c) => typeof c.url === "string" && c.url.startsWith(appUrl));
+}
+
+/**
+ * The one pending run: a close, a reopen and a close again inside the delay
+ * restart its timer instead of logging in twice. A close that arrives while
+ * the run is logging in (SASL, then up to AWAY_REPLY_MS) is queued for one
+ * more run after it, and the run's promise waits for that one too.
+ */
+let closeRun = null;
+
+function awayOnClose(uuids) {
+	if (closeRun && closeRun.running) {
+		for (const uuid of uuids) {
+			closeRun.queued.add(uuid);
+		}
+
+		return closeRun.promise;
+	}
+
+	if (closeRun) {
+		for (const uuid of uuids) {
+			closeRun.networks.add(uuid);
+		}
+
+		clearTimeout(closeRun.timer);
+		closeRun.timer = setTimeout(closeRun.fire, AWAY_ON_CLOSE_DELAY_MS);
+		return closeRun.promise;
+	}
+
+	const run = {
+		networks: new Set(uuids),
+		queued: new Set(),
+		running: false,
+		timer: null,
+		fire: null,
+		promise: null,
+	};
+	run.promise = new Promise((resolve) => {
+		run.fire = () => {
+			run.running = true;
+			awayOnCloseNow([...run.networks])
+				.catch(() => undefined)
+				.finally(() => {
+					closeRun = null;
+					// Resolving with the next run's promise waits for it too.
+					resolve(run.queued.size > 0 ? awayOnClose([...run.queued]) : undefined);
+				});
+		};
+
+		run.timer = setTimeout(run.fire, AWAY_ON_CLOSE_DELAY_MS);
+	});
+	closeRun = run;
+	return run.promise;
+}
+
+async function awayOnCloseNow(uuids) {
+	const windows = await appWindows();
+
+	if (windows.length > 0) {
+		return; // a reload, or the app was opened again: that page speaks for itself
+	}
+
+	const stash = await getStash();
+
+	for (const uuid of uuids) {
+		// By uuid only: stashNetwork's fallback to the first network would
+		// mark another network away.
+		const net = stash.networks.find((n) => n && n.uuid === uuid);
+
+		if (canLogin(net)) {
+			await swAway(net);
+		}
+	}
+}
+
+/** `AWAY *` over a throwaway connection; resolves true once it was sent. */
+function swAway(net) {
+	return swIrcOpen(
+		net,
+		(ctx) => (ctx.caps.has(PRE_AWAY_CAP) ? ["AWAY *"] : []),
+		(ws, done, ctx) => {
+			let finished = false;
+			let timer = null;
+
+			const finish = () => {
+				if (finished) {
+					return;
+				}
+
+				finished = true;
+				clearTimeout(timer);
+
+				try {
+					ws.send("QUIT :done");
+				} catch (e) {
+					//
+				}
+
+				done(true);
+			};
+
+			// Armed first: a server that answers inside send() finishes at once.
+			timer = setTimeout(finish, AWAY_REPLY_MS);
+
+			ctx.onLine((l) => {
+				if (/^(@\S+ )?:\S+ 306 /.test(l)) {
+					finish();
+				}
+			});
+
+			ws.send("AWAY *");
+		},
+		[PRE_AWAY_CAP]
 	);
 }
 
@@ -1467,7 +1613,9 @@ function askPage(client, message) {
  * first — until one does. Asking them all at once would post a reply
  * once per window. Resolves true when a page sent it. */
 async function viaPage(message) {
-	const cs = await self.clients.matchAll({includeUncontrolled: true, type: "window"});
+	// Only this app's windows answer; another project's on the origin
+	// would only cost its timeout.
+	const cs = await appWindows();
 
 	if (cs.length === 0 || typeof MessageChannel !== "function") {
 		return false;

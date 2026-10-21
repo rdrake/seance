@@ -4,7 +4,9 @@
 		<template v-else>
 			<Username :user="message.from" />
 			is away
-			<i class="away-message">(<ParsedMessage :network="network" :message="message" />)</i>
+			<i v-if="message.text" class="away-message"
+				>(<ParsedMessage :network="network" :message="message" />)</i
+			>
 		</template>
 	</span>
 </template>

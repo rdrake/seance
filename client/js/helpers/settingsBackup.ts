@@ -42,6 +42,7 @@ export const BACKUP_KEYS: readonly string[] = [
 	"thelounge.reactions.recent",
 	"thelounge.aliases",
 	"thelounge.oper",
+	"thelounge.dnd",
 ];
 
 /** Key prefixes the backup carries: one entry per network. */

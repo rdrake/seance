@@ -463,3 +463,10 @@ Still 1.1–2.5, coffee 1.0–1.9.
 - **No regression from §11.4**: skeins alone 39.4 and full dusk 83.8 again, calm noon 19.1 against 19.3.
 - **Full ≤ 30 fails at every moment**, as since §10.6; full is at or below §10.6 everywhere (noon 68.1 → 61.8, night 88.5 → 82.3, storm 77.2 → 77.1, dusk 92.2 → 83.8) and far below classic.
 - Each moving group alone costs 14–31, mostly backboardd; the page work is the skeins (14.5), the rain (9.3), the fireflies (6.2) and the stars (5.4). The sun's fire is the one GPU cost (21.5).
+
+### 11.6 Re-measured for the perf-measure skill (2026-10-18)
+
+Two figures the skill (`.claude/skills/perf-measure/SKILL.md`) had from notes only, re-run on the iPhone 16, Safari, USB.
+
+- **Tiled transform layers** (§2's spike harness, `tmp/perf/ng/ios-layers.sh`, 3 rounds, slots in the same order each round, load 10.5–36.6, so rank only): 1 layer 13.1–13.4, 3 layers 13.6–14.4, 6 layers 14.2–15.3, 12 layers 15.5–17.1, all backboardd, WebContent and GPU 0. The step from 1 to 12 (+2 to +4) matches §2; the level is about 7 lower than §2's 20–21.5 / 23–24.5, unexplained.
+- **The old sun** (`upstream/develop` c9a70e1b, classic as shipped, noon; rid `ios2-1792351149000`, `SHORT=oldsun`, 3 rounds, load 5.7–18.7): as shipped 392.7 / 392.7 / 390.5 (WebKit GPU 376, WebContent 5.6, backboardd 11.1); the fire's filter off 108.1 (104.5–113.3); the whole sun off 103.4 (103.2–108.6); coffee 0.6–0.9. The animated `feTurbulence` alone costs about 285 of a core.

@@ -178,11 +178,11 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		h.sent();
 		joinAll(h);
 
-		// Active channel: its history now. Nothing for the others yet: they
+		// Active channel: its marker and history now. Nothing for the others yet: they
 		// wait for the server to say which of them has been written to.
 		const first = h.sent();
-		expect(commandsOf(first)).to.deep.equal(["CHATHISTORY LATEST"]);
-		expect(first[0]).to.include("#seance");
+		expect(commandsOf(first)).to.deep.equal(["MARKREAD #seance", "CHATHISTORY LATEST"]);
+		expect(first[1]).to.include("#seance");
 		expect(pendingCatchup(h.client).map((c) => c.name)).to.deep.equal([
 			"#two",
 			"#three",
@@ -201,24 +201,23 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		]);
 
 		// Then, each job only once the clock has drained enough for it to
-		// stay within the budget: the active channel's marker query (a server
-		// that volunteers it has done so by then), its modes, then one channel
-		// at a time, the most recently written first and the unlisted one
-		// last, history first and its marker query right behind it.
-		const sent = collect(h, 8);
+		// stay within the budget: the active channel's modes, then one
+		// channel at a time, the most recently written first and the
+		// unlisted one last, its marker query (while the server has not
+		// volunteered it) ahead of its history, which it counts past.
+		const sent = collect(h, 7);
 		expect(commandsOf(sent.map((s) => s.line))).to.deep.equal([
-			"MARKREAD #seance",
 			"MODE #seance",
-			"CHATHISTORY LATEST",
 			"MARKREAD #three",
 			"CHATHISTORY LATEST",
 			"MARKREAD #two",
 			"CHATHISTORY LATEST",
 			"MARKREAD #four",
+			"CHATHISTORY LATEST",
 		]);
 		expect(fetched(sent.map((s) => s.line))).to.deep.equal(["#three", "#two", "#four"]);
 		// Steady state: a channel's two commands drain in their own 4 s.
-		expect(sent[6].at - sent[4].at).to.equal(4000);
+		expect(sent[5].at - sent[3].at).to.equal(4000);
 		expect(pendingCatchup(h.client)).to.deep.equal([]);
 		clock.tick(CATCHUP_STEP_COST_MS * 6);
 		expect(h.sent()).to.deep.equal([]);
@@ -353,8 +352,10 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			const caughtUp: string[] = [];
 			const markers: string[] = [];
 
-			// For longer than the catch-up needs on its own.
-			for (let n = 1; n <= 40000 / every; n++) {
+			// For longer than the catch-up needs on its own (each channel's
+			// marker query goes ahead of its history, so the last history
+			// fetch goes out at about 44 s at one background command per 4 s).
+			for (let n = 1; n <= 48000 / every; n++) {
 				if (who === "alice") {
 					h.client.send(`PRIVMSG #seance :line ${n}`);
 				}
@@ -476,8 +477,8 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		// here" markers are background work of their own).
 		const catchupOnly = (l: string) => isFetch(l) || l === "MARKREAD #two";
 		expect(commandsOf(collect(h, 2, catchupOnly).map((s) => s.line))).to.deep.equal([
-			"CHATHISTORY LATEST",
 			"MARKREAD #two",
+			"CHATHISTORY LATEST",
 		]);
 	});
 
@@ -516,8 +517,8 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 		h.client.findChannel("#three")!.state = ChanState.PARTED;
 		const catchupOnly = (l: string) => isFetch(l) || /^MARKREAD #(three|four)/.test(l);
 		expect(commandsOf(collect(h, 2, catchupOnly).map((s) => s.line))).to.deep.equal([
-			"CHATHISTORY LATEST",
 			"MARKREAD #four",
+			"CHATHISTORY LATEST",
 		]);
 
 		h.client.findChannel("#three")!.state = ChanState.JOINED;

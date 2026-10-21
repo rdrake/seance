@@ -13,6 +13,13 @@ type BaseContextMenuItem = {
 	label: string;
 	type: string;
 	class: string;
+	/**
+	 * A choice that can be the current one: rendered as `menuitemradio`
+	 * (`menuitemcheckbox` with `toggle`) with `aria-checked`, the check mark
+	 * drawn by CSS. Left out for a plain action.
+	 */
+	checked?: boolean;
+	toggle?: boolean;
 };
 
 type ContextMenuItemWithAction = BaseContextMenuItem & {

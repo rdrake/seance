@@ -146,6 +146,8 @@ export interface BackgroundJob {
 	cost: number;
 	/** Send it. Builds its lines now, so they carry the state of the moment. */
 	run: () => void;
+	/** Stays behind every job without it, however late those are queued. */
+	last?: boolean;
 }
 
 /**
@@ -180,23 +182,29 @@ export class BackgroundQueue {
 	/**
 	 * Queue `job`: at the back, at the front, or just before the first job
 	 * whose key passes `ahead` (in order among others queued the same way);
-	 * in its old place when the key is already queued.
+	 * in its old place when the key is already queued. A job without
+	 * {@link BackgroundJob.last} never goes behind one with it; a `last` job
+	 * always goes to the very back.
 	 */
 	add(
 		job: BackgroundJob,
 		{front = false, ahead}: {front?: boolean; ahead?: (key: string) => boolean} = {}
 	): void {
 		const index = this.jobs.findIndex((j) => j.key === job.key);
+		const firstLast = this.jobs.findIndex((j) => j.last);
+		const back = firstLast === -1 ? this.jobs.length : firstLast;
 		const before = ahead ? this.jobs.findIndex((j) => ahead(j.key)) : -1;
 
 		if (index !== -1) {
 			this.jobs[index] = job;
+		} else if (job.last) {
+			this.jobs.push(job);
 		} else if (front) {
 			this.jobs.unshift(job);
 		} else if (before !== -1) {
-			this.jobs.splice(before, 0, job);
+			this.jobs.splice(Math.min(before, back), 0, job);
 		} else {
-			this.jobs.push(job);
+			this.jobs.splice(back, 0, job);
 		}
 
 		this.pump();
