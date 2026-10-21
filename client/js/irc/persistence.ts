@@ -17,7 +17,9 @@
  *   `BEFORE` back to the newest line we held; history.ts)
  *   (catchup.ts), which is what actually fills the gap — unless the server
  *   is filling it itself, see {@link serverReplayCovers};
- * - after `STATUS ON` the autojoin `JOIN` waits for that batch (or
+ * - after `STATUS ON` (or a setting of ON not in force, `ON OFF`: an alias
+ *   of another device's session reads so, and only learns it is one from
+ *   the NOTE after the MOTD) the autojoin `JOIN` waits for that batch (or
  *   {@link RESTORE_WAIT_MS}, whichever is first) and then covers only the
  *   channels the server did not restore. JOINing a channel the server is
  *   restoring anyway is ignored at best and, while another client of the
@@ -147,7 +149,7 @@ function arm(client: IrcClient, state: RestoreState, delay: number): void {
 	const wait = Math.max(0, Math.min(delay, state.deadline - Date.now()));
 	state.timer = setTimeout(() => {
 		state.timer = null;
-		client.autojoin();
+		client.restorationSettled();
 	}, wait);
 }
 
@@ -186,7 +188,7 @@ export const persistenceBatch: BatchHandler = (client, batch) => {
 	}
 
 	if (waiting) {
-		client.autojoin();
+		client.restorationSettled();
 	}
 
 	presenceResumed(client);

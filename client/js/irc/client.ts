@@ -1430,27 +1430,6 @@ export class IrcClient {
 			}
 		}
 
-		// Opt this connection into session persistence: `PERSISTENCE SET ON`
-		// creates the server's bouncer session and turns its hold on, which
-		// is what draft/webpush triggers fire against. It needs the account
-		// flag, so it only goes out post-registration (a SET sent before CAP
-		// END is answered FAIL ACCOUNT_REQUIRED), and it is idempotent — so
-		// when the registration STATUS already says the account's setting is
-		// ON it is skipped: every command after 001 costs fake lag (fakelag.ts).
-		if (
-			this.caps.hasCapability(PERSISTENCE_CAP) &&
-			this.options.saslAccount &&
-			// Already on, and in force: asking again only costs fake lag. A
-			// setting of ON that is not in force (no session, bouncer off)
-			// still asks, since SET ON is what creates the session.
-			!(this.persistenceSetting === "ON" && this.persistenceHold)
-		) {
-			// Flag the ack + STATUS echo as ours: handlers/persistence.ts
-			// swallows them (the user never typed anything).
-			this.persistenceAutoSetPending = true;
-			this.send(persistenceEnableLine());
-		}
-
 		// Web Push availability (draft/webpush): announce the server's VAPID
 		// key (or its absence) so webpush.ts can re-register a stored
 		// subscription and the Settings UI can tell the two cases apart. The
@@ -1462,15 +1441,50 @@ export class IrcClient {
 			sasl: this.saslOk,
 		});
 
-		if (this.persistenceHold || this.serverReplay) {
+		if (this.persistenceHold || this.serverReplay || this.persistenceSetting === "ON") {
 			// The server may be about to restore the channels of our held
 			// session (a draft/persistence batch right behind the MOTD, or
 			// the replay our ATTACH cursor asked for): JOIN only what it does
-			// not restore, once that batch is in.
+			// not restore, once that batch is in. A setting of ON that is not
+			// in force (`STATUS ON OFF`) is most often an alias of another
+			// device's live session, which nefarious2 only says after the MOTD
+			// (`NOTE BOUNCER ALIAS_ATTACHED`), right before handing it the
+			// channels; otherwise nothing comes and the wait ends in
+			// RESTORE_WAIT_MS.
 			awaitRestoration(this);
 		} else {
-			this.autojoin();
+			this.restorationSettled();
 		}
+	}
+
+	/**
+	 * Registration's restoration is in, or was never coming: opt into
+	 * session persistence if that still does something, then JOIN what the
+	 * server did not give back. Once per connection (persistence.ts).
+	 */
+	restorationSettled(): void {
+		// `PERSISTENCE SET ON` creates the server's bouncer session and turns
+		// its hold on, which is what draft/webpush triggers fire against. It
+		// needs the account flag, so it only goes out post-registration (a SET
+		// sent before CAP END is answered FAIL ACCOUNT_REQUIRED), and it is
+		// idempotent — so it is skipped when it would change nothing: every
+		// command after 001 costs fake lag (fakelag.ts).
+		if (
+			this.caps.hasCapability(PERSISTENCE_CAP) &&
+			this.options.saslAccount &&
+			// The setting is ON and in force, or this connection is an alias of
+			// a session that is (it reads `ON OFF`: the alias is not held, the
+			// session is). A setting of ON not in force otherwise (no session,
+			// bouncer off) still asks, since SET ON is what creates the session.
+			!(this.persistenceSetting === "ON" && (this.persistenceHold || this.bouncerAlias))
+		) {
+			// Flag the ack + STATUS echo as ours: handlers/persistence.ts
+			// swallows them (the user never typed anything).
+			this.persistenceAutoSetPending = true;
+			this.send(persistenceEnableLine());
+		}
+
+		this.autojoin();
 	}
 
 	/**
