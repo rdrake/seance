@@ -265,6 +265,16 @@ starts about 2 s later on a fresh connect. Since the quiet channels are
 still fetched, the order is all it buys; what it buys is the channel that
 was written to fetched first instead of behind every quiet one.
 
+On a real network: `tools/fakelag-probe.mjs` measures what the server
+actually charges (a PING burst after 001, guest or SASL, and a holder mode
+that makes the next login an alias attach), and
+`tools/scenarios/connect-fakelag-live.mjs` runs a fresh connect and a
+reconnect with typing on a real account (both take the password from
+`SEANCE_SASL_PASSWORD` only). On AfterNET's fractal (2026-10-21) a guest got
+5 commands at once then one per 2 s, a SASL alias attach 15 (the 20 s
+`POSTREG_GRACE` credit on top), and a revived held session no fake lag at
+all — a server bug, in PR #121's server notes.
+
 Also in this round: a queued push renewal is dropped when its endpoint is
 unregistered (it would have re-registered it); the open channel's reconnect walk (`CHATHISTORY BEFORE` pages) goes at once while the server's clock stays under 6 s
 (`PAGE_NOW_LIMIT_MS`) instead of waiting for the background budget, and
