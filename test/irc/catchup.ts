@@ -600,7 +600,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			"#four": "2026-08-27T12:00:40.000Z",
 		};
 
-		it("on a reconnect fetches only the channels with something new, newest first", function () {
+		it("on a reconnect fetches the channels with something new first, newest first, the quiet ones last", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
 			// From the start: events move what we hold, not the server's index.
@@ -613,7 +613,9 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				["#four", "2026-08-27T12:00:40.000Z"], // our newest is its newest
 			]);
 			const lines = collect(h, 20).map((s) => s.line);
-			expect(fetched(lines)).to.deep.equal(["#three"]);
+			// The index is a hint for the order, not proof: the quiet ones are
+			// still fetched, behind the rest.
+			expect(fetched(lines)).to.deep.equal(["#three", "#two", "#four"]);
 			expect(pendingCatchup(h.client)).to.deep.equal([]);
 			expect(h.client.findChannel("bob")).to.equal(undefined);
 		});
@@ -775,7 +777,11 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				["#three", "2026-08-27T12:00:20.000Z"],
 				["#two", "2026-08-27T12:00:10.000Z"],
 			]);
-			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#four"]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#four",
+				"#two",
+				"#three",
+			]);
 		});
 
 		it("walks the open channel's gap back without waiting for the queue", function () {
@@ -799,7 +805,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			expect(h.sent().filter((l) => /CHATHISTORY BEFORE #seance /.test(l))).to.have.length(1);
 		});
 
-		it("skips nothing on an answer without draft/chathistory-end, however fast", function () {
+		it("orders a listed quiet channel behind one the answer leaves out, end tag or not", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
 			answerTargets(
@@ -811,13 +817,13 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				],
 				false
 			);
-			// Without the end tag a listed row may be older than the channel's
-			// newest (a storage server that timed out or hit its limit): it
-			// orders the catch-up but vouches for nothing, #two included.
+			// A listed row may be older than the channel's newest (a storage
+			// server that timed out or hit its limit, with or without the tag):
+			// #two is quiet by the answer, so last, and still fetched.
 			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
 				"#three",
-				"#two",
 				"#four",
+				"#two",
 			]);
 		});
 
@@ -872,7 +878,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			expect(pendingCatchup(h.client).map((c) => c.name)).to.deep.equal(["#two", "#four"]);
 		});
 
-		it("fetches a channel joined after the question last, whatever the answer says", function () {
+		it("fetches a channel joined after the question behind the busy ones, whatever the answer says", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
 			h.client.joinChannels([{name: "#five"}]);
@@ -883,20 +889,27 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 				["#four", "2026-08-27T12:00:40.000Z"],
 				["#two", "2026-08-27T12:00:10.000Z"],
 			]);
-			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#five"]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#three",
+				"#five",
+				"#two",
+				"#four",
+			]);
 		});
 
-		it("never skips a channel the answer leaves out; a complete answer skips however late", function () {
+		it("never skips a channel, left out of the answer or listed as quiet, however late it answers", function () {
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
-			// The end tag is the server's word, not the clock: a federated
-			// answer cut short comes without it (nefarious2 a333d81).
 			clock.tick(3500);
 			answerTargets(h, targets, [
 				["#three", "2026-08-27T12:05:00.000Z"],
 				["#two", "2026-08-27T12:00:10.000Z"],
 			]); // #four left out
-			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal(["#three", "#four"]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#three",
+				"#four",
+				"#two",
+			]);
 		});
 
 		it("is not asked to order a single channel, nor while the server replays the gap", function () {

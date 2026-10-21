@@ -26,14 +26,15 @@
 // background work and will fail with typing on, since typed lines count.
 //
 // Checks, on a fresh connect and on a reconnect of the same page:
-//   * the peak stays at or under 6 s, and once the burst is over at or
+//   * the peak stays at or under 6 s (8 s with the open channel's walk-back
+//     page), and once the burst is over at or
 //     under the background budget (4 s);
 //   * every autojoined channel gets its history in the end (fresh connect);
 //   * the reconnect asks for no marker the server has already answered;
-//   * each connect asks one `CHATHISTORY TARGETS`, and a reconnect fetches
-//     the history of no channel that was not written to meanwhile;
+//   * each connect asks one `CHATHISTORY TARGETS`, and a reconnect still
+//     fetches every channel, the quiet ones last;
 //   * after a helper writes to one channel while the page is offline, that
-//     channel is the only one the reconnect fetches.
+//     channel is the first one the reconnect fetches.
 
 const PORT = process.env.SEANCE_PORT || "8047";
 // The ircd's WebSocket (TLS) and plain ports. The dev ircd's image turns
@@ -321,9 +322,11 @@ async function watch(page, label, {until, cap = WAIT} = {}) {
 		console.log(`  +${s.at.toFixed(2)}s ahead=${s.ahead.toFixed(1)} ${s.line.slice(0, 120)}`);
 	}
 
+	// 6 s, plus the open channel's walk-back page when it has one: that page
+	// goes at once while the clock is under 6 s (history.ts PAGE_NOW_LIMIT_MS).
 	page.check(
-		`${label}: the clock never passes 6 s ahead (peak ${peak.toFixed(1)})`,
-		peak <= 6.05
+		`${label}: the clock never passes 8 s ahead (peak ${peak.toFixed(1)})`,
+		peak <= 8.05
 	);
 	page.check(
 		`${label}: after the burst, background work stays within 4 s (peak ${latePeak.toFixed(1)})`,
@@ -369,7 +372,9 @@ async function scenario(page) {
 
 	// Drop the socket; the page reconnects on its own.
 	await page.evaluate("window.__wire.length = 0, window.__socks.at(-1).close(), 1");
-	const again = await watch(page, "reconnect");
+	// Until every channel is caught up again: the quiet ones too, last.
+	const everyChannel = {until: (sent) => latestFetched(sent).size >= N, cap: (20 + 4 * N) * 1000};
+	const again = await watch(page, "reconnect", everyChannel);
 	const asked = again
 		.filter((s) => /^MARKREAD \S+$/.test(s.line))
 		.map((s) => s.line.split(" ")[1]);
@@ -393,7 +398,8 @@ async function scenario(page) {
 		await watch(page, "busy");
 	}
 
-	// The reconnect fetched nothing in the background: nobody wrote anywhere.
+	// Nobody wrote anywhere; the reconnect still fetches every channel (a
+	// quiet one by TARGETS is fetched last, not skipped).
 	const backgroundFetches = (sent) =>
 		sent
 			.filter((s) => s.at > 1 && /^CHATHISTORY (LATEST|AFTER|BEFORE)$/.test(command(s.line)))
@@ -407,22 +413,23 @@ async function scenario(page) {
 		`reconnect: one CHATHISTORY TARGETS (${targetsAsked(again).length})`,
 		targetsAsked(again).length === 1
 	);
+	const quietFetched = new Set(backgroundFetches(again));
 	page.check(
-		`reconnect: no quiet channel fetched (${backgroundFetches(again).join(", ") || "none"})`,
-		backgroundFetches(again).length === 0
+		`reconnect: every channel behind the open one fetched (${quietFetched.size} of ${N - 1})`,
+		quietFetched.size >= N - 1
 	);
 
-	// One channel written to while the page is offline: the only one fetched.
+	// One channel written to while the page is offline: fetched first.
 	const written = CHANS.at(-2);
 	await page.evaluate("window.__offline = true, window.__socks.at(-1).close(), 1");
 	await seed([written], 3);
 	await page.evaluate(
 		"window.__wire.length = 0, window.__offline = false, dispatchEvent(new Event('online')), 1"
 	);
-	const after = await watch(page, "written");
+	const after = await watch(page, "written", everyChannel);
 	page.check(
-		`written: only ${written} fetched (${backgroundFetches(after).join(", ") || "none"})`,
-		backgroundFetches(after).join() === written
+		`written: ${written} fetched first (${backgroundFetches(after).join(", ") || "none"})`,
+		backgroundFetches(after)[0] === written
 	);
 
 	const {mkdirSync, writeFileSync} = await import("node:fs");

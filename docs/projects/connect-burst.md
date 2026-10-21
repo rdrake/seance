@@ -217,35 +217,27 @@ parked until it answers (`catchup.ts`):
   among the parked ones.
 - The answer (`draft/chathistory-targets` batch, labelled; a batch without
   our label is somebody's typed query and is left alone) orders the parked
-  channels: written to since what we hold, newest first; then the rest in
-  JOIN order. A channel listed with the newest message we already hold has
-  nothing new and gets no fetch at all (its marker query and a lost `more`
-  page still go) — but only when the batch opener carries
-  `draft/chathistory-end`. Without the tag the server is saying the answer
-  was cut: a federated query whose storage server timed out (its
-  `CHATHISTORY_TIMEOUT`, 5 s) or capped its rows (a `CH E … T` reply, which
-  can arrive at once), and a listed row may then be older
-  than the channel's newest message. Such an answer still orders the
-  catch-up and skips nothing. A channel the answer leaves out is always
-  fetched: under `CHATHISTORY_STRICT_PRESENCE` a complete answer leaves out
-  channels whose newest message we were not present for.
+  channels: written to since what we hold, newest first; then the ones the
+  answer leaves out, in JOIN order; then the ones listed with the newest
+  message we already hold. Those last are still fetched, the same walk as
+  any other channel: the index is a hint for the order, not proof that
+  nothing was missed (see below, 2026-10-21).
 
-  This trusts the server's tag, so it needs nefarious2 at or after
-  `a333d81` (2026-10-20). Before it `complete_targets_fed` tagged every
-  federated answer under the limit whether or not `fed_truncated` was set,
-  and the first version of this change guarded against that with the
-  clock instead: an answer slower than 3 s skipped nothing. That missed the
-  row-limit truncation, which is fast, and the timeout it was meant for
-  cannot reach us anyway — the server's federation timeout is 5 s from when
-  it reads the command, our `TARGETS_TIMEOUT_MS` is 5 s from when we sent
-  it, so a timed-out answer arrives after we have gone in JOIN order and is
-  ignored. The clock rule was dropped.
+  The first version skipped them, trusting the answer when the batch opener
+  carried `draft/chathistory-end` (nefarious2 leaves it off a truncated
+  federated answer from `a333d81`). The skip was dropped on 2026-10-21: the
+  index had been wrong twice (truncated answers tagged complete before
+  `a333d81`; REDACT and TOPIC not moving it before `7598622`), and a
+  message stamped at or before the one we hold that reached the store late
+  is listed under our time, so a skipped channel would have missed it
+  silently. On nefarious2 with SASL the skip rarely applied anyway: a
+  reconnect is covered by the `PERSISTENCE ATTACH` cursor (no TARGETS at
+  all), and a fresh page holds nothing.
 
 - "What we hold" is the newest message the server stamped (one with a
   msgid, `Channel.newestServerRef`) before this JOIN, and only once that
   channel's catch-up has completed (`historyFilled`: cleared when a JOIN's
-  catch-up is scheduled, set when its fill or walk is answered in full or
-  TARGETS calls it quiet). A local line is on our clock and can be later
+  catch-up is scheduled, set when its fill or walk is answered in full). A local line is on our clock and can be later
   than lines we never got; a channel whose fill never came holds nothing but
   our own last JOIN; and a catch-up the socket cut short, with a live line
   seen meanwhile, must not read as finished.
@@ -259,31 +251,19 @@ parked until it answers (`catchup.ts`):
   (`serverReplay`), or for fewer than two channels behind the open one.
 
 Measured on the lag rig (12 channels, 60 s per phase,
-`SEANCE_FAKELAG_WAIT=60000`): a fresh connect fetched the one channel
-written to in the last run first; a reconnect with nothing new sent 5
-commands after 001 instead of 12 and fetched no history; a reconnect after a
-helper wrote three lines to `#lag10` while the page was offline fetched
-`#lag10` and nothing else. The peak stayed at 4.0 s throughout.
+`SEANCE_FAKELAG_WAIT=60000`), with the skip: a fresh connect fetched the one
+channel written to in the last run first; a reconnect with nothing new sent
+5 commands after 001 instead of 12 and fetched no history; a reconnect after
+a helper wrote three lines to `#lag10` while the page was offline fetched
+`#lag10` and nothing else. Without the skip the last two fetch every channel
+again, `#lag10` first, the quiet ones behind it. The peak stayed at 4.0 s
+throughout.
 
 The cost: one command (2 s on the server's clock) on every connect that has
 two or more channels behind the open one, so the first background fetch
-starts about 2 s later on a fresh connect, where nothing can be skipped.
-What a skipped channel can miss, all on nefarious2:
-
-- **Events.** Only PRIVMSG, NOTICE, TAGMSG, multiline and `HISTORY_GAP`
-  (a message not stored because its sender opted out with `+Y`/`+y`) move
-  a target's timestamp (`history.c`); REDACT, TOPIC, KICK, MODE, JOIN, PART
-  and QUIT do not. A gap row moving it is the safe direction — an extra
-  fetch (it brings back the server's gap marker), never a missed one — so
-  it needs nothing here. REDACT not moving it is not: a redaction made while we were away in a channel the answer
-  calls quiet is never fetched, and the message stays visible until the
-  page is reloaded. The joins and parts of the gap are not shown either
-  (the user list is right: NAMES). Worth asking MrLenin to let REDACT bump
-  the index.
-- **A message stamped at or before the newest one we hold** that reached the
-  store after we dropped (S2S lag, a netsplit's other side), or a second
-  message in the same millisecond: the index keeps the max, so the row
-  equals what we hold. The old `LATEST` walk caught these.
+starts about 2 s later on a fresh connect. Since the quiet channels are
+still fetched, the order is all it buys; what it buys is the channel that
+was written to fetched first instead of behind every quiet one.
 
 Also in this round: a queued push renewal is dropped when its endpoint is
 unregistered (it would have re-registered it); the open channel's reconnect walk (`CHATHISTORY BEFORE` pages) goes at once while the server's clock stays under 6 s

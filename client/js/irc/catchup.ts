@@ -20,10 +20,10 @@
  * Which channel goes first is the server's to say: one `CHATHISTORY TARGETS`
  * after the JOIN burst lists every channel we are in with the time of its
  * newest message, newest first. The catch-up is parked until it answers,
- * then queued in that order: channels with something new first, the ones we
- * hold everything for not at all, the ones we hold nothing for last. One
- * command buys the order of N and, on a reconnect, saves the fetch of every
- * quiet channel. A server that cannot answer gets the JOIN order.
+ * then queued in that order: channels with something new first, the ones it
+ * does not list next, the ones it says we hold everything for last — still
+ * fetched, since the index is a hint, not proof. One command buys the order
+ * of N. A server that cannot answer gets the JOIN order.
  */
 
 import {ChanState, ChanType} from "../../../shared/types/chan";
@@ -87,11 +87,6 @@ interface PendingCatchup {
 /** The newest message per channel (casefolded name → ms), from a TARGETS answer. */
 interface TargetsAnswer {
 	rows: Map<string, number>;
-	/**
-	 * The batch carried `draft/chathistory-end`: the server says nothing was
-	 * cut. Only then is a listed row the channel's newest message.
-	 */
-	complete: boolean;
 }
 
 /** One connection's TARGETS exchange. */
@@ -203,7 +198,7 @@ export function enqueueCatchup(
 	queueStep(client, pending);
 }
 
-function queueStep(client: IrcClient, pending: PendingCatchup, history = true): void {
+function queueStep(client: IrcClient, pending: PendingCatchup): void {
 	const key = keyOf(pending.chan);
 	const map = pendingMap(client);
 	const chan = pending.chan;
@@ -237,7 +232,7 @@ function queueStep(client: IrcClient, pending: PendingCatchup, history = true): 
 		cost: CATCHUP_STEP_COST_MS,
 		run() {
 			map.delete(key);
-			step(client, pending, history);
+			step(client, pending);
 		},
 	});
 }
@@ -435,14 +430,14 @@ export function queueModes(client: IrcClient, chan: Channel): void {
 	});
 }
 
-function step(client: IrcClient, next: PendingCatchup, history = true): void {
+function step(client: IrcClient, next: PendingCatchup): void {
 	// Left again while waiting (or the socket went): nothing to send.
 	if (next.chan.state !== ChanState.JOINED || client.transport.state !== "open") {
 		return;
 	}
 
 	if (!next.prefetched) {
-		fetchFor(client, next.chan, next.before, history, !next.markerQueued);
+		fetchFor(client, next.chan, next.before, !next.markerQueued);
 	}
 
 	if (next.chan.id === client.activeChannelId) {
@@ -454,7 +449,6 @@ function fetchFor(
 	client: IrcClient,
 	chan: Channel,
 	before: MsgRef | undefined,
-	history = true,
 	marker = true
 ): void {
 	// nefarious2 volunteers the marker after a logged-in account's JOIN (`*`
@@ -467,9 +461,7 @@ function fetchFor(
 		fetchReadMarker(client, chan);
 	}
 
-	if (history) {
-		requestChannelHistory(client, chan, before);
-	}
+	requestChannelHistory(client, chan, before);
 
 	retryLostHistory(client, chan);
 }
@@ -606,23 +598,16 @@ function unpark(client: IrcClient, chan: Channel): PendingCatchup | undefined {
  * Queue the parked steps: by the answer when there is one, else as they
  * came. Per channel, against what that channel already holds:
  *
- * - listed, newest message later than ours (or we hold none): fetched,
- *   the most recently written channel first;
- * - listed, newest message the one we hold: nothing new, no fetch — if
- *   the answer is complete (`draft/chathistory-end`). Without the tag a
- *   row may be short of the channel's newest: nefarious2 leaves it off a
- *   federated answer a storage server cut short, by its own timeout or its
- *   row limit (`CH E … T`, which can come back at once). That
- *   needs a server at or after nefarious2 a333d81; an older one tags every
- *   federated answer under the limit, cut short or not;
- * - not listed, or its JOIN followed the command: fetched last, as before.
- *   Not listed while we hold its history means its newest message is older
- *   than the window or was never stored where the server looked; strict
- *   presence leaves channels out of a complete answer, and an older
- *   server's answer can say complete when it is not: never a skip.
- *
- * A skipped channel still gets its marker query and any page the last
- * connection lost; only the history fetch is left out.
+ * - listed, newest message later than ours (or we hold none): first, the
+ *   most recently written channel first;
+ * - not listed, or its JOIN followed the command: next, as before;
+ * - listed, newest message the one we hold: last. Nothing new by the
+ *   server's index, but the index is only a hint for the order: it has been
+ *   wrong (a federated answer cut short, a REDACT or TOPIC that did not move
+ *   it before nefarious2 7598622), and a message that reached the store late
+ *   with an older stamp (S2S lag, a netsplit's other side) is listed under
+ *   the time we hold. So the channel is still fetched, the same walk as any
+ *   other, only behind every channel that may have something new.
  */
 function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer | undefined): void {
 	if (state.status === "done") {
@@ -639,7 +624,6 @@ function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer |
 		return;
 	}
 
-	const trusted = answer.complete;
 	const busy: {pending: PendingCatchup; newest: number}[] = [];
 	const rest: PendingCatchup[] = [];
 	const quiet: PendingCatchup[] = [];
@@ -653,18 +637,16 @@ function release(client: IrcClient, state: TargetsState, answer: TargetsAnswer |
 		} else if (newest === undefined) {
 			rest.push(pending);
 		} else if (held !== undefined && newest <= held) {
-			(trusted ? quiet : rest).push(pending);
+			quiet.push(pending);
 		} else {
 			busy.push({pending, newest});
 		}
 	}
 
-	// Nothing missed up to now: as good as a completed fill.
-	quiet.forEach((p) => (p.chan.historyFilled = true));
 	busy.sort((a, b) => b.newest - a.newest);
 	busy.forEach(({pending}) => queueStep(client, pending));
 	rest.forEach((p) => queueStep(client, p));
-	quiet.forEach((p) => queueStep(client, p, false));
+	quiet.forEach((p) => queueStep(client, p));
 }
 
 /** A closed `draft/chathistory-targets` batch: the answer, if it is ours. */
@@ -695,8 +677,7 @@ export const targetsBatch: BatchHandler = (client, batch) => {
 		}
 	}
 
-	// The tag rides the opener (spec; nefarious2 puts it beside our label).
-	release(client, state, {rows, complete: batch.tags.has("draft/chathistory-end")});
+	release(client, state, {rows});
 };
 
 /**
