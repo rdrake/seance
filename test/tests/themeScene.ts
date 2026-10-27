@@ -248,6 +248,24 @@ describe("the theme-scene hook (client/js/themeScene.ts)", function () {
 		]);
 	});
 
+	it("while watching (touch grass), counts the page as attended and lifts a query's frost", async function () {
+		const {log, mod} = fakeScene();
+		const h = host({ps: () => Promise.resolve(mod)});
+		h.setView("query");
+		await h.setTheme("ps");
+		h.setAttended(false);
+		h.setWatching(true); // attended, and a channel's view
+		h.setAttended(false); // no input is the point: still attended
+		h.setView("query"); // the app's own view changes underneath
+		h.setWatching(false); // back to what the app reported: resting, frosted
+		expect(log).to.deep.equal([
+			"mount true true query",
+			"update true resting query",
+			"update true channel",
+			"update true resting query",
+		]);
+	});
+
 	it("setDevice re-tiers a mounted scene, and a repeat is no update", async function () {
 		const seen: string[] = [];
 		const mod: SceneModule = {
