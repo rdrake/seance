@@ -13,7 +13,7 @@
 import type {IrcClient} from "./client";
 import {formatLine} from "./message";
 import {fitsQuiet, sendQuiet} from "./quiet";
-import {canRequest, request} from "./request";
+import {canRequest, isFailedOutcome, request} from "./request";
 import {collectServiceReply, type ServiceAnswer} from "./services";
 import {servicesProfileFor} from "./services/index";
 import type {
@@ -53,19 +53,17 @@ async function ask<T>(client: IrcClient, lookup: ServiceLookup<T>): Promise<Look
 		return {kind: "unavailable"};
 	}
 
-	const line = lookup.command(bot);
+	// Sent first, then watched: a line that was never sent leaves no watcher
+	// waiting, and nothing the bot says can arrive before this task yields.
+	const sent = sendQuiet(client, lookup.command(bot));
 
-	if (!fitsQuiet(line)) {
-		return {kind: "toolong"};
+	if (sent !== "sent") {
+		return {kind: sent};
 	}
 
-	const reply = collectServiceReply(client, bot, {accept: (text) => lookup.accept(text)});
-
-	if (!sendQuiet(client, line)) {
-		return {kind: "closed"};
-	}
-
-	const answer: ServiceAnswer<string[]> = await reply;
+	const answer: ServiceAnswer<string[]> = await collectServiceReply(client, bot, {
+		accept: (text) => lookup.accept(text),
+	});
 
 	if (answer.kind !== "reply") {
 		return {kind: answer.kind};
@@ -171,7 +169,7 @@ export async function opersAmong(
 	});
 	const reply = await request(client, line, {end: ["315"]});
 
-	if (reply.outcome === "closed" || reply.outcome === "timeout") {
+	if (isFailedOutcome(reply.outcome)) {
 		return undefined;
 	}
 
@@ -237,7 +235,7 @@ export function describeFailure(client: IrcClient, result: LookupResult<unknown>
 		case "closed":
 			return "The connection is down.";
 		case "toolong":
-			return `That is too long to send to ${bot}: shorten the reason or the criteria.`;
+			return "Not sent: the command is too long. Shorten the reason or the criteria.";
 		case "unavailable":
 			return "No oper service is set up for this network.";
 		default:

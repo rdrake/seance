@@ -29,11 +29,30 @@ function emptyNote(lines: IrcMessage[], outcome: string): string | undefined {
 		return undefined;
 	}
 
-	return outcome === "timeout"
-		? "The server did not answer."
-		: outcome === "closed"
-		? "Not sent: the connection is down."
-		: undefined;
+	switch (outcome) {
+		case "timeout":
+			return "The server did not answer.";
+		case "closed":
+			return "Not sent: the connection is down.";
+		case "toolong":
+			return "Not sent: the command is too long.";
+		case "ack":
+			return "The server answered with nothing.";
+		default:
+			return undefined;
+	}
+}
+
+/** CHECK's numerics, 286 (the header) to 292 (no match). */
+const CHECK_NUMERICS = ["286", "287", "288", "289", "290", "291", "292"];
+
+/**
+ * Whether `CHECK <args>` is the remote form (nefarious2 `m_check.c`: four
+ * or more parameters, or three with the second not a `-flags`): it runs on
+ * another server and its answer comes back without our label.
+ */
+export function isRemoteCheck(args: string[]): boolean {
+	return args.length >= 3 || (args.length === 2 && !args[1].startsWith("-"));
 }
 
 /** `STATS <selector> [server]` → the profile's table for that selector. */
@@ -49,8 +68,12 @@ export async function runStats(client: IrcClient, chan: Channel, args: string[])
 
 /** `CHECK …` → the profile's card, else the raw lines. */
 export async function runCheck(client: IrcClient, chan: Channel, args: string[]): Promise<void> {
-	const line = formatLine({command: "CHECK", params: args.filter(Boolean)});
-	const reply = await request(client, line, {end: ["291", "292"]});
+	const params = args.filter(Boolean);
+	const line = formatLine({command: "CHECK", params});
+	const reply = await request(client, line, {
+		end: ["291", "292"],
+		unlabeled: isRemoteCheck(params) ? CHECK_NUMERICS : undefined,
+	});
 	const note = emptyNote(reply.lines, reply.outcome);
 	const report =
 		client.profile.checkReport(reply.lines, line) ??
@@ -64,7 +87,10 @@ export async function runPrivs(client: IrcClient, chan: Channel, args: string[])
 	const line = formatLine({command: "PRIVS", params: args.filter(Boolean)});
 	const reply = await request(client, line, {untagged: ["270"]});
 	const replies = reply.lines.filter((msg) => msg.command === "270");
-	const error = errorOf(reply.lines) ?? emptyNote(reply.lines, reply.outcome);
+	// A bare ACK here is "no privileges", worded below, not an empty answer.
+	const error =
+		errorOf(reply.lines) ??
+		(reply.outcome === "ack" ? undefined : emptyNote(reply.lines, reply.outcome));
 
 	if (replies.length === 0) {
 		pushReport(

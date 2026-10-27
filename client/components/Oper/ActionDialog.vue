@@ -141,17 +141,28 @@
 
 <style>
 #oper-action-dialog {
-	background: var(--body-bg-color);
+	/* The window's colour pair, like the cards': --body-bg-color is the
+	 * sidebar's, dark under day's dark-on-light text. */
+	background: var(--window-bg-color);
 	color: var(--body-color);
 	margin: 0.75rem;
 	border-radius: 5px;
 	width: min(32rem, calc(100vw - 1.5rem));
 	max-height: calc(100% - 1.5rem);
-	overflow-y: auto;
+
+	/* The body scrolls, the buttons stay: with the keyboard up the dialog
+	 * is a short band and Cancel / the submit must not scroll away. */
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 	user-select: text;
 }
 
 #oper-action-dialog .oper-action-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 	padding: 1rem;
 	display: flex;
 	flex-direction: column;
@@ -218,7 +229,7 @@
 }
 
 #oper-action-dialog .oper-action-error {
-	color: #e74c3c;
+	color: var(--error-fg, color-mix(in oklab, #e74c3c 60%, var(--body-color)));
 	font-size: 0.875rem;
 	margin: 0.25rem 0 0;
 }
@@ -229,6 +240,7 @@
 }
 
 #oper-action-dialog .oper-action-buttons {
+	flex-shrink: 0;
 	display: flex;
 	justify-content: flex-end;
 	gap: 0.6rem;
@@ -263,6 +275,9 @@ import {
 	parseDuration,
 } from "../../js/irc/profiles/nefarious/bans";
 import {profileById} from "../../js/irc/profiles";
+import {servicesProfileFor} from "../../js/irc/services/index";
+import {hasVirtualKeyboard} from "../../js/helpers/device";
+import {lineBudget, lineTooLongText} from "../../js/helpers/operLine";
 import {errorOf} from "../../js/irc/profiles/report";
 import type {IrcMessage} from "../../js/irc/message";
 
@@ -310,12 +325,20 @@ export default defineComponent({
 		const force = ref(false);
 		const looking = ref(false);
 		const busy = ref(false);
-		const problem = ref("");
+		// What the server or the bot said went wrong; `problem` adds the
+		// dialog's own reason not to send (a line over the byte cap).
+		const sendProblem = ref("");
 		const result = ref("");
 		const rawSuggestions = ref<{mask: string; label: string}[]>([]);
 		const preview = ref<{count: number; text: string} | null>(null);
 		let previewTimer: ReturnType<typeof setTimeout> | undefined;
 		let previewFor = "";
+		// The close a moment after a success: cleared on open and close, so a
+		// late one never closes the next dialog opened.
+		let closeTimer: ReturnType<typeof setTimeout> | undefined;
+		/** Bumped on every open and close: an answer to an earlier dialog's
+		 * submit finds it changed and leaves this one alone. */
+		let generation = 0;
 
 		const network = computed(() =>
 			request.value ? store.getters.findNetwork(request.value.network) : undefined
@@ -385,8 +408,51 @@ export default defineComponent({
 			return out.length ? out : [{value: "*", label: "The whole network"}];
 		});
 
+		/** The exact line Submit sends (without the label the IRC layer adds). */
+		const outgoingLine = computed(() => {
+			const r = request.value;
+
+			if (!r) {
+				return "";
+			}
+
+			const why = reason.value.trim();
+
+			if (r.action === "kill") {
+				return killLine(r.nick ?? "", why);
+			}
+
+			const type = banType.value;
+			const profile = servicesProfileFor(network.value?.services);
+
+			if (viaServices.value && type !== "zline" && profile) {
+				return profile.banCommand(serviceBot.value, {
+					type,
+					mask: normaliseMask(type, mask.value),
+					seconds: seconds.value ?? 0,
+					reason: why,
+				});
+			}
+
+			return banLine({
+				type,
+				mask: mask.value,
+				scope: scope.value,
+				seconds: seconds.value ?? 0,
+				reason: why,
+				force: maskCheck.value.needsForce && force.value,
+			});
+		});
+		const budget = computed(() => lineBudget(outgoingLine.value));
+		const problem = computed(() => sendProblem.value || lineTooLongText(budget.value));
+
 		const canSubmit = computed(() => {
-			if (!request.value || reason.value.trim() === "") {
+			// A result in means it was sent: a second press would send it again.
+			if (!request.value || reason.value.trim() === "" || result.value) {
+				return false;
+			}
+
+			if (budget.value.over > 0) {
 				return false;
 			}
 
@@ -410,7 +476,7 @@ export default defineComponent({
 			durationChoice.value = "3600";
 			customDuration.value = "";
 			force.value = false;
-			problem.value = "";
+			sendProblem.value = "";
 			result.value = "";
 			rawSuggestions.value = [];
 			preview.value = null;
@@ -452,6 +518,8 @@ export default defineComponent({
 		};
 
 		const open = (incoming: OperActionRequest) => {
+			clearTimeout(closeTimer);
+			generation++;
 			request.value = incoming;
 			reset();
 
@@ -459,12 +527,23 @@ export default defineComponent({
 				void lookUp(incoming.nick);
 			}
 
-			void nextTick(() => firstField.value?.focus());
+			// Not on a touch phone: the keyboard would come up over the buttons.
+			if (!hasVirtualKeyboard()) {
+				void nextTick(() => firstField.value?.focus());
+			}
 		};
 
 		const close = () => {
+			generation++;
 			request.value = null;
 			clearTimeout(previewTimer);
+			clearTimeout(closeTimer);
+			previewFor = "";
+		};
+
+		const closeSoon = (ms: number) => {
+			clearTimeout(closeTimer);
+			closeTimer = setTimeout(close, ms);
 		};
 
 		/** Who the mask matches now, from a CHECK host search (no CHECK: no preview). */
@@ -516,7 +595,9 @@ export default defineComponent({
 		};
 
 		watch([mask, banType], () => {
+			// A CHECK still out for the old mask must not land on the new one.
 			preview.value = null;
+			previewFor = "";
 			clearTimeout(previewTimer);
 
 			if (request.value && request.value.action !== "kill" && mask.value.trim()) {
@@ -539,6 +620,10 @@ export default defineComponent({
 				return "Not sent: the connection is down.";
 			}
 
+			if (outcome === "toolong") {
+				return "Not sent: the line is too long. Shorten the reason.";
+			}
+
 			return undefined;
 		};
 
@@ -546,28 +631,31 @@ export default defineComponent({
 			const r = request.value;
 			const n = network.value;
 
-			if (!r || !n || !canSubmit.value) {
+			if (!r || !n || !canSubmit.value || busy.value) {
 				return;
 			}
 
 			busy.value = true;
-			problem.value = "";
+			sendProblem.value = "";
+			const asked = generation;
 
 			if (r.action === "kill") {
-				const reply = await operRequest(
-					n.uuid,
-					killLine(r.nick ?? "", reason.value.trim())
-				);
+				const reply = await operRequest(n.uuid, outgoingLine.value);
+
+				if (asked !== generation) {
+					return;
+				}
+
 				busy.value = false;
 				const error = errorText(reply.lines, reply.outcome);
 
 				if (error) {
-					problem.value = error;
+					sendProblem.value = error;
 					return;
 				}
 
 				result.value = `Killed ${r.nick}.`;
-				setTimeout(close, 900);
+				closeSoon(900);
 				return;
 			}
 
@@ -581,46 +669,54 @@ export default defineComponent({
 					seconds: seconds.value ?? 0,
 					reason: reason.value.trim(),
 				});
+
+				if (asked !== generation) {
+					return;
+				}
+
 				busy.value = false;
 
 				switch (reply.outcome) {
 					case "ok":
 						result.value = `${NAMES[type]} set via ${bot}: ${reply.text ?? ""}`;
-						setTimeout(close, 1500);
+						closeSoon(1500);
 						return;
 					case "refused":
 						// O3's own words; the title already says who answered.
-						problem.value = reply.text ?? `${bot} refused it.`;
+						sendProblem.value = reply.text ?? `${bot} refused it.`;
 						return;
 					case "closed":
-						problem.value = "Not sent: the connection is down.";
+					case "toolong":
+						sendProblem.value = errorText([], reply.outcome) ?? "";
 						return;
 					default:
-						problem.value = `${bot} did not answer.`;
+						sendProblem.value = `${bot} did not answer.`;
 						return;
 				}
 			}
 
-			const line = banLine({
-				type,
-				mask: mask.value,
-				scope: scope.value,
-				seconds: seconds.value ?? 0,
-				reason: reason.value.trim(),
-				force: maskCheck.value.needsForce && force.value,
-			});
-			const reply = await operRequest(n.uuid, line);
+			const reply = await operRequest(n.uuid, outgoingLine.value);
+
+			if (asked !== generation) {
+				return;
+			}
+
 			const error = errorText(reply.lines, reply.outcome);
 
 			if (error) {
 				busy.value = false;
-				problem.value = error;
+				sendProblem.value = error;
 				return;
 			}
 
 			// Silence means it worked; listing it back says so for certain.
 			const query = `${type.toUpperCase()} ${normaliseMask(type, mask.value)}`;
 			const check = await operRequest(n.uuid, query, {end: LIST_END[type]});
+
+			if (asked !== generation) {
+				return;
+			}
+
 			busy.value = false;
 			const found = check.lines.some(
 				(msg) => msg.command === (type === "zline" ? "548" : "280")
@@ -628,7 +724,7 @@ export default defineComponent({
 			result.value = found
 				? `${NAMES[type]} set for ${formatDuration(seconds.value ?? 0)}.`
 				: `${NAMES[type]} sent; the server does not list it yet.`;
-			setTimeout(close, found ? 1200 : 2500);
+			closeSoon(found ? 1200 : 2500);
 		};
 
 		const onEscape = (layer: string | null) => {
@@ -646,6 +742,7 @@ export default defineComponent({
 			eventbus.off("oper:action", open);
 			eventbus.off("escapekey", onEscape);
 			clearTimeout(previewTimer);
+			clearTimeout(closeTimer);
 		});
 
 		return {

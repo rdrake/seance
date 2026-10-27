@@ -193,7 +193,7 @@ interface ServerToClientEvents {
 	"services:banned": EventHandler<{
 		network: string;
 		id: string;
-		outcome: "ok" | "refused" | "timeout" | "closed";
+		outcome: "ok" | "refused" | "timeout" | "closed" | "toolong";
 		text?: string;
 	}>;
 	/** One `PushSession` per `PERSISTENCE LIST` row, dispatched when the list closes (Settings → session panel). */

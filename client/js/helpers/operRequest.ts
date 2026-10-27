@@ -56,7 +56,7 @@ export interface ServicesCheckReply {
 }
 
 export interface ServicesBanReply {
-	outcome: "ok" | "refused" | "timeout" | "closed";
+	outcome: "ok" | "refused" | "timeout" | "closed" | "toolong";
 	text?: string;
 }
 

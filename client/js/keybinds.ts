@@ -5,6 +5,7 @@ import {switchToChannel, router, navigate, leavePage} from "./router";
 import isChannelCollapsed from "./helpers/isChannelCollapsed";
 import isIgnoredKeybind from "./helpers/isIgnoredKeybind";
 import listenForTwoFingerSwipes from "./helpers/listenForTwoFingerSwipes";
+import {topEscapeLayer} from "./helpers/escapeLayer";
 import {ClientChan} from "./types";
 import {ChanType} from "../../shared/types/chan";
 
@@ -201,13 +202,32 @@ const ignoredKeys = {
 	224: true, // Meta
 };
 
+// The Escape presses that came while an overlay was up, noted in the capture
+// phase, before any listener acts: Mousetrap's `esc` (App.vue) runs ahead of
+// the listener below and closes the overlay, and Vue's update lands in the
+// microtask between the two, so by then the overlay's mark is already gone.
+const escapeOverOverlay = new WeakSet<KeyboardEvent>();
+
+document.addEventListener(
+	"keydown",
+	(e) => {
+		if (e.key === "Escape" && topEscapeLayer() !== null) {
+			escapeOverOverlay.add(e);
+		}
+	},
+	true
+);
+
 document.addEventListener("keydown", (e) => {
 	// Escape leaves the help screen and the settings and oper modals. Not
 	// `router.go(-1)`: the history is kept one deep (router.ts). Never from
 	// inside a form field — settings are full of them, and Escape there
-	// means "leave the field", not "throw me out of the page".
+	// means "leave the field", not "throw me out of the page". Nor while an
+	// overlay is up over the page (a dialog or card over the oper panel): the
+	// press is that overlay's (helpers/escapeLayer.ts), one thing per press.
 	if (
 		e.key === "Escape" &&
+		!escapeOverOverlay.has(e) &&
 		(router.currentRoute.value.name === "Help" ||
 			router.currentRoute.value.path.startsWith("/settings") ||
 			router.currentRoute.value.name === "OperPanel") &&

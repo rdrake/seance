@@ -65,10 +65,24 @@ export function fitsQuiet(line: string): boolean {
 	return utf8ByteLength(`${tagPrefix({label: "svc99999"})}${line}`) <= MAX_LINE_BYTES;
 }
 
-/** Send `line` so that its echo is dropped; returns what `client.send` does. */
-export function sendQuiet(client: IrcClient, line: string): boolean {
+/**
+ * How a quiet send went. `toolong`: the line with its label is over
+ * `MAX_LINE_BYTES` and was never sent (`client.send` would refuse it and
+ * report an error in the lobby) — the connection is fine, the line is not.
+ */
+export type QuietSend = "sent" | "closed" | "toolong";
+
+/** Send `line` so that its echo is dropped. */
+export function sendQuiet(client: IrcClient, line: string): QuietSend {
 	const label = quietLabel(client);
-	return client.send(label ? `${tagPrefix({label})}${line}` : line);
+	const tagged = label ? `${tagPrefix({label})}${line}` : line;
+
+	if (utf8ByteLength(tagged) > MAX_LINE_BYTES) {
+		takeQuietLabel(client, label);
+		return "toolong";
+	}
+
+	return client.send(tagged) ? "sent" : "closed";
 }
 
 /** Whether `label` is one of this client's quiet labels (and forget it). */
