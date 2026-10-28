@@ -244,9 +244,9 @@ class Pacer {
 }
 
 const FAILED_NOTES = {
-	closed: "the connection is down",
-	timeout: "no answer",
-	toolong: "too long to send",
+	closed: () => t("oper.investigate.note.closed"),
+	timeout: () => t("oper.investigate.note.noAnswer"),
+	toolong: () => "too long to send",
 } as const;
 const pacers = new WeakMap<IrcClient, Pacer>();
 
@@ -461,7 +461,7 @@ export class Investigation {
 
 				if (isFailedOutcome(reply.outcome)) {
 					this.sources[source] = "failed";
-					this.notes[source] = FAILED_NOTES[reply.outcome];
+					this.notes[source] = FAILED_NOTES[reply.outcome]();
 				} else {
 					const error = errorText(reply.lines);
 
@@ -505,7 +505,7 @@ export class Investigation {
 				if (sent !== "sent") {
 					if (generation === this.generation) {
 						this.sources[source] = "failed";
-						this.notes[source] = FAILED_NOTES[sent];
+						this.notes[source] = FAILED_NOTES[sent]();
 					}
 
 					apply(undefined, {kind: "closed"});

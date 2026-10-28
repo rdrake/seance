@@ -238,7 +238,7 @@ export function describeFailure(client: IrcClient, result: LookupResult<unknown>
 		case "closed":
 			return t("oper.services.connectionDown");
 		case "toolong":
-			return bot ? t("oper.services.tooLong", {bot}) : t("oper.services.tooLongOperService");
+			return "Not sent: the command is too long. Shorten the reason or the criteria.";
 		case "unavailable":
 			return t("oper.services.noOperService");
 		default:

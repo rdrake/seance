@@ -32,9 +32,9 @@ function emptyNote(lines: IrcMessage[], outcome: string): string | undefined {
 
 	switch (outcome) {
 		case "timeout":
-			return "The server did not answer.";
+			return t("oper.report.noAnswer");
 		case "closed":
-			return "Not sent: the connection is down.";
+			return t("oper.report.notSent");
 		case "toolong":
 			return "Not sent: the command is too long.";
 		case "ack":
