@@ -143,9 +143,13 @@ export default defineComponent({
 			});
 
 			if (element && element.classList.contains("menu")) {
+				const rect = element.getBoundingClientRect();
+				const rtl = window.getComputedStyle(element).direction === "rtl";
+				const left = rtl ? rect.left : rect.right - menuWidth;
+
 				return fit({
-					left: element.getBoundingClientRect().left - (menuWidth - element.offsetWidth),
-					top: element.getBoundingClientRect().top + element.offsetHeight,
+					left: Math.min(Math.max(left, 0), window.innerWidth - menuWidth),
+					top: rect.top + element.offsetHeight,
 				});
 			}
 
