@@ -8,6 +8,7 @@ import {isMobile, type Capability} from "../../client/js/translate/capability";
 import {
 	DEFAULT_CONTEXT_WINDOW,
 	MOBILE_CONTEXT_WINDOW,
+	WEBKIT_CONTEXT_WINDOW,
 	QWEN3_1_7B_ID,
 	QWEN3_4B_ID,
 	buildCatalog,
@@ -116,6 +117,18 @@ describe("translate: a phone's page memory", () => {
 			expect(contextWindowFor({maxBufferBytes: 2 * GiB, capBytes: null})).to.equal(null);
 			expect(contextWindowFor(null)).to.equal(null);
 			expect(contextWindowFor(undefined)).to.equal(null);
+		});
+
+		it("is WEBKIT_CONTEXT_WINDOW on an iPhone or iPad, under WebKit's ~330-token GPU loss", () => {
+			expect(WEBKIT_CONTEXT_WINDOW).to.be.below(330);
+			expect(
+				contextWindowFor({
+					maxBufferBytes: 128 * MiB,
+					capBytes: null,
+					mobile: true,
+					appleMobile: true,
+				})
+			).to.equal(WEBKIT_CONTEXT_WINDOW);
 		});
 	});
 
