@@ -22,6 +22,8 @@ import {
 	QWEN3_1_7B_SPLIT_ID,
 	QWEN3_1_7B_SPLIT_LIB,
 	QWEN3_4B_ID,
+	WEBKIT_CONTEXT_WINDOW,
+	WEBKIT_PREFILL_CHUNK,
 	buildCatalog,
 } from "../../client/js/translate/models";
 import {EXAMPLES} from "../../client/js/translate/prompt";
@@ -1053,6 +1055,34 @@ describe("translate/engines/webllm", () => {
 			reason: "unknown",
 			message: "GPU process terminated",
 		});
+	});
+
+	it("on an iPhone or iPad the GPU copy loads with WebKit's window and prefill chunk", async () => {
+		const reloads: unknown[] = [];
+		const d = deps([]);
+		const mlc = d.deps.create({model_list: []}, () => {});
+		const reload = mlc.reload.bind(mlc);
+
+		mlc.reload = (id, opts) => {
+			reloads.push(opts);
+			return reload(id, opts);
+		};
+
+		d.deps.create = () => mlc;
+		const engine = new WebLlmEngine(d.deps, name);
+
+		engine.configure(catalog, {
+			maxBufferBytes: 1024 * 1024 * 1024,
+			capBytes: null,
+			mobile: true,
+			appleMobile: true,
+		});
+		await engine.load(catalog.llm, "gpu", () => {});
+
+		expect(reloads).to.deep.equal([
+			{context_window_size: WEBKIT_CONTEXT_WINDOW, prefill_chunk_size: WEBKIT_PREFILL_CHUNK},
+		]);
+		expect(engine.contextWindow).to.equal(WEBKIT_CONTEXT_WINDOW);
 	});
 
 	it("a contextWindow option is the window every reload asks for", async () => {

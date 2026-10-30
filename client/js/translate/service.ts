@@ -461,6 +461,8 @@ export class TranslateService {
 					// The phone's smaller context window (models.ts
 					// `contextWindowFor`); a computer's message is unchanged.
 					...(this.probed.mobile ? {mobile: true} : {}),
+					// An iPhone's or iPad's WebGPU window (`WEBKIT_CONTEXT_WINDOW`).
+					...(this.probed.appleMobile ? {appleMobile: true} : {}),
 			  }
 			: undefined;
 	}

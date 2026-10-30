@@ -253,7 +253,33 @@ export interface GpuBudget {
 	 * computer, so the message a computer's worker is told is unchanged.
 	 */
 	mobile?: boolean;
+	/**
+	 * An iPhone or iPad (capability.ts `Capability.appleMobile`): the GPU
+	 * model loads with `WEBKIT_CONTEXT_WINDOW` and `WEBKIT_PREFILL_CHUNK`.
+	 */
+	appleMobile?: boolean;
 }
+
+/**
+ * The context window a GPU model loads with on an iPhone or iPad, in
+ * tokens. WebKit's WebGPU loses the device once a sequence passes about 330
+ * tokens: the GPU process takes a fatal command buffer error and crashes
+ * (WebGPU `crashGPUProcess` from `Queue::commitMTLCommandBuffer`), at any
+ * prefill chunk and any KV cache size, and every WebLLM object goes with it
+ * (the request then fails "Object has already been disposed"). Measured with
+ * a probe page in the iOS shell (iOS 27.2, iPhone 16, Qwen3 1.7B): 296
+ * prompt tokens + 32 generated ran, 392 prompt tokens lost the device, at
+ * prefill chunks of 128 and 512 and windows of 1024 and 2048; seen again on
+ * 2026-10-30 at `MOBILE_CONTEXT_WINDOW`. WebLLM refuses a prompt past its
+ * window and stops decoding at it, so a window under the line means a
+ * request that would cross it is trimmed or refused (budget.ts
+ * `fitToWindow`) instead of crashing the GPU process. A WebKit bug; desktop
+ * Safari was not measured and keeps the phone's window.
+ */
+export const WEBKIT_CONTEXT_WINDOW = 320;
+
+/** The prefill chunk on an iPhone or iPad: well inside `WEBKIT_CONTEXT_WINDOW`. */
+export const WEBKIT_PREFILL_CHUNK = 128;
 
 /**
  * The context window a GPU model loads with on a phone or tablet, in tokens.
@@ -279,11 +305,16 @@ export const MOBILE_CONTEXT_WINDOW = 2048;
 export const DEFAULT_CONTEXT_WINDOW = 4096;
 
 /**
- * The context window to ask WebLLM for on this device: `MOBILE_CONTEXT_WINDOW`
- * on a phone or tablet, null elsewhere — the model's own record decides
+ * The context window to ask WebLLM for on this device: `WEBKIT_CONTEXT_WINDOW`
+ * on an iPhone or iPad, `MOBILE_CONTEXT_WINDOW` on another phone or tablet,
+ * null elsewhere — the model's own record decides
  * (4096 for both Qwen3 models), and the reload is the one it always was.
  */
 export function contextWindowFor(gpu: GpuBudget | null | undefined): number | null {
+	if (gpu?.appleMobile) {
+		return WEBKIT_CONTEXT_WINDOW;
+	}
+
 	return gpu?.mobile ? MOBILE_CONTEXT_WINDOW : null;
 }
 

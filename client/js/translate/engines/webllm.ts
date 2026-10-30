@@ -52,6 +52,7 @@ import {
 	DEFAULT_CONTEXT_WINDOW,
 	GpuBudget,
 	ModelCatalog,
+	WEBKIT_PREFILL_CHUNK,
 	contextWindowFor,
 	smallBufferBuildFor,
 } from "../models";
@@ -83,6 +84,8 @@ export interface ChatDelta {
 export interface ReloadOptions {
 	/** Overrides the record's `overrides.context_window_size`: the KV cache is sized to it at load. */
 	context_window_size?: number;
+	/** Overrides the record's prefill chunk (`WEBKIT_PREFILL_CHUNK` on an iPhone or iPad). */
+	prefill_chunk_size?: number;
 }
 
 /** The slice of MLCEngine the engine uses. */
@@ -546,7 +549,12 @@ export class WebLlmEngine implements Engine {
 			const window = this.fixedWindow ?? contextWindowFor(this.gpu);
 
 			if (window !== null) {
-				await this.engine.reload(build?.id ?? ref.id, {context_window_size: window});
+				await this.engine.reload(build?.id ?? ref.id, {
+					context_window_size: window,
+					...(!this.fixedWindow && this.gpu?.appleMobile
+						? {prefill_chunk_size: WEBKIT_PREFILL_CHUNK}
+						: {}),
+				});
 			} else {
 				await this.engine.reload(build?.id ?? ref.id);
 			}
