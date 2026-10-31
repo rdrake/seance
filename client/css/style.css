@@ -400,8 +400,10 @@ html[data-shell="native"] :is(.screen-overlay, #specificity-of-an-id) {
 	left: var(--inset-left);
 	right: var(--inset-right);
 
-	/* `.window` is `height: 100%`, which with a moved top runs past the
-	 * bottom edge by the same amount; the two pinned edges size it. */
+	/* `.window` and the context menu's band are `height: 100%` (the band
+	 * `width: 100%` too), which with moved edges run past the opposite ones
+	 * by the same amount; the pinned edges size them. */
+	width: auto;
 	height: auto;
 }
 
@@ -2626,8 +2628,9 @@ textarea.input {
 	flex-direction: column;
 	gap: 0.5rem;
 
-	/* Above the home indicator, whatever the device says that is. */
-	padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 20px));
+	/* Above iOS's home indicator in the shell (Android's bar is under the
+	   sheet's edge, which `.screen-overlay` or its own rule moves). */
+	padding: 0.75rem 1rem calc(0.75rem + var(--inset-inner-bottom, 0px));
 	border-top: 1px solid var(--window-border, rgb(128 128 128 / 30%));
 }
 
@@ -2770,11 +2773,11 @@ textarea.input {
 }
 
 /* Fixed to the screen's bottom edge, which in the shell is under Android's
- * button bar (stop above it) or iOS's home indicator (reserve its strip, or
- * the buttons lose their taps to it); in landscape the notch is a side. */
+ * button bar: it stops above it (iOS's home indicator is reserved by the
+ * actions row); in landscape the notch is a side. */
 html[data-shell="native"] .source-language-picker--sheet {
 	bottom: var(--inset-outer-bottom);
-	padding: 0 var(--inset-right) var(--inset-inner-bottom) var(--inset-left);
+	padding: 0 var(--inset-right) 0 var(--inset-left);
 }
 
 .source-language-picker--sheet .source-language-picker-field {
@@ -2795,8 +2798,9 @@ html[data-shell="native"] .source-language-picker--sheet {
 }
 
 .source-language-picker--sheet .source-language-picker-actions {
-	/* Above the home indicator, whatever the device says that is. */
-	padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 20px));
+	/* Above iOS's home indicator in the shell (Android's bar is under the
+	   sheet's edge, which `.screen-overlay` or its own rule moves). */
+	padding: 0.75rem 1rem calc(0.75rem + var(--inset-inner-bottom, 0px));
 	border-top: 1px solid var(--window-border, rgb(128 128 128 / 30%));
 }
 
@@ -6806,17 +6810,6 @@ html[data-shell="native"] #footer {
 		padding-top: var(--inset-top);
 		padding-bottom: var(--inset-outer-bottom);
 		padding-left: var(--inset-left);
-	}
-
-	/* The context menu's band too: a long menu clamped to the top of the
-	 * band would otherwise start under the clock. */
-	html[data-shell="native"] #context-menu-container {
-		top: var(--inset-top);
-		bottom: var(--inset-outer-bottom);
-		left: var(--inset-left);
-		right: var(--inset-right);
-		width: auto;
-		height: auto;
 	}
 
 	#sidebar-overlay {
