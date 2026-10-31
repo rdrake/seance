@@ -16,7 +16,7 @@ import {TranslateClient} from "./client";
 import {FAKE_CAPABILITY, fakePort} from "./fakePort";
 import {buildCatalog, listedSize, nativeDevice, normalizeDeviceChoice} from "./models";
 import {APPLE_PLUGIN, AppleTranslator} from "./engines/apple";
-import {isIOSShell, nativeInvoke} from "../helpers/shell";
+import {isIOSShell, nativeInvoke, nativePlatform} from "../helpers/shell";
 import {MainPort} from "./protocol";
 import {RouteTable} from "./router";
 import {ServiceDeps, ServiceSettings, TranslateService} from "./service";
@@ -196,9 +196,10 @@ function create(): TranslateService {
 		deps.consent = storedConsent(storage);
 	}
 
-	// The system translator: the iOS shell's AppleTranslate plugin, on this
-	// thread, since the worker has no bridge. Nowhere else.
-	if (!fake && isIOSShell()) {
+	// The system translator: the iOS shell's AppleTranslate plugin, or the
+	// macOS shell's (shells/tauri/src-tauri/src/apple.rs), on this thread,
+	// since the worker has no bridge. Nowhere else.
+	if (!fake && (isIOSShell() || nativePlatform() === "macos")) {
 		apple = new AppleTranslator({
 			invoke: (method, options) => nativeInvoke(APPLE_PLUGIN, method, options),
 		});

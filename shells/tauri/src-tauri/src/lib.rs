@@ -10,6 +10,9 @@
 // use, and `listen(plugin, event, cb)` hears what `emit()` evaluates in the
 // page. No Tauri plugin API is exposed to the page (capabilities/default.json).
 
+#[cfg(target_os = "macos")]
+mod apple;
+
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::Mutex;
@@ -60,7 +63,7 @@ fn init_script(version: &str) -> String {
 #[derive(Serialize)]
 struct ShellError {
     message: String,
-    code: &'static str,
+    code: String,
 }
 
 /// The `web+irc:` links the page has not been handed yet.
@@ -125,7 +128,7 @@ fn show_main(app: &AppHandle) {
 }
 
 #[tauri::command]
-fn seance_call(
+async fn seance_call(
     window: WebviewWindow,
     links: State<'_, Mutex<Links>>,
     plugin: String,
@@ -135,8 +138,16 @@ fn seance_call(
     if window.label() != MAIN {
         return Err(ShellError {
             message: "not the app's page".into(),
-            code: "denied",
+            code: "denied".into(),
         });
+    }
+
+    // Apple's Translation framework, answered asynchronously (src/apple.rs).
+    #[cfg(target_os = "macos")]
+    if plugin == "AppleTranslate" {
+        return apple::call(&method, &options)
+            .await
+            .map_err(|(code, message)| ShellError { message, code });
     }
 
     // The dock (macOS) and launchers that show a count (Linux); a Windows
@@ -181,7 +192,7 @@ fn seance_call(
         }
         _ => Err(ShellError {
             message: format!("{plugin}.{method} is not implemented"),
-            code: "unimplemented",
+            code: "unimplemented".into(),
         }),
     }
 }
