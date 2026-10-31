@@ -32,7 +32,9 @@ build dependencies (see `tools/linux/Dockerfile` for Debian's list).
 
 `corepack yarn icons` regenerates `src-tauri/icons/` from
 `public/img/icon-512.png` (the deploy's icon, so a rebrand carries over); the
-other scripts run it first.
+other scripts run it first. On a Mac the `.icns` is made from the logo cut to
+the Mac's rounded square (`tools/macos-icon.swift`), since macOS draws an icon
+as it is and a square logo would show as a square in the Dock.
 
 ## Checks
 
