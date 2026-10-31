@@ -10,7 +10,7 @@
  */
 
 import {PHONE_LAYOUT_QUERY} from "./helpers/device";
-import {isIOSShell, nativeCall, nativeListen} from "./helpers/shell";
+import {nativeCall, nativeListen} from "./helpers/shell";
 import {createPowerMerge, framesSayLowPower} from "./helpers/power";
 import {onAndroidSystemStatus} from "./helpers/systemAccessibility";
 
@@ -471,64 +471,20 @@ export function installThemeSceneHooks(): void {
 		}
 	});
 
+	// Low Power Mode from the Apple shells (iOS, macOS); anywhere else the
+	// call answers null.
 	type PowerStatus = {lowPower: boolean};
-
-	if (isIOSShell()) {
-		void nativeCall<PowerStatus>("Power", "status").then((s) => {
-			if (s) {
-				power.update({saver: s.lowPower});
-			}
-		});
-		nativeListen("Power", "changed", (s: PowerStatus) => power.update({saver: s.lowPower}));
-	} else if (
-		/iPhone|iPad|iPod/.test(navigator.userAgent) ||
-		(/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
-	) {
-		// Safari on iOS: Low Power Mode shows only as a 30 fps cap. Sampled on
-		// load and on each return to the page, and every 2 minutes while it
-		// says low power, so a passing slowdown does not stick.
-		let probing = false;
-		let again = 0;
-
-		const probe = () => {
-			if (probing || document.visibilityState === "hidden") {
-				return;
-			}
-
-			probing = true;
-			const gaps: number[] = [];
-			let last = 0;
-
-			const step = (t: number) => {
-				if (last) {
-					gaps.push(t - last);
-				}
-
-				last = t;
-
-				if (gaps.length < 30) {
-					requestAnimationFrame(step);
-					return;
-				}
-
-				probing = false;
-				gaps.sort((a, b) => a - b);
-				const low = framesSayLowPower(gaps[15]);
-				power.update({saver: low});
-				window.clearTimeout(again);
-
-				if (low) {
-					again = window.setTimeout(probe, 2 * 60 * 1000);
-				}
-			};
-
-			requestAnimationFrame(step);
-		};
-
-		document.addEventListener("visibilitychange", probe);
-		// Not during boot, whose own long frames would read as low power.
-		window.setTimeout(probe, 2000);
-	}
+	nativeListen("Power", "changed", (s: PowerStatus) => power.update({saver: s.lowPower}));
+	void nativeCall<PowerStatus>("Power", "status").then((s) => {
+		if (s) {
+			power.update({saver: s.lowPower});
+		} else if (
+			/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+			(/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+		) {
+			probeSafariFrameRate(power);
+		}
+	});
 
 	const sync = () => {
 		const visible = document.visibilityState !== "hidden";
@@ -552,4 +508,51 @@ export function installThemeSceneHooks(): void {
 		}
 	});
 	sync();
+}
+
+/** Safari on iOS: Low Power Mode shows only as a 30 fps cap. Sampled on load
+ * and on each return to the page, and every 2 minutes while it says low
+ * power, so a passing slowdown does not stick. */
+function probeSafariFrameRate(power: ReturnType<typeof createPowerMerge>): void {
+	let probing = false;
+	let again = 0;
+
+	const probe = () => {
+		if (probing || document.visibilityState === "hidden") {
+			return;
+		}
+
+		probing = true;
+		const gaps: number[] = [];
+		let last = 0;
+
+		const step = (t: number) => {
+			if (last) {
+				gaps.push(t - last);
+			}
+
+			last = t;
+
+			if (gaps.length < 30) {
+				requestAnimationFrame(step);
+				return;
+			}
+
+			probing = false;
+			gaps.sort((a, b) => a - b);
+			const low = framesSayLowPower(gaps[15]);
+			power.update({saver: low});
+			window.clearTimeout(again);
+
+			if (low) {
+				again = window.setTimeout(probe, 2 * 60 * 1000);
+			}
+		};
+
+		requestAnimationFrame(step);
+	};
+
+	document.addEventListener("visibilitychange", probe);
+	// Not during boot, whose own long frames would read as low power.
+	window.setTimeout(probe, 2000);
 }

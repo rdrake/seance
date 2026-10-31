@@ -30,37 +30,18 @@ import AppKit
 /// The translation daemon serves one request at a time (measured: parallel
 /// requests took no less time), so every request waits for the one before.
 ///
-/// A shell's adapter hands `call` the method and its options and answers its
-/// page with the result or the error's code and message.
+/// Before macOS 26 there is no framework: the router (SeanceApple.swift)
+/// answers every pair `unsupported`, and the page keeps its own engines.
 @available(iOS 26.0, macOS 26.0, *)
-public final class AppleTranslate {
-    /// Where `prepare`'s sheet is shown: a view controller (iOS) or a view in
-    /// a window (macOS); nil when there is none.
-    #if os(iOS)
-    public typealias Host = UIViewController
-    #elseif os(macOS)
-    public typealias Host = NSView
-    #endif
-
-    public struct Failure: Error {
-        public let code: String
-        public let message: String
-    }
-
-    public static let methods = ["availability", "translate", "prepare", "languages"]
-
+final class AppleTranslate {
     private let translator = SerialTranslator()
-    private let host: @MainActor () -> Host?
+    private let host: @MainActor () -> Presenter?
 
-    public init(host: @escaping @MainActor () -> Host?) {
+    init(host: @escaping @MainActor () -> Presenter?) {
         self.host = host
     }
 
-    public func call(_ method: String, _ options: [String: Any]) async throws -> [String: Any] {
-        guard Self.methods.contains(method) else {
-            throw Failure(code: "unimplemented", message: "AppleTranslate.\(method) is not implemented")
-        }
-
+    func call(_ method: String, _ options: [String: Any]) async throws -> [String: Any] {
         if method == "languages" {
             let supported = await LanguageAvailability().supportedLanguages
             var seen = Set<String>()
@@ -128,7 +109,7 @@ public final class AppleTranslate {
 
     /// Adds `view` to `parent`, 1×1 and clear; returns what takes it away.
     @MainActor
-    private static func attach(_ view: PrepareView, to parent: Host) -> () -> Void {
+    private static func attach(_ view: PrepareView, to parent: Presenter) -> () -> Void {
         #if os(iOS)
         let controller = UIHostingController(rootView: view)
         controller.view.backgroundColor = .clear

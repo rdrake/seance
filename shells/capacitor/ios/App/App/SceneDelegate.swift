@@ -23,45 +23,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 }
 
-/// Registers the plugins that live in the app target itself.
+/// Registers the plugins that live in the app target itself: the Apple
+/// shells' (SeanceApplePlugin.swift, shells/apple).
 class BridgeViewController: CAPBridgeViewController {
+    private var apple: SeanceAppleShell?
+
     override func capacitorDidLoad() {
-        bridge?.registerPluginInstance(PowerPlugin())
-        bridge?.registerPluginInstance(AppleTranslatePlugin())
-    }
-}
-
-/// `Power`: Low Power Mode, for the ps scene's Auto (client/js/themeScene.ts).
-/// WebKit holds a Safari page to 30 fps in Low Power Mode but not this web
-/// view (measured 2026-10-17), so the shell has to say it.
-///
-/// - `status()`: `{lowPower}`.
-/// - event `changed`: the same, whenever it changes.
-class PowerPlugin: CAPPlugin, CAPBridgedPlugin {
-    let identifier = "PowerPlugin"
-    let jsName = "Power"
-    let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise)
-    ]
-
-    override func load() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(powerStateChanged),
-            name: .NSProcessInfoPowerStateDidChange,
-            object: nil
-        )
-    }
-
-    @objc func status(_ call: CAPPluginCall) {
-        call.resolve(["lowPower": ProcessInfo.processInfo.isLowPowerModeEnabled])
-    }
-
-    /// Posted on an arbitrary thread.
-    @objc private func powerStateChanged() {
-        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-        DispatchQueue.main.async {
-            self.notifyListeners("changed", data: ["lowPower": lowPower])
+        if let bridge {
+            apple = SeanceAppleShell(bridge: bridge)
         }
     }
 }

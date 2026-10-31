@@ -9,10 +9,10 @@ let package = Package(
     name: "SeanceApple",
     platforms: [.iOS("26.0"), .macOS(.v10_15)],
     products: [
-        .library(name: "SeanceTranslate", targets: ["SeanceTranslate"]),
+        .library(name: "SeanceApple", targets: ["SeanceApple"]),
     ],
     targets: [
-        .target(name: "SeanceTranslate"),
+        .target(name: "SeanceApple"),
     ],
     swiftLanguageVersions: [.v5]
 )

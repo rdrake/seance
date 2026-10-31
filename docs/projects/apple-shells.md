@@ -2,13 +2,13 @@
 
 The iOS shell (`shells/capacitor`) and the macOS shell (`shells/tauri`) run
 the same page on the same engine (WKWebView) and can call the same Apple
-frameworks. `shells/apple` is where that Swift lives; `SeanceTranslate` is
-its only module so far. This plan is about making the next modules cheap and
+frameworks. `shells/apple` is where that Swift lives. This plan is about making the next modules cheap and
 **removing code** rather than adding it. The codebase is already large; each
 step below has to leave less to read than it found.
 
-Status (2026-10-31): a plan. Nothing in it is built except the macOS icon
-(§ 6).
+Status (2026-10-31): step 0 and `Power` are built (§ 7), and the macOS
+icon (§ 6). Notifications are next, once (a) or (b) is decided. § 2 is the
+state this plan started from.
 
 ## 1. The rule
 
@@ -103,7 +103,7 @@ plan.
 ### 4.3 Held
 
 - **Language detection** (`NLLanguageRecognizer`, a `detect` method on
-  `SeanceTranslate`) for lines the page's own detector cannot place. Same
+  `AppleTranslate`) for lines the page's own detector cannot place. Same
   API on both. Undecided; not built until it is.
 - **Network changes and waking from sleep** (`NWPathMonitor`, the Mac's
   `NSWorkspace.didWakeNotification`) calling `reconnectAll()`. Only worth it
@@ -145,9 +145,16 @@ Mac icon is upscaled; a 1024 source in `public/img/` would sharpen it.
 
 ## 7. Order
 
-1. Step 0 and `Power` together: the router, both adapters, the event path,
-   `PowerPlugin` moved, the `themeScene.ts` gate gone. Checks: the iOS
-   build on the phone (Translate still works, Low Power Mode still reaches
-   the scene), the Mac (`--drive`: Translate, Low Power Mode toggled).
+1. **Done 2026-10-31.** Step 0 and `Power` together: the router, both
+   adapters, the event path, `PowerPlugin` moved, the `themeScene.ts` gate
+   gone (the page asks `Power.status` everywhere and probes Safari's frame
+   rate only where nothing answers). Checked: the Mac (`--drive`: Power,
+   AppleTranslate's languages, availability and a translation, unknown
+   plugins and methods `unimplemented`, a `changed` event reaching the page
+   through a posted power-state notification; `--smoke` passes), the iOS
+   Simulator (both plugins registered, `Power.status` and
+   `AppleTranslate.languages` answered). Owed: the phone (Translate,
+   Low Power Mode toggled for real), and a real Low Power Mode toggle on a
+   Mac laptop (toggling it needs `sudo pmset`).
 2. Notifications, (a) or (b) as decided, with its gates.
 3. Anything from § 4.3 once decided.

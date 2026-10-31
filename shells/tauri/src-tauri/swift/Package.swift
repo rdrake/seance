@@ -14,7 +14,7 @@ let package = Package(
         .package(name: "SeanceApple", path: "../../../apple"),
     ],
     targets: [
-        .target(name: "SeanceTauri", dependencies: [.product(name: "SeanceTranslate", package: "SeanceApple")]),
+        .target(name: "SeanceTauri", dependencies: [.product(name: "SeanceApple", package: "SeanceApple")]),
     ],
     swiftLanguageVersions: [.v5]
 )

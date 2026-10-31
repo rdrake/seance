@@ -142,14 +142,6 @@ async fn seance_call(
         });
     }
 
-    // Apple's Translation framework, answered asynchronously (src/apple.rs).
-    #[cfg(target_os = "macos")]
-    if plugin == "AppleTranslate" {
-        return apple::call(&method, &options)
-            .await
-            .map_err(|(code, message)| ShellError { message, code });
-    }
-
     // The dock (macOS) and launchers that show a count (Linux); a Windows
     // taskbar takes an overlay image, not a number.
     let badge = PLATFORM != "windows";
@@ -190,11 +182,25 @@ async fn seance_call(
             smoke::report(window.app_handle(), &options);
             Ok(json!({}))
         }
-        _ => Err(ShellError {
-            message: format!("{plugin}.{method} is not implemented"),
-            code: "unimplemented".into(),
-        }),
+        _ => native(&plugin, &method, &options).await,
     }
+}
+
+/// What the shell's own Rust does not answer: on macOS the Apple shells'
+/// Swift plugins (src/apple.rs), which the iOS shell has too.
+#[cfg(target_os = "macos")]
+async fn native(plugin: &str, method: &str, options: &Value) -> Result<Value, ShellError> {
+    apple::call(plugin, method, options)
+        .await
+        .map_err(|(code, message)| ShellError { message, code })
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn native(plugin: &str, method: &str, _: &Value) -> Result<Value, ShellError> {
+    Err(ShellError {
+        message: format!("{plugin}.{method} is not implemented"),
+        code: "unimplemented".into(),
+    })
 }
 
 /// The app's own pages: the bundled assets, never the network — except
@@ -347,6 +353,9 @@ pub fn run() {
             // nothing, so trying it never takes over this machine's links.
             #[cfg(all(not(debug_assertions), any(target_os = "linux", windows)))]
             let _ = app.deep_link().register_all();
+
+            #[cfg(target_os = "macos")]
+            apple::start(app.handle());
 
             create_main(app.handle())?;
             install_close_behaviour(app.handle())?;
