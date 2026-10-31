@@ -13,7 +13,7 @@
 				<button
 					class="settings-modal-close"
 					type="button"
-					aria-label="Close the release notes"
+					:aria-label="t('image.close')"
 					@click="close"
 				>
 					✕
@@ -70,7 +70,9 @@
 				<router-link id="back-to-help" to="/help">{{
 					t("windows.changelog.back")
 				}}</router-link>
-				<button class="btn settings-modal-done" type="button" @click="close">Done</button>
+				<button class="btn settings-modal-done" type="button" @click="close">
+					{{ t("windows.settings.done") }}
+				</button>
 			</div>
 		</div>
 	</div>

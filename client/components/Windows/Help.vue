@@ -13,7 +13,7 @@
 				<button
 					class="settings-modal-close"
 					type="button"
-					aria-label="Close help"
+					:aria-label="t('image.close')"
 					@click="close"
 				>
 					✕
@@ -1079,7 +1079,9 @@
 				</div>
 			</div>
 			<div class="settings-modal-footer">
-				<button class="btn settings-modal-done" type="button" @click="close">Done</button>
+				<button class="btn settings-modal-done" type="button" @click="close">
+					{{ t("windows.settings.done") }}
+				</button>
 			</div>
 		</div>
 	</div>
