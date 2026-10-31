@@ -266,7 +266,7 @@ import webpush from "../../js/webpush";
 import dnd from "../../js/dnd";
 import {DAYS, HHMM, weekdayName, type DndSchedule} from "../../js/helpers/dnd";
 import {frameSegments, KEEP} from "../../js/i18n/core";
-import {isAndroidShell} from "../../js/helpers/capacitor";
+import {isAndroidShell} from "../../js/helpers/shell";
 import {nativeAlertsAvailable} from "../../js/helpers/nativeAlerts";
 import {playNotificationSound} from "../../js/helpers/notificationSound";
 

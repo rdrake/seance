@@ -16,7 +16,7 @@ import {TranslateClient} from "./client";
 import {FAKE_CAPABILITY, fakePort} from "./fakePort";
 import {buildCatalog, listedSize, nativeDevice, normalizeDeviceChoice} from "./models";
 import {APPLE_PLUGIN, AppleTranslator} from "./engines/apple";
-import {isIOSShell, nativeInvoke} from "../helpers/capacitor";
+import {isIOSShell, nativeInvoke} from "../helpers/shell";
 import {MainPort} from "./protocol";
 import {RouteTable} from "./router";
 import {ServiceDeps, ServiceSettings, TranslateService} from "./service";
