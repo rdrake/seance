@@ -5,8 +5,9 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         swift_rs::SwiftLinker::new("10.15")
-            .with_package("SeanceApple", "swift/")
+            .with_package("SeanceTauri", "swift/")
             .link();
+        println!("cargo:rerun-if-changed=../../apple");
         println!("cargo:rustc-link-arg=-Wl,-weak_framework,Translation");
         // The Swift runtime is the system's (macOS 12+ keeps it there).
         println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");

@@ -1,6 +1,6 @@
 // `AppleTranslate` (macOS): the Swift package under swift/ answers it with
-// Apple's Translation framework, the same four methods and shapes as the iOS
-// shell's plugin. One C entry point: the method and its options as JSON in,
+// Apple's Translation framework through the package the iOS shell's plugin
+// uses too (shells/apple), so the methods and shapes are the same. One C entry point: the method and its options as JSON in,
 // and a callback, on any thread, with `{"ok": …}` or `{"err": {code, message}}`.
 
 use serde_json::Value;
