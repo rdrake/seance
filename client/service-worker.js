@@ -113,6 +113,11 @@ self.addEventListener("install", function (event) {
 });
 
 self.addEventListener("activate", function (event) {
+	event.waitUntil(
+		logPush("activate build=" + cacheName + (pushOnly ? " network=" + scopeNetwork : " root"))
+	);
+	sweepOn(event);
+
 	if (pushOnly) {
 		// The cache belongs to the root worker; a push-only one of another
 		// build must not sweep it, and there are no clients to claim.
@@ -380,6 +385,9 @@ self.addEventListener("message", function (event) {
 		event.waitUntil(awayOnClose(networks));
 		return;
 	}
+
+	// A page that is here (not one leaving): a chance to run a close that is due.
+	sweepOn(event);
 
 	if (event.data && event.data.type === "read" && typeof event.data.target === "string") {
 		const {target, ts} = event.data;
@@ -1304,6 +1312,7 @@ async function updateBadge() {
 self.addEventListener("push", function (event) {
 	const raw = event.data ? event.data.text() : "";
 
+	sweepOn(event);
 	event.waitUntil(handlePush(raw));
 });
 
@@ -1329,6 +1338,25 @@ let pushChain = Promise.resolve();
 /** The strict push the queue is running (handlePush): showSafely marks it
  * shown, so its deadline knows it has answered WebKit. */
 let activePush = null;
+
+/** The worker's own account of what it did — each push and its outcome,
+ * a show that failed, a subscription change, an activation — kept in
+ * IndexedDB (`pushlog`, newest last) for Settings → Notifications →
+ * Diagnostics (webpush.ts `diagnostics`): the one way to learn what happened
+ * on a device nobody debugging it can hold. Never awaited ahead of a
+ * notification that must still be shown. */
+const PUSH_LOG_CAP = 40;
+/** Notifications shown so far (showSafely): a push's outcome line says
+ * whether it showed one. */
+let notificationsShown = 0;
+
+async function logPush(text) {
+	try {
+		await idbAppend("pushlog", new Date().toISOString() + " " + text, PUSH_LOG_CAP);
+	} catch (e) {
+		// no storage, no log
+	}
+}
 
 function handlePush(raw) {
 	if (!strictUserVisible()) {
@@ -1570,6 +1598,8 @@ function fromJson(json) {
 }
 
 async function handlePushNow(raw, state = {fellBack: false}) {
+	const before = notificationsShown;
+	let outcome = "unparsed";
 	let json = null;
 
 	// RFC 8188 says the decrypter strips the aes128gcm padding delimiter
@@ -1595,6 +1625,7 @@ async function handlePushNow(raw, state = {fellBack: false}) {
 
 		// Another device read a channel (JSON opt-down tier): close what we show for it.
 		if (json && json.t === "read") {
+			outcome = "read-relay " + json.target;
 			await readRelay(json.target, json.ts, strict);
 			return;
 		}
@@ -1623,19 +1654,29 @@ async function handlePushNow(raw, state = {fellBack: false}) {
 
 		// The same relay as a MARKREAD line (the full tier).
 		if (parsed && parsed.command === "MARKREAD") {
+			outcome = "read-relay " + parsed.target;
 			await readRelay(parsed.target, parsed.timestamp, strict);
 			return;
 		}
 
 		if (parsed && (parsed.command === "PRIVMSG" || parsed.command === "NOTICE")) {
+			// The conversation, as the notification is tagged: the sender of a PM.
+			outcome =
+				"message " +
+				parsed.command +
+				" " +
+				(isChannelName(parsed.target) ? parsed.target : parsed.nick);
 			await showMessage(P, parsed, true, strict);
 			return;
 		}
 
 		// userVisibleOnly means every push should surface something.
+		outcome = "generic";
 		await showGeneric();
 		await updateBadge();
 	} catch (e) {
+		outcome = "error " + ((e && e.name) || "Error") + ": " + ((e && e.message) || e);
+
 		// Whatever failed above, the prefs' locale may or may not have been
 		// applied — a push that dies before it leaves a locale a previous
 		// push installed, which must not leak into the fallback copy.
@@ -1653,6 +1694,18 @@ async function handlePushNow(raw, state = {fellBack: false}) {
 		}
 
 		await updateBadge().catch(() => undefined);
+	} finally {
+		await logPush(
+			"push " +
+				outcome +
+				" bytes=" +
+				raw.length +
+				" strict=" +
+				strict +
+				" shown=" +
+				(notificationsShown - before) +
+				(state.fellBack ? " fellBack" : "")
+		);
 	}
 }
 
@@ -1668,11 +1721,246 @@ async function handlePushNow(raw, state = {fellBack: false}) {
  * (READ_STUB_LIFETIME_MS); one killed before then leaves it to the next
  * message or the page's app-opened sweep. Not inside `waitUntil`: the event
  * must not outlive WebKit's handler lifetime. */
+/** The read marker this device knows per conversation (`reads` in
+ * IndexedDB: `<network>/<target>` → the newest read time, server clock, at
+ * most READS_CAP entries, newest kept): a Mark read tapped here, and every
+ * relay. A push whose message is at or before it is a message already read
+ * — FCM delivers a dozing phone's backlog late, after the tap that woke it —
+ * and shows no fresh card (showMessage). */
+const READS_CAP = 50;
+
+async function rememberRead(network, target, ts) {
+	if (!target || !ts || Number.isNaN(Date.parse(ts))) {
+		return;
+	}
+
+	try {
+		const reads = (await idbGet("reads")) || {};
+		const key = foldName((network || "") + "/" + target);
+
+		if (!reads[key] || Date.parse(reads[key]) < Date.parse(ts)) {
+			reads[key] = ts;
+		}
+
+		const keys = Object.keys(reads);
+
+		if (keys.length > READS_CAP) {
+			keys.sort((a, b) => Date.parse(reads[a]) - Date.parse(reads[b]));
+
+			for (const k of keys.slice(0, keys.length - READS_CAP)) {
+				delete reads[k];
+			}
+		}
+
+		await idbSet("reads", reads);
+	} catch (e) {
+		// no storage: a late push shows as it did
+	}
+}
+
+/** Whether a message at `time` is at or before the conversation's known read marker. */
+async function alreadyRead(network, target, time) {
+	if (!target || !time) {
+		return false;
+	}
+
+	try {
+		const reads = (await idbGet("reads")) || {};
+		const at = reads[foldName((network || "") + "/" + target)];
+
+		return typeof at === "string" && Date.parse(time) <= Date.parse(at);
+	} catch (e) {
+		return false;
+	}
+}
+
+/** How long after a read relay's push event the last notification it
+ * found, turned into "Marked as read", is closed on Chrome: past the moment
+ * Chrome counts (the event's end). */
+const DEFERRED_CLOSE_MS = 500;
+
 async function readRelay(target, ts, strict) {
-	await closeForTarget(target, ts);
+	await rememberRead(await networkOf(), target, ts);
 
 	if (strict) {
+		await closeForTarget(target, ts);
 		await showReadStub(target, ts);
+	} else {
+		// Chrome counts the notifications visible on this registration when
+		// the push event ends, and a relay that closed the last one would
+		// leave none — a silent push, which spends the origin's budget and
+		// then shows Chrome's own "This site has been updated in the
+		// background". So what the relay found closes now while another
+		// notification stays up (the count is still one), and the last one
+		// is turned into a silent "Marked as read" in place instead, for a
+		// scheduled close to take (closeOrConvert).
+		const matched = await closeOrConvert(target, ts);
+
+		if (matched === 0) {
+			await keepChromeCount(target);
+		}
+	}
+
+	await updateBadge();
+}
+
+/** Close `target`'s notifications at or before `ts` on Chrome, keeping the
+ * registration's count at one for the event's end: every matched one
+ * closes now while another notification is up; the last one is re-shown in
+ * place as a silent "Marked as read" (no alert: same tag, no renotify) and
+ * scheduled to close DEFERRED_CLOSE_MS later — by the timer where the
+ * worker lives on, else by the next event (Background Sync needs a window
+ * of the app, below). Returns how many matched. */
+async function closeOrConvert(target, ts) {
+	const cutoff = ts ? Date.parse(ts) : Infinity;
+	const all = (await self.registration.getNotifications()).filter(
+		(n) => n.tag && n.tag.startsWith("push-")
+	);
+	const matched = all.filter(
+		(n) =>
+			n.data &&
+			sameName(n.data.target, target) &&
+			(!n.data.time || Date.parse(n.data.time) <= cutoff)
+	);
+
+	if (matched.length === 0) {
+		return 0;
+	}
+
+	const keep = matched.length === all.length ? newest(matched) : null;
+
+	for (const n of matched) {
+		if (n !== keep) {
+			n.close();
+		}
+	}
+
+	if (keep) {
+		if (!isStub(keep)) {
+			await showSafely(keep.title, {
+				tag: keep.tag,
+				silent: true,
+				renotify: false,
+				icon: "img/icon-192.png",
+				body: "Marked as read",
+				data: {...keep.data, kind: "read", count: 0, messages: undefined},
+			});
+		}
+
+		await scheduleStubClose(keep.tag, DEFERRED_CLOSE_MS);
+		void logPush(
+			"closed " +
+				(matched.length - 1) +
+				" after the read relay for " +
+				target +
+				", the last turned into Marked as read"
+		);
+	} else {
+		void logPush("closed " + matched.length + " after the read relay for " + target);
+	}
+
+	return matched.length;
+}
+
+/** How long the brief "Marked as read" stays on a tag-replacing browser:
+ * past the end of the push event, which is when Chrome counts (a
+ * scheduled close, scheduleClose). */
+const BRIEF_READ_STUB_MS = 4000;
+
+/** A push event on Chrome that would end with nothing shown — a read relay
+ * that found nothing to close (the device that did the reading, or whose
+ * page closed its copy already), or a message the page already took.
+ * Chrome waives the rule while a window of the site is visible (the usual
+ * case on the reading device: the app is open), and a notification for
+ * another conversation still up is count enough. Only with neither does a
+ * silent stub take the count to one for the event's end — "Marked as read"
+ * for a relay, a blank quiet one under the message's own tag (`quietTag`)
+ * for a taken message, which the page's own card under that tag replaces —
+ * closed a few seconds later by a scheduled close (Chrome never refuses a
+ * close). */
+async function keepChromeCount(target, quietTag = undefined) {
+	const windows = await appWindows();
+
+	if (windows.some((c) => c.visibilityState === "visible")) {
+		return;
+	}
+
+	const up = (await self.registration.getNotifications()).filter(
+		(n) => n.tag && n.tag.startsWith("push-")
+	);
+
+	if (up.length > 0) {
+		return;
+	}
+
+	const network = await networkOf();
+
+	if (quietTag) {
+		await showStub(quietTag, "quiet", target, network);
+		await scheduleStubClose(quietTag, BRIEF_READ_STUB_MS);
+		return;
+	}
+
+	const tag = tagFor(network, "read/" + foldName(target || ""));
+
+	await showSafely(appName, {
+		tag,
+		silent: true,
+		icon: "img/icon-192.png",
+		body: "Marked as read",
+		data: {kind: "read", target, network: network || undefined},
+	});
+
+	await scheduleStubClose(tag, BRIEF_READ_STUB_MS);
+}
+
+/** How long a notification marked read from its own button lingers as
+ * "Marked as read" on Chrome before the worker closes it, unless the
+ * server's relay of that read closes it sooner (DEFERRED_CLOSE_MS after
+ * its event). */
+const MARKED_READ_LINGER_MS = 8000;
+
+/** Mark read tapped on a notification. On Chrome the notification closes
+ * at once while another is up on the registration (the server's relay of
+ * the read, seconds later, finds that one and is no silent push); the last
+ * one is not closed but turned, in place and without an alert (same tag, no
+ * renotify), into a silent "Marked as read" for the relay to find
+ * (keepChromeCount otherwise), closed by a scheduled close a little later in
+ * case no relay comes (a notification the page showed for a message the
+ * server never pushed). Elsewhere it closes at once, as before. */
+async function markedReadHere(data) {
+	await rememberRead(data.network || (await networkOf()), data.target, data.time);
+
+	if (strictUserVisible() || !data.target) {
+		await doneWith(data);
+		return;
+	}
+
+	const all = (await self.registration.getNotifications()).filter(
+		(n) => n.tag && n.tag.startsWith("push-")
+	);
+	const mine = all.filter((n) => n.data && sameName(n.data.target, data.target));
+	const keep = mine.length > 0 && mine.length === all.length ? newest(mine) : null;
+
+	for (const n of mine) {
+		if (n !== keep) {
+			n.close();
+		}
+	}
+
+	if (keep) {
+		if (!isStub(keep)) {
+			await showSafely(keep.title, {
+				tag: keep.tag,
+				silent: true,
+				renotify: false,
+				icon: "img/icon-192.png",
+				body: "Marked as read",
+				data: {...keep.data, kind: "read", count: 0, messages: undefined},
+			});
+		}
+
+		await scheduleStubClose(keep.tag, MARKED_READ_LINGER_MS);
 	}
 
 	await updateBadge();
@@ -1721,10 +2009,13 @@ async function showStub(tag, kind, target, network, fallback = false) {
 }
 
 async function closeStub(tag) {
+	let closed = 0;
+
 	try {
 		for (const n of await self.registration.getNotifications({tag})) {
 			if (isStub(n)) {
 				n.close();
+				closed++;
 			}
 		}
 
@@ -1732,6 +2023,8 @@ async function closeStub(tag) {
 	} catch (e) {
 		// the next message on the target, or the page's sweep, takes it
 	}
+
+	return closed;
 }
 
 /** Show a notification again exactly as it stands, silently: what WebKit
@@ -1794,6 +2087,21 @@ async function showMessage(P, parsed, checkSeen, mustShow = false, silent = fals
 	// stashed network.
 	const network = await networkOf();
 	const tag = tagFor(network, replyTo || "activity");
+	const time = typeof parsed.tags.time === "string" ? parsed.tags.time : undefined;
+
+	// A push for a message at or before the conversation's read marker —
+	// delivered late, after a Mark read or a read elsewhere — is read already:
+	// no fresh card. Under WebKit it still has to show (quietly); on Chrome
+	// what is up is count enough, else the brief silent "Marked as read".
+	if (checkSeen && (await alreadyRead(network, replyTo, time))) {
+		if (mustShow) {
+			await showQuiet(tag, replyTo, network);
+		} else {
+			await keepChromeCount(replyTo);
+		}
+
+		return;
+	}
 
 	// The page mirrors the reader's markdown setting and its muted
 	// conversations here (client/js/push-prefs.ts); absent means the app
@@ -1814,9 +2122,18 @@ async function showMessage(P, parsed, checkSeen, mustShow = false, silent = fals
 			((msgid && seen.includes(msgid)) || seen.includes(seenId) || seen.includes(seenKey))
 		) {
 			// Under WebKit even this must show: quietly, never a second alert
-			// (the page took it, or the user already dismissed it).
+			// (the page took it, or the user already dismissed it). On Chrome
+			// a push that shows nothing is a silent push unless a window of
+			// the app is visible or a notification is up on this registration
+			// (keepChromeCount) — the page took the message but showed nothing
+			// for it (a muted conversation, do not disturb, the network's
+			// notifications off, or its own card on another registration).
+			void logPush("dropped as seen " + tag);
+
 			if (mustShow) {
 				await showQuiet(tag, replyTo, network);
+			} else {
+				await keepChromeCount(replyTo, tag);
 			}
 
 			return;
@@ -1903,8 +2220,6 @@ async function showMessage(P, parsed, checkSeen, mustShow = false, silent = fals
 			placeholder: t("sw.replyPlaceholder"),
 		},
 	];
-
-	const time = typeof parsed.tags.time === "string" ? parsed.tags.time : undefined;
 
 	await showSafely(title, {
 		tag,
@@ -2025,14 +2340,17 @@ async function showSafely(title, options) {
 		activePush.shown = true;
 	}
 
+	let failure = null;
+
 	// Which copy under a tag is the newest (WebKit keeps them all; `tidy`).
 	options = {...options, data: {...(options.data || {}), shownAt: Date.now()}};
 
 	try {
 		await self.registration.showNotification(title, options);
+		notificationsShown++;
 		return;
 	} catch (e) {
-		// fall through to the reduced forms
+		failure = e; // fall through to the reduced forms
 	}
 
 	try {
@@ -2042,15 +2360,24 @@ async function showSafely(title, options) {
 			silent: options.silent === true,
 			data: {shownAt: options.data.shownAt},
 		});
+		notificationsShown++;
 		return;
 	} catch (e) {
-		// fall through to the bare form
+		failure = e; // fall through to the bare form
 	}
 
 	try {
 		await self.registration.showNotification(title, {});
+		notificationsShown++;
 	} catch (e) {
-		// nothing else to try
+		// nothing else to try: say so where the page can read it
+		failure = e;
+		void logPush(
+			"show failed " +
+				((failure && failure.name) || "Error") +
+				": " +
+				((failure && failure.message) || failure)
+		);
 	}
 }
 
@@ -2069,10 +2396,12 @@ function sameName(a, b) {
 	return typeof a === "string" && typeof b === "string" && foldName(a) === foldName(b);
 }
 
-/** Close push notifications for `target` whose message predates `ts`. */
+/** Close push notifications for `target` whose message predates `ts`;
+ * returns how many matched. */
 async function closeForTarget(target, ts) {
 	const cutoff = ts ? Date.parse(ts) : Infinity;
 	const all = await self.registration.getNotifications();
+	const matched = [];
 
 	for (const n of all) {
 		if (!n.tag || !n.tag.startsWith("push-")) {
@@ -2086,9 +2415,182 @@ async function closeForTarget(target, ts) {
 			(sameTarget || (mine && !target)) &&
 			(!cutoff || !n.data.time || Date.parse(n.data.time) <= cutoff)
 		) {
-			n.close();
+			matched.push(n);
 		}
 	}
+
+	for (const n of matched) {
+		n.close();
+	}
+
+	return matched.length;
+}
+
+// --- closes that outlive the event ------------------------------------------
+// A close a read leaves for after its event — the last "Marked as read" a
+// relay or a tap left in place, the brief stub — used to be a timer alone,
+// and a timer runs past the event only while the worker lives. On Android,
+// Chrome reports the push job finished the moment the message is dispatched
+// (GCMNativeBackgroundTask.java: "we hope that the system keeps us alive
+// long enough to actually finish processing"), so a phone with its screen
+// off ends the process with the event and the timer never fires. So each
+// such close is kept in IndexedDB (`closes`: a tag, or a target with its
+// cutoff `ts`, and the earliest moment `at`), the timer is still set, a
+// one-shot Background Sync is registered where the browser allows it —
+// Chrome fires it at once under its own keep-alive, or when the device next
+// can, and the sync handler sleeps inside its own waitUntil until the entry
+// is due; but Chrome refuses the registration from a worker with no window
+// of the app open (BackgroundSyncManager::RegisterDidCheckIfMainFrame:
+// NOT_ALLOWED), which is exactly the phone in a pocket — and every event the
+// worker gets sweeps what is due first. Whichever runs first closes; the
+// others find nothing. That is why a relay closes what it can inside its
+// event and leaves at most one "Marked as read" behind (closeOrConvert): on
+// a phone with the app closed, that one stands until the next push or the
+// app opens.
+
+const CLOSES_KEY = "closes";
+const CLOSES_SYNC_TAG = "seance-closes";
+/** The sync handler's sleep between sweeps while an entry is not yet due. */
+const CLOSES_POLL_MS = 1000;
+
+/** Close the stub under `tag` (and nothing else: a card the page shows
+ * under the tag meanwhile stays) once `delayMs` has passed, by whichever
+ * of the timer, the sync event and the next event comes first. One entry
+ * per tag: the earlier moment wins. */
+async function scheduleStubClose(tag, delayMs) {
+	const at = Date.now() + delayMs;
+	const key = "tag:" + tag;
+
+	try {
+		const closes = (await idbGet(CLOSES_KEY)) || {};
+		const had = closes[key];
+
+		closes[key] = {tag, at: had && had.at < at ? had.at : at};
+		await idbSet(CLOSES_KEY, closes);
+	} catch (e) {
+		// no storage: the timer is what there is
+	}
+
+	// The timer is this entry's own due signal; the sync and the event
+	// sweeps go by the clock.
+	setTimeout(() => {
+		void enqueuePush(() => sweepCloses(key)).catch(() => undefined);
+	}, delayMs);
+
+	// Fire and forget: nothing the caller does should wait on it.
+	registerClosesSync();
+}
+
+/** Whether this worker has learnt that Background Sync is refused here,
+ * so the log says it once. */
+let syncRefused = false;
+
+function registerClosesSync() {
+	try {
+		self.registration.sync.register(CLOSES_SYNC_TAG).catch((e) => {
+			// No Background Sync here: WebKit and Firefox have none, Chrome
+			// refuses a worker with no window of the app open, or the
+			// permission is off. The timer and the next event are what
+			// there is.
+			if (!syncRefused) {
+				syncRefused = true;
+				void logPush(
+					"background sync refused: " +
+						((e && e.name) || "Error") +
+						" — closes wait for the next event"
+				);
+			}
+		});
+	} catch (e) {
+		if (!syncRefused) {
+			syncRefused = true;
+			void logPush("no background sync here — closes wait for the next event");
+		}
+	}
+}
+
+/** Run the scheduled closes that are due (and `dueKey`'s, whose timer
+ * fired); returns the milliseconds until the next one, or null when none
+ * is left. */
+async function sweepCloses(dueKey = null) {
+	let closes;
+
+	try {
+		closes = (await idbGet(CLOSES_KEY)) || {};
+	} catch (e) {
+		return null;
+	}
+
+	const now = Date.now();
+	let next = null;
+	let changed = false;
+
+	for (const key of Object.keys(closes)) {
+		const entry = closes[key];
+
+		if (!entry || typeof entry.at !== "number" || typeof entry.tag !== "string") {
+			delete closes[key];
+			changed = true;
+			continue;
+		}
+
+		if (entry.at > now && key !== dueKey) {
+			next = next === null ? entry.at - now : Math.min(next, entry.at - now);
+			continue;
+		}
+
+		const matched = await closeStub(entry.tag);
+
+		if (matched > 0) {
+			void logPush("closed the stub " + entry.tag);
+		}
+
+		delete closes[key];
+		changed = true;
+	}
+
+	if (changed) {
+		try {
+			await idbSet(CLOSES_KEY, closes);
+		} catch (e) {
+			// read again next time
+		}
+
+		await updateBadge();
+	}
+
+	return next;
+}
+
+/** The sync event: sweep once the pushes in flight have ended (Chrome has
+ * counted them), sleep while an entry is not yet due, and end with none
+ * left. */
+async function runCloses() {
+	for (;;) {
+		await pushChain;
+
+		const left = await enqueuePush(sweepCloses);
+
+		if (left === null) {
+			return;
+		}
+
+		await new Promise((resolve) => setTimeout(resolve, Math.min(left, CLOSES_POLL_MS)));
+	}
+}
+
+self.addEventListener("sync", function (event) {
+	if (event.tag !== CLOSES_SYNC_TAG) {
+		return;
+	}
+
+	event.waitUntil(runCloses().catch(() => undefined));
+});
+
+/** Any event is a chance to run a close that is due (the timer may have
+ * died with the worker). */
+function sweepOn(event) {
+	event.waitUntil(enqueuePush(sweepCloses).catch(() => undefined));
 }
 
 /** Fallback line parser (no tag unescaping) for when js/push.js did not load. */
@@ -2136,10 +2638,28 @@ function parsePushLine(line) {
 // connection; when credentials are not stashed, ask any open page to redo it
 // from the UI instead.
 self.addEventListener("pushsubscriptionchange", function (event) {
-	event.waitUntil(handleResubscribe(event.oldSubscription, event.newSubscription));
+	event.waitUntil(
+		logPush(
+			"pushsubscriptionchange old=" +
+				Boolean(event.oldSubscription) +
+				" new=" +
+				Boolean(event.newSubscription)
+		).then(() => handleResubscribe(event.oldSubscription, event.newSubscription))
+	);
 });
 
 async function handleResubscribe(oldSub, newSub) {
+	// The root registration holds no subscription in the per-network design
+	// (push-per-network.md): one that turns up here is a leftover, and
+	// renewing it would give the device a second endpoint — every push
+	// delivered twice, the root's copy dropped as seen with nothing visible
+	// on this registration, a silent push each time (Chrome's "This site has
+	// been updated in the background"). Let it lapse; the page drops it.
+	if (!pushOnly) {
+		await logPush("pushsubscriptionchange on the root registration: not renewed");
+		return;
+	}
+
 	const stash = await getStash();
 	// This worker's network (by scope) and the key its subscription was made
 	// against; the root worker has only the stash-wide key.
@@ -2357,6 +2877,10 @@ async function handleReply(data, text) {
  * whatever happened, since there is nothing to type and nothing to lose.
  * The server's relay of the marker closes it on the other devices. */
 async function handleMarkRead(data) {
+	// First, so the tap answers at once: the notification turns into "Marked
+	// as read" (Chrome) or closes (elsewhere), then the marker goes out.
+	await markedReadHere(data);
+
 	if (data.target) {
 		const stash = await getStash();
 		const net = stashNetwork(stash, data.network);
@@ -2375,8 +2899,6 @@ async function handleMarkRead(data) {
 			await enqueueOutbox(mark);
 		}
 	}
-
-	await doneWith(data);
 }
 
 /** The notification's conversation has been dealt with here. */
@@ -2387,6 +2909,12 @@ async function doneWith(data) {
 
 self.addEventListener("notificationclick", function (event) {
 	const data = event.notification.data || {};
+
+	sweepOn(event);
+
+	void logPush(
+		"click action=" + (event.action || "open") + " tag=" + (event.notification.tag || "")
+	);
 
 	// Reply: an inline text field where the platform has one (event.reply),
 	// a plain button elsewhere — that one opens the conversation to type in.
@@ -2399,7 +2927,9 @@ self.addEventListener("notificationclick", function (event) {
 	// Mark read: the account's read marker at the notification's newest
 	// message, which the server relays to every device.
 	if (event.action === "markread") {
-		event.notification.close();
+		// Not closed here: on Chrome markedReadHere turns it into a silent
+		// "Marked as read" in place for the server's relay to find; elsewhere
+		// doneWith closes it.
 		event.waitUntil(handleMarkRead(data));
 		return;
 	}

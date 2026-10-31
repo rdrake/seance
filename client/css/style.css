@@ -8786,6 +8786,33 @@ html[data-reduce-motion] #form .upload-bar-track.indeterminate .upload-bar-fill 
 	color: var(--body-color-muted);
 }
 
+/* Settings → Notifications → Diagnostics: the push report to copy. */
+.push-diagnostics {
+	margin-top: 0.75rem;
+}
+
+.push-diagnostics summary {
+	cursor: pointer;
+}
+
+.push-diagnostics-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.push-diagnostics-report {
+	max-height: 20rem;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 0.75rem;
+	line-height: 1.4;
+	padding: 0.5rem;
+	border: 1px solid var(--body-color-muted);
+	border-radius: 0.25rem;
+}
+
 .session-row {
 	padding: 6px 0;
 	border-bottom: 1px solid var(--body-color-muted);

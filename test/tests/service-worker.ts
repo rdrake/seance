@@ -346,6 +346,8 @@ interface SWHarness {
 	socketTimeline(): {bornAt: number; quitAt: number | null}[];
 	/** Move the worker's and the notifications' clock forward. */
 	advance(ms: number): void;
+	/** The Background Sync tags the worker registered, in order. */
+	synced: string[];
 }
 
 interface HarnessOptions {
@@ -367,6 +369,9 @@ interface HarnessOptions {
 	scope?: string;
 	/** Run the worker's timers a hundred times faster (its delays are seconds long). */
 	fastTimers?: boolean;
+	/** A worker whose timers never fire: the process Android ends with the
+	 * event (GCMNativeBackgroundTask.java). */
+	deadTimers?: boolean;
 	/** Replace the stash the page wrote. */
 	stash?: Stash;
 	/** Refuse `close()` on a notification shown under 30 s ago, as WebKit does
@@ -415,10 +420,14 @@ function makeSW(options: HarnessOptions = {}): SWHarness {
 		}
 	}
 
+	const synced: string[] = [];
+
 	const sandbox: any = {
 		console,
 		Date: ShiftedDate,
-		setTimeout: options.fastTimers
+		setTimeout: options.deadTimers
+			? () => 0
+			: options.fastTimers
 			? (fn: () => void, ms = 0) => setTimeout(fn, ms / 100)
 			: setTimeout,
 		clearTimeout,
@@ -442,6 +451,12 @@ function makeSW(options: HarnessOptions = {}): SWHarness {
 		},
 		registration: {
 			scope: options.scope ?? SCOPE,
+			sync: {
+				register(tag: string): Promise<void> {
+					synced.push(tag);
+					return Promise.resolve();
+				},
+			},
 			getNotifications(filter?: {tag: string}): Promise<Rec[]> {
 				return Promise.resolve(
 					records.filter(
@@ -648,7 +663,20 @@ function makeSW(options: HarnessOptions = {}): SWHarness {
 		advance(ms: number): void {
 			offset += ms;
 		},
+		synced,
 	};
+}
+
+/** Fire a Background Sync event with the given tag. */
+async function fireSync(sw: SWHarness, tag: string): Promise<void> {
+	const promises: Promise<unknown>[] = [];
+	const ev = {tag, waitUntil: (p: Promise<unknown>) => promises.push(p)};
+
+	for (const h of sw.handlers.sync ?? []) {
+		h(ev);
+	}
+
+	await Promise.all(promises).catch(() => {});
 }
 
 /** Fire one push payload through the worker's push handler. */
@@ -806,13 +834,14 @@ describe("service worker push notifications", function () {
 	});
 
 	it("closes a target's notification when another device reads it", async function () {
-		const sw = makeSW();
+		const sw = makeSW({fastTimers: true});
 
 		await firePush(sw, msgPayload("alice", "pushtest", "for the desktop"));
 		await firePush(sw, msgPayload("bob", "pushtest", "and one more"));
 
 		const ts = new Date(Date.now() + 5000).toISOString();
 		await firePush(sw, `{"t":"read","target":"alice","ts":"${ts}"}`);
+		await new Promise((r) => setTimeout(r, 60)); // Chrome: the close follows the event
 
 		const live = sw.records.filter((n) => !n.closed);
 		expect(live).to.have.lengthOf(1);
@@ -914,7 +943,7 @@ describe("service worker push notifications", function () {
 	});
 
 	it("drops every line of a batch the live page already saw, msgid on the first line only", async function () {
-		const sw = makeSW();
+		const sw = makeSW({clients: [makeClient()]}); // a window visible: no stub stands in
 		const T = "2026-09-02T19:59:00.000Z";
 		const line = (i: number, text: string) =>
 			`@batch=b4;${
@@ -942,7 +971,7 @@ describe("service worker push notifications", function () {
 	});
 
 	it("a MARKREAD line closes the target's notification when it postdates the message", async function () {
-		const sw = makeSW();
+		const sw = makeSW({fastTimers: true});
 
 		await firePush(
 			sw,
@@ -950,8 +979,126 @@ describe("service worker push notifications", function () {
 		);
 		await firePush(sw, ":irc.example MARKREAD alice timestamp=2099-01-01T00:00:00.000Z");
 
+		// On Chrome the last notification turns into Marked as read in place
+		// (what Chrome counts is still one) and closes just after the event.
+		let live = sw.records.filter((n) => !n.closed);
+		expect(live, "in place at the event's end").to.have.lengthOf(1);
+		expect(live[0].body).to.equal("Marked as read");
+		await new Promise((r) => setTimeout(r, 40));
+		live = sw.records.filter((n) => !n.closed);
+		expect(live, "closed just after").to.have.lengthOf(0);
+	});
+
+	it("a read relay on Chrome turns the last notification into Marked as read in place and closes it just after the event", async function () {
+		const sw = makeSW({fastTimers: true});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there"));
+		await firePush(
+			sw,
+			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
+		);
+
+		// In place, silently: the count is one when Chrome looks, no alert.
 		const live = sw.records.filter((n) => !n.closed);
-		expect(live).to.have.lengthOf(0);
+		expect(live).to.have.lengthOf(1);
+		expect(live[0].tag).to.equal("push-net-1/alice");
+		expect(live[0].body).to.equal("Marked as read");
+		expect(live[0].silent).to.equal(true);
+		expect(live[0].renotify).to.equal(false);
+
+		// DEFERRED_CLOSE_MS, a hundred times faster.
+		await new Promise((r) => setTimeout(r, 60));
+		expect(sw.records.filter((n) => !n.closed)).to.have.lengthOf(0);
+	});
+
+	it("Mark read with another conversation's notification up closes at once", async function () {
+		const sw = makeSW();
+
+		await firePush(sw, msgPayload("alice", "pushtest", "one"));
+		await firePush(sw, msgPayload("bob", "pushtest", "two"));
+		const alice = sw.records.find((n) => n.data.target === "alice") as Rec;
+
+		await fireClick(sw, alice, "markread");
+
+		expect(sw.records.filter((n) => !n.closed).map((n) => n.data.target)).to.deep.equal([
+			"bob",
+		]);
+		expect(sw.shown, "nothing re-shown").to.have.lengthOf(2);
+	});
+
+	it("a read relay with nothing to close shows no stub while a window of the app is visible", async function () {
+		const sw = makeSW({clients: [makeClient()]});
+
+		await firePush(sw, `{"t":"read","target":"alice","ts":"${new Date().toISOString()}"}`);
+
+		expect(sw.shown).to.have.lengthOf(0);
+	});
+
+	it("Mark read from the notification turns it into a silent Marked as read in place, which the relay then closes", async function () {
+		this.timeout(10000);
+		const sw = makeSW(); // real timers: fireClick itself waits 350 ms, inside the 8 s linger
+		const rec = await pushed(sw);
+
+		await fireClick(sw, rec, "markread");
+
+		// In place: the same tag, no second notification, no alert.
+		const live = sw.records.filter((n) => !n.closed);
+		expect(live).to.have.lengthOf(1);
+		expect(live[0].tag).to.equal(rec.tag);
+		expect(live[0].body).to.equal("Marked as read");
+		expect(live[0].silent).to.equal(true);
+		expect(live[0].data.kind).to.equal("read");
+
+		// The server's relay of that read finds it and closes it after its event.
+		await firePush(
+			sw,
+			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
+		);
+		expect(sw.shown.filter((n) => n.data?.kind === "read")).to.have.lengthOf(1);
+		await new Promise((r) => setTimeout(r, 1700)); // DEFERRED_CLOSE_MS, real
+		expect(sw.records.filter((n) => !n.closed)).to.have.lengthOf(0);
+	});
+
+	it("a Marked as read nobody relays closes itself a little later", async function () {
+		const sw = makeSW({fastTimers: true});
+		const rec = await pushed(sw);
+
+		await fireClick(sw, rec, "markread"); // waits 350 ms real: the 8 s linger (80 ms here) is over
+
+		const marked = sw.shown.find((n) => n.data?.kind === "read");
+		expect(marked, "turned into Marked as read in place").to.not.equal(undefined);
+		expect(marked?.tag).to.equal(rec.tag);
+		expect(
+			sw.records.filter((n) => !n.closed),
+			"closed by the worker itself"
+		).to.have.lengthOf(0);
+	});
+
+	it("a read relay that leaves another conversation's notification up shows no stub on Chrome", async function () {
+		const sw = makeSW({fastTimers: true});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "one"));
+		await firePush(sw, msgPayload("bob", "pushtest", "two"));
+		await firePush(
+			sw,
+			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
+		);
+
+		// Closed inside the event: bob's keeps the count at one.
+		expect(sw.shown).to.have.lengthOf(2);
+		expect(sw.records.filter((n) => !n.closed).map((n) => n.data.target)).to.deep.equal([
+			"bob",
+		]);
+	});
+
+	it("a read relay with nothing to close still keeps Chrome's count with the brief stub", async function () {
+		const sw = makeSW();
+
+		await firePush(sw, `{"t":"read","target":"alice","ts":"${new Date().toISOString()}"}`);
+
+		expect(sw.shown).to.have.lengthOf(1);
+		expect(sw.shown[0].body).to.equal("Marked as read");
+		expect(sw.shown[0].silent).to.equal(true);
 	});
 
 	it("a MARKREAD line leaves a notification that postdates it", async function () {
@@ -991,7 +1138,7 @@ describe("service worker push notifications", function () {
 	});
 
 	it("drops a push whose msgid the live page already saw", async function () {
-		const sw = makeSW();
+		const sw = makeSW({clients: [makeClient()]}); // a window of the app is visible
 		const msgid = "BjAAAaBjzZ0";
 
 		// The page recorded this message while it was alive (push-seen.ts).
@@ -1013,6 +1160,37 @@ describe("service worker push notifications", function () {
 		// A raw line with a msgid not in the ring still shows.
 		await firePush(sw, "@msgid=BjAAAaBjzZ10 :alice PRIVMSG pushtest :new line");
 		expect(sw.shown, "raw-line msgid not in the ring still shows").to.have.lengthOf(2);
+	});
+
+	it("a push the page took, with no window visible and nothing up, shows a brief blank stub on Chrome", async function () {
+		const sw = makeSW({fastTimers: true});
+		const msgid = "BjAAAaBjzZ0";
+
+		sw.kv.set("seen", [msgid]);
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there", msgid));
+
+		// Not a silent push: a quiet stub under the message's own tag.
+		expect(sw.shown).to.have.lengthOf(1);
+		expect(sw.shown[0].tag).to.equal("push-net-1/alice");
+		expect(sw.shown[0].silent).to.equal(true);
+		expect(sw.shown[0].data.kind).to.equal("quiet");
+		expect(
+			((sw.kv.get("pushlog") as string[]) ?? []).some((l) => l.includes("dropped as seen"))
+		).to.equal(true);
+
+		await new Promise((r) => setTimeout(r, 80)); // BRIEF_READ_STUB_MS, a hundred times faster
+		expect(sw.records.filter((n) => !n.closed)).to.have.lengthOf(0);
+	});
+
+	it("a push the page took shows nothing while another notification is up on the registration", async function () {
+		const sw = makeSW();
+
+		await firePush(sw, msgPayload("bob", "pushtest", "earlier"));
+		sw.kv.set("seen", ["BjAAAaBjzZ0"]);
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there", "BjAAAaBjzZ0"));
+
+		expect(sw.shown).to.have.lengthOf(1);
+		expect(sw.shown[0].data.target).to.equal("bob");
 	});
 
 	it("puts Mark read on the left and Reply on the right (thumb reach on a phone)", async function () {
@@ -1092,7 +1270,7 @@ describe("service worker push notifications", function () {
 	});
 
 	it("drops a push delivered twice (same msgid), even after its notification was closed", async function () {
-		const sw = makeSW();
+		const sw = makeSW({clients: [makeClient()]});
 		const raw = "@msgid=BjAAAaBjdup1 :alice!u@h PRIVMSG pushtest :hello";
 
 		await firePush(sw, raw);
@@ -1124,7 +1302,7 @@ describe("service worker push notifications", function () {
 	});
 
 	it("drops every line of a multiline message the live page took, whichever arrives first", async function () {
-		const sw = makeSW();
+		const sw = makeSW({clients: [makeClient()]});
 		const line = (i: number, text: string) => batchLine("b8", i, 3, 3, text);
 
 		// The page recorded the msgid from the BATCH opener (push-seen.ts);
@@ -1160,13 +1338,14 @@ describe("service worker push notifications", function () {
 	});
 
 	it("keeps the read relay working when seen entries exist", async function () {
-		const sw = makeSW();
+		const sw = makeSW({fastTimers: true});
 
 		await firePush(sw, msgPayload("alice", "pushtest", "hello there"));
 		expect(sw.shown).to.have.lengthOf(1);
 
 		// The t:"read" relay carries ts, not msgid — never deduped.
 		await firePush(sw, `{"t":"read","target":"alice","ts":"2026-09-03T00:00:00.000Z"}`);
+		await new Promise((r) => setTimeout(r, 60)); // Chrome: the close follows the event
 		expect(sw.records[0].closed, "notification closed by read relay").to.be.true;
 	});
 
@@ -1231,7 +1410,7 @@ describe("service worker push notifications under WebKit (every push shows)", fu
 	});
 
 	it("a Chromium worker still drops what the page saw (AppleWebKit with Chrome/ is not WebKit)", async function () {
-		const sw = makeSW({userAgent: CHROME_UA});
+		const sw = makeSW({userAgent: CHROME_UA, clients: [makeClient()]});
 		const msgid = "BjAAAaBjzZ0";
 
 		sw.kv.set("seen", [msgid]);
@@ -1316,7 +1495,13 @@ describe("service worker push notifications under WebKit (every push shows)", fu
 			sw,
 			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
 		);
-		await firePush(sw, msgPayload("alice", "pushtest", "and again"));
+		// Later than the read marker (the relay's ts): a message the user has not read.
+		await firePush(
+			sw,
+			`{"t":"msg","from":"alice","target":"pushtest","msgid":"again1","time":"${new Date(
+				Date.now() + 10000
+			).toISOString()}","text":"and again"}`
+		);
 
 		const live = sw.records.filter((n) => !n.closed);
 		expect(live).to.have.lengthOf(1);
@@ -2086,8 +2271,12 @@ describe("service worker notification click", function () {
 });
 
 describe("service worker subscription renewal", function () {
+	// Renewal is the push-only worker's job; the root registration holds no
+	// subscription in the per-network design.
+	const NET_SCOPE = `${SCOPE}push/net-1/`;
+
 	it("re-registers after 001, where nefarious2 accepts WEBPUSH REGISTER", async function () {
-		const sw = makeSW();
+		const sw = makeSW({scope: NET_SCOPE});
 		const promises: Promise<unknown>[] = [];
 		const ev = {
 			oldSubscription: null,
@@ -2111,7 +2300,7 @@ describe("service worker subscription renewal", function () {
 	});
 
 	it("unregisters the rotated-away endpoint so the device is not registered twice", async function () {
-		const sw = makeSW();
+		const sw = makeSW({scope: NET_SCOPE});
 		const promises: Promise<unknown>[] = [];
 		const ev = {
 			oldSubscription: {endpoint: "https://push.example/OLD"},
@@ -2133,6 +2322,244 @@ describe("service worker subscription renewal", function () {
 		expect(unregister, "old endpoint unregistered").to.be.greaterThan(-1);
 		expect(register, "new endpoint registered").to.be.greaterThan(-1);
 		expect(unregister, "unregister before register").to.be.lessThan(register);
+	});
+	it("the root registration renews nothing: a subscription there would double every push", async function () {
+		const sw = makeSW();
+		const promises: Promise<unknown>[] = [];
+		const ev = {
+			oldSubscription: {endpoint: "https://push.example/OLD"},
+			newSubscription: {endpoint: "https://push.example/NEW", keys: {p256dh: "P", auth: "A"}},
+			waitUntil: (p: Promise<unknown>) => promises.push(p),
+		};
+
+		for (const h of sw.handlers.pushsubscriptionchange) {
+			h(ev);
+		}
+
+		await Promise.all(promises).catch(() => {});
+		expect(sw.socketsOpened()).to.equal(0);
+		expect(
+			(sw.kv.get("pushlog") as string[]).some((l) =>
+				/ pushsubscriptionchange on the root registration: not renewed$/.test(l)
+			)
+		).to.equal(true);
+	});
+});
+
+describe("service worker closes that outlive the event", function () {
+	// Android ends the process with the push event, so no timer the worker
+	// set runs: the closes a read leaves for later are kept, and run from
+	// the Background Sync event or from the next event the worker gets.
+
+	it("a read relay's close runs from the sync event when the worker's timer never fires", async function () {
+		const sw = makeSW({deadTimers: true});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there"));
+		await firePush(
+			sw,
+			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
+		);
+
+		let live = sw.records.filter((n) => !n.closed);
+		expect(live, "Marked as read in place when the event ends").to.have.lengthOf(1);
+		expect(live[0].body).to.equal("Marked as read");
+		expect(sw.synced).to.include("seance-closes");
+
+		sw.advance(600); // DEFERRED_CLOSE_MS is over
+		await fireSync(sw, "seance-closes");
+
+		live = sw.records.filter((n) => !n.closed);
+		expect(live, "closed by the sync event").to.have.lengthOf(0);
+		expect(sw.kv.get("closes"), "the entry is gone").to.deep.equal({});
+		expect(
+			((sw.kv.get("pushlog") as string[]) ?? []).some((l) =>
+				l.includes("the last turned into Marked as read")
+			)
+		).to.equal(true);
+	});
+
+	it("a Marked as read whose linger timer never fires is closed by the sync event", async function () {
+		const sw = makeSW({deadTimers: true});
+		const rec = await pushed(sw);
+
+		await fireClick(sw, rec, "markread");
+
+		const live = sw.records.filter((n) => !n.closed);
+		expect(live).to.have.lengthOf(1);
+		expect(live[0].body).to.equal("Marked as read");
+
+		sw.advance(9000); // MARKED_READ_LINGER_MS is over
+		await fireSync(sw, "seance-closes");
+
+		expect(sw.records.filter((n) => !n.closed)).to.have.lengthOf(0);
+	});
+
+	it("the brief stub of a relay with nothing to close is closed by the sync event", async function () {
+		const sw = makeSW({deadTimers: true});
+
+		await firePush(sw, `{"t":"read","target":"alice","ts":"${new Date().toISOString()}"}`);
+
+		expect(sw.shown).to.have.lengthOf(1);
+		expect(sw.shown[0].data.kind).to.equal("read");
+
+		sw.advance(5000); // BRIEF_READ_STUB_MS is over
+		await fireSync(sw, "seance-closes");
+
+		expect(sw.records.filter((n) => !n.closed)).to.have.lengthOf(0);
+	});
+
+	it("the next push the worker gets runs a close that is due", async function () {
+		const sw = makeSW({deadTimers: true});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there"));
+		await firePush(
+			sw,
+			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
+		);
+		expect(sw.records.filter((n) => !n.closed)[0].body).to.equal("Marked as read");
+
+		sw.advance(600);
+		await firePush(sw, msgPayload("bob", "pushtest", "another conversation"));
+
+		const live = sw.records.filter((n) => !n.closed);
+		expect(live, "alice's Marked as read closed by the sweep").to.have.lengthOf(1);
+		expect(live[0].data.target).to.equal("bob");
+	});
+
+	it("a close not yet due is left for later by the sweep", async function () {
+		const sw = makeSW({deadTimers: true});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there"));
+		await firePush(
+			sw,
+			`{"t":"read","target":"alice","ts":"${new Date(Date.now() + 5000).toISOString()}"}`
+		);
+
+		// Another push before DEFERRED_CLOSE_MS: the entry stays.
+		await firePush(sw, msgPayload("bob", "pushtest", "another conversation"));
+
+		expect(sw.records.filter((n) => !n.closed).map((n) => n.data.target)).to.deep.equal([
+			"alice",
+			"bob",
+		]);
+		expect(Object.keys(sw.kv.get("closes") as object)).to.have.lengthOf(1);
+	});
+});
+
+describe("service worker read markers against late pushes", function () {
+	// FCM delivers a dozing phone's backlog after the tap that woke it: a
+	// push for a message at or before the conversation's read marker (a
+	// Mark read here, a relay from anywhere) is read already and shows no
+	// fresh card.
+	const IOS_UA =
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+
+	it("a push behind a relayed read marker shows no fresh card on Chrome; one past it does", async function () {
+		const sw = makeSW({fastTimers: true});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "first"));
+		await firePush(sw, `{"t":"read","target":"alice","ts":"2026-09-02T20:00:00.000Z"}`);
+		await new Promise((r) => setTimeout(r, 30));
+		expect(sw.records.filter((n) => !n.closed)).to.have.lengthOf(0);
+
+		// Late: the payload's time (19:59) is before the marker (20:00).
+		await firePush(sw, msgPayload("alice", "pushtest", "late copy", "late1"));
+		const fresh = sw.records.filter((n) => !n.closed && n.data.kind === "push");
+		expect(fresh, "no fresh card for a message already read").to.have.lengthOf(0);
+
+		// Later than the marker: a card.
+		await firePush(
+			sw,
+			`{"t":"msg","from":"alice","target":"pushtest","msgid":"new1","time":"2026-09-02T20:00:01.000Z","text":"newer"}`
+		);
+		expect(sw.records.filter((n) => !n.closed && n.data.kind === "push")).to.have.lengthOf(1);
+	});
+
+	it("a Mark read tapped here is a read marker too", async function () {
+		this.timeout(10000);
+		const sw = makeSW();
+		const rec = await pushed(sw); // time 19:59
+
+		await fireClick(sw, rec, "markread");
+		await firePush(sw, msgPayload("alice", "pushtest", "late copy", "late2")); // 19:59 again
+		expect(sw.records.filter((n) => !n.closed && n.data.kind === "push")).to.have.lengthOf(0);
+	});
+
+	it("a late push still shows quietly under WebKit", async function () {
+		const sw = makeSW({userAgent: IOS_UA, fastTimers: true});
+
+		await firePush(sw, `{"t":"read","target":"alice","ts":"2026-09-02T20:00:00.000Z"}`);
+		const before = sw.shown.length;
+		await firePush(sw, msgPayload("alice", "pushtest", "late copy", "late3"));
+		expect(sw.shown.length, "WebKit saw a show").to.equal(before + 1);
+		expect(sw.shown[sw.shown.length - 1].silent).to.equal(true);
+	});
+});
+
+describe("service worker push log", function () {
+	// The worker writes what it did with each push into IndexedDB
+	// (`pushlog`), for Settings → Notifications → Diagnostics: the one way to
+	// read a device nobody debugging it can hold.
+	const IOS_UA =
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+
+	function log(sw: SWHarness): string[] {
+		const entries = sw.kv.get("pushlog");
+		return Array.isArray(entries) ? (entries as string[]) : [];
+	}
+
+	it("records each push with its outcome and whether it showed", async function () {
+		const sw = makeSW({userAgent: IOS_UA});
+
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there"));
+		await firePush(sw, `{"t":"read","target":"alice","ts":"${new Date().toISOString()}"}`);
+		await firePush(sw, "garbage that parses as nothing");
+
+		const lines = log(sw);
+		expect(lines).to.have.lengthOf(3);
+		expect(lines[0]).to.match(/ push message PRIVMSG alice bytes=\d+ strict=true shown=1$/);
+		expect(lines[1]).to.match(/ push read-relay alice bytes=\d+ strict=true shown=1$/);
+		expect(lines[2]).to.match(/ push generic bytes=\d+ strict=true shown=1$/);
+		expect(lines[0]).to.match(/^\d{4}-\d{2}-\d{2}T/);
+	});
+
+	it("records a push the lenient worker dropped as shown=0, and why", async function () {
+		const sw = makeSW({clients: [makeClient()]});
+		const msgid = "BjAAAaBjzZ0";
+
+		sw.kv.set("seen", [msgid]);
+		await firePush(sw, msgPayload("alice", "pushtest", "hello there", msgid));
+
+		const lines = log(sw);
+		expect(lines.some((l) => / dropped as seen push-net-1\/alice$/.test(l))).to.equal(true);
+		expect(
+			lines.some((l) => / push message PRIVMSG alice bytes=\d+ strict=false shown=0$/.test(l))
+		).to.equal(true);
+	});
+
+	it("records the worker's activation with its build and network", async function () {
+		const sw = makeSW({scope: `${SCOPE}push/net-1/`});
+		const waited: Array<Promise<unknown>> = [];
+
+		for (const handler of sw.handlers.activate ?? []) {
+			handler({waitUntil: (p: Promise<unknown>) => waited.push(p)});
+		}
+
+		await Promise.all(waited);
+
+		expect(log(sw)).to.have.lengthOf(1);
+		expect(log(sw)[0]).to.match(/ activate build=__HASH__ network=net-1$/);
+	});
+
+	it("records a click with its action and tag", async function () {
+		const sw = makeSW();
+		const rec = await pushed(sw);
+
+		await fireClick(sw, rec, "markread");
+
+		expect(
+			log(sw).some((line) => / click action=markread tag=push-net-1\/alice$/.test(line))
+		).to.equal(true);
 	});
 });
 

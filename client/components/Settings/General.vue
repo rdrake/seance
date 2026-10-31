@@ -138,6 +138,7 @@
 		<div class="settings-backup">
 			<h2>{{ t("settings.general.backupHeading") }}</h2>
 			<p>{{ t("settings.general.backupIntro") }}</p>
+			<p>Scripts in an imported file arrive switched off, and so does scripting itself.</p>
 			<label class="opt">
 				<input v-model="includePasswords" v-switch type="checkbox" />
 				{{ t("settings.general.includePasswords") }}

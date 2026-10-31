@@ -17,6 +17,8 @@ import GeneralSettings from "../components/Settings/General.vue";
 import NotificationSettings from "../components/Settings/Notifications.vue";
 import TranslationSettings from "../components/Settings/Translation.vue";
 import AliasSettings from "../components/Settings/Aliases.vue";
+import ScriptSettings from "../components/Settings/Scripts.vue";
+import ScriptEdit from "../components/Settings/ScriptEdit.vue";
 import NetworkSettings from "../components/Settings/Networks.vue";
 import {ClientChan} from "./types";
 import {shouldShowGeneralSettings} from "./helpers/settingsTabs";
@@ -84,6 +86,27 @@ const router = createRouter({
 					name: "Aliases",
 					path: "aliases",
 					component: AliasSettings,
+				},
+				{
+					name: "Scripts",
+					path: "scripts",
+					component: ScriptSettings,
+					children: [
+						{
+							// An overlay over the settings, the list still under it.
+							name: "ScriptEdit",
+							path: ":id",
+							component: ScriptEdit,
+							beforeEnter(to, from, next) {
+								if (!store.state.settings.enableScripting) {
+									next({name: "Scripts"});
+									return;
+								}
+
+								next();
+							},
+						},
+					],
 				},
 			],
 		},

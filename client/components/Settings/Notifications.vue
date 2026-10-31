@@ -126,6 +126,29 @@
 				>:
 				{{ t("settings.notifications.pushBlocked") }}
 			</div>
+			<details class="push-diagnostics" @toggle="onDiagnosticsToggle">
+				<summary>Diagnostics</summary>
+				<p class="push-networks-hint">
+					What this device knows about push: its permission, each network's subscription,
+					and what the browser and the server answered. Copy it and paste it where someone
+					can read it — nothing in it lets anyone push to this device. Subscribe now asks
+					for this device's subscription again, on every connected network.
+				</p>
+				<div class="opt push-diagnostics-actions">
+					<button id="pushSubscribeNow" @click.prevent="subscribeNow">
+						Subscribe now
+					</button>
+					<button id="pushDiagnosticsRefresh" @click.prevent="refreshDiagnostics">
+						Refresh
+					</button>
+					<button id="pushDiagnosticsCopy" @click.prevent="copyDiagnostics">
+						{{ copied ? "Copied" : "Copy" }}
+					</button>
+				</div>
+				<pre id="pushDiagnostics" ref="report" class="push-diagnostics-report">{{
+					diagnosticsText
+				}}</pre>
+			</details>
 		</div>
 
 		<h2>{{ t("settings.notifications.browserHeading") }}</h2>
@@ -259,7 +282,7 @@
 </template>
 
 <script lang="ts">
-import {computed, defineComponent, onMounted} from "vue";
+import {computed, defineComponent, onMounted, ref} from "vue";
 import {useStore} from "../../js/store";
 import {useI18n} from "../../js/i18n";
 import webpush from "../../js/webpush";
@@ -330,6 +353,51 @@ export default defineComponent({
 			void playNotificationSound().catch(() => undefined);
 		};
 
+		// Push diagnostics (webpush.ts `diagnostics`): built when the fold
+		// opens and on Refresh; Subscribe now is the user gesture a
+		// subscription may need, and the report then shows what came of it.
+		const diagnosticsText = ref("");
+		const report = ref<HTMLPreElement | null>(null);
+		const copied = ref(false);
+
+		const refreshDiagnostics = async () => {
+			diagnosticsText.value = await webpush.diagnostics();
+		};
+
+		const onDiagnosticsToggle = (event: Event) => {
+			if ((event.target as HTMLDetailsElement).open) {
+				void refreshDiagnostics();
+			}
+		};
+
+		const subscribeNow = async () => {
+			await webpush.subscribeConnected();
+			await refreshDiagnostics();
+		};
+
+		const copyDiagnostics = async () => {
+			await refreshDiagnostics();
+
+			try {
+				await navigator.clipboard.writeText(diagnosticsText.value);
+				copied.value = true;
+				setTimeout(() => {
+					copied.value = false;
+				}, 1500);
+			} catch {
+				// No clipboard access: select the text so the platform's own copy works.
+				const pre = report.value;
+				const selection = window.getSelection();
+
+				if (pre && selection) {
+					const range = document.createRange();
+					range.selectNodeContents(pre);
+					selection.removeAllRanges();
+					selection.addRange(range);
+				}
+			}
+		};
+
 		return {
 			store,
 			t,
@@ -340,6 +408,13 @@ export default defineComponent({
 			androidShell: isAndroidShell(),
 			nativeShell: nativeAlertsAvailable(),
 			playNotification,
+			diagnosticsText,
+			report,
+			copied,
+			refreshDiagnostics,
+			onDiagnosticsToggle,
+			subscribeNow,
+			copyDiagnostics,
 			// Sunday = 0, the day a window starts on (helpers/dnd.ts DndSchedule.days).
 			DAYS,
 			weekdayName: dayName,

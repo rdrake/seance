@@ -4,6 +4,7 @@ import socket from "./socket";
 import {store} from "./store";
 import storage from "./localStorage";
 import {idbGet, idbSet} from "./idb";
+import {BUILD} from "./build";
 import * as saved from "./irc/saved-networks";
 import type {SavedNetwork} from "./irc/saved-networks";
 import {
@@ -142,6 +143,53 @@ const servers = reactive(new Map<string, {vapid: string | undefined; sasl: boole
 /** Persisted subscriptions by network uuid. Reactive for the same reason;
  * one object identity, mutated in place and saved through {@link saveSubs}. */
 const subs = reactive<Record<string, PushEntry>>({});
+
+/** What this page decided and what the browser and the server answered,
+ * newest last — Settings → Notifications → Diagnostics ({@link diagnostics})
+ * shows it beside the worker's own log, so a device nobody debugging it can
+ * hold (an iPhone) can say where push stops. */
+const JOURNAL_CAP = 60;
+const journal: string[] = [];
+
+function note(text: string): void {
+	journal.push(`${new Date().toISOString()} ${text}`);
+
+	if (journal.length > JOURNAL_CAP) {
+		journal.splice(0, journal.length - JOURNAL_CAP);
+	}
+}
+
+/** The first characters of a key or a uuid: enough to tell two apart. */
+function short(value: string | null | undefined): string {
+	return value ? `${value.slice(0, 10)}…` : "none";
+}
+
+/** A key's bytes as the base64url the server announced it in. */
+function base64url(bytes: Uint8Array): string {
+	let binary = "";
+
+	for (const b of bytes) {
+		binary += String.fromCharCode(b);
+	}
+
+	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** An endpoint for the eyes: its host and the tail of its path. The whole
+ * URL is a capability — anyone holding it can push to the device — and the
+ * report is meant to be pasted where others read it. */
+function endpointLabel(endpoint: string | null | undefined): string {
+	if (!endpoint) {
+		return "none";
+	}
+
+	try {
+		const url = new URL(endpoint);
+		return `${url.host}/…${url.pathname.slice(-8)}`;
+	} catch {
+		return "unparsable";
+	}
+}
 
 /** The old per-key subscription's endpoints, until every network announcing
  * their key has been told to forget them. */
@@ -494,10 +542,19 @@ async function pushSubscription(uuid: string, vapid: string): Promise<PushMateri
 	const applicationServerKey = decodeApplicationServerKey(vapid);
 	const existing = await registration.pushManager.getSubscription();
 
+	note(
+		`subscribe ${short(uuid)}: registration active=${Boolean(
+			registration.active
+		)}, browser subscription ${existing ? endpointLabel(existing.endpoint) : "none"}`
+	);
+
 	if (
 		existing &&
 		!sameApplicationServerKey(existing.options.applicationServerKey, applicationServerKey)
 	) {
+		note(
+			`subscribe ${short(uuid)}: the subscription was made against another key — dropping it`
+		);
 		await existing.unsubscribe();
 	}
 
@@ -506,11 +563,30 @@ async function pushSubscription(uuid: string, vapid: string): Promise<PushMateri
 		applicationServerKey,
 	});
 
+	note(`subscribe ${short(uuid)}: the browser subscribed (${endpointLabel(sub.endpoint)})`);
+
 	return materialOf(sub);
 }
 
-/** The pre-per-network subscription lived on the root registration; once
- * its endpoints are queued for unregistering it has no use. */
+/** An error's name and message, for the journal. */
+function describeError(error: unknown): string {
+	if (error && typeof error === "object") {
+		const e = error as {name?: unknown; message?: unknown};
+		return `${typeof e.name === "string" ? e.name : "Error"}: ${
+			typeof e.message === "string" ? e.message : String(error)
+		}`;
+	}
+
+	return String(error);
+}
+
+/** The root registration holds no subscription in the per-network design:
+ * the pre-per-network one lived there, and an older root worker's
+ * `pushsubscriptionchange` could make one again. One found at boot is
+ * unsubscribed and its endpoint queued for `WEBPUSH UNREGISTER` on the
+ * network whose key it was made against — left alone, the server pushes
+ * every message to it as well, the root worker drops the copy as seen, and
+ * that is a silent push on Chrome, every time. */
 async function dropRootSubscription(): Promise<void> {
 	if (!workerPush()) {
 		return;
@@ -521,6 +597,19 @@ async function dropRootSubscription(): Promise<void> {
 		const existing = await registration.pushManager.getSubscription();
 
 		if (existing) {
+			const key = existing.options.applicationServerKey;
+			const vapid = key ? base64url(new Uint8Array(key)) : undefined;
+
+			note(
+				`boot: the root registration held a subscription (${endpointLabel(
+					existing.endpoint
+				)}) — dropped${vapid ? ", endpoint queued for UNREGISTER" : ""}`
+			);
+
+			if (vapid && queueUnregister({vapid, endpoint: existing.endpoint})) {
+				saveLegacy();
+			}
+
 			await existing.unsubscribe();
 		}
 	} catch (error) {
@@ -581,6 +670,13 @@ async function syncStoredWithBrowser(): Promise<void> {
 						}) || queued;
 				}
 
+				note(
+					`sync ${short(uuid)}: registration ${
+						registration ? "found" : "missing"
+					}, no browser subscription — entry ${endpointLabel(entry.endpoint)} dropped${
+						registration ? ", endpoint queued for UNREGISTER" : ""
+					}`
+				);
 				delete subs[uuid];
 				changed = true;
 				continue;
@@ -593,11 +689,23 @@ async function syncStoredWithBrowser(): Promise<void> {
 				material.keys.p256dh !== entry.keys.p256dh ||
 				material.keys.auth !== entry.keys.auth
 			) {
+				note(
+					`sync ${short(uuid)}: the browser's subscription changed (${endpointLabel(
+						material.endpoint
+					)}) — entry updated`
+				);
 				subs[uuid] = {vapid: entry.vapid, ...material};
 				changed = true;
+			} else {
+				note(
+					`sync ${short(uuid)}: entry matches the browser (${endpointLabel(
+						entry.endpoint
+					)})`
+				);
 			}
-		} catch {
+		} catch (error) {
 			// leave the entry; the server-side re-REGISTER is idempotent
+			note(`sync ${short(uuid)}: failed — ${describeError(error)}`);
 		}
 	}
 
@@ -892,6 +1000,17 @@ function maybePrompt(uuid: string): void {
 	const server = servers.get(uuid);
 
 	if (!server || !server.sasl || server.vapid === undefined || !pushOn(uuid)) {
+		note(
+			`connect ${short(uuid)}: nothing to offer — ${
+				!server
+					? "not connected"
+					: !server.sasl
+					? "no SASL login"
+					: server.vapid === undefined
+					? "the server announced no push key"
+					: "push is off for this network"
+			}`
+		);
 		return;
 	}
 
@@ -902,6 +1021,15 @@ function maybePrompt(uuid: string): void {
 	}
 
 	if (!browserSupported() || needsInstall() || permissionDenied()) {
+		note(
+			`connect ${short(uuid)}: cannot subscribe here — ${
+				!browserSupported()
+					? "no Push API"
+					: needsInstall()
+					? "iOS, not installed to the Home Screen"
+					: "permission denied"
+			}`
+		);
 		return;
 	}
 
@@ -915,12 +1043,16 @@ function maybePrompt(uuid: string): void {
 	const entry = subs[uuid];
 
 	if (entry && entry.vapid === vapid) {
+		note(
+			`connect ${short(uuid)}: subscribed (${endpointLabel(entry.endpoint)}), re-registering`
+		);
 		return; // subscribed; autoRegister re-registers it
 	}
 
 	const kind: PromptKind = entry ? "renew" : "subscribe";
 
 	if (declined.has(declineKey(kind, uuid, vapid))) {
+		note(`connect ${short(uuid)}: ${kind} declined earlier on this page`);
 		return;
 	}
 
@@ -928,14 +1060,17 @@ function maybePrompt(uuid: string): void {
 		const policy = keyChangePolicy(store.state.settings.pushKeyChange);
 
 		if (policy === "ignore") {
+			note(`connect ${short(uuid)}: key changed, policy ignore`);
 			return;
 		}
 
 		if (policy === "trust" && pushConsented()) {
+			note(`connect ${short(uuid)}: key changed, renewing silently`);
 			void subscribe(uuid);
 			return;
 		}
 
+		note(`connect ${short(uuid)}: key changed, asking to renew`);
 		askOrWait("renew", uuid, vapid);
 		return;
 	}
@@ -946,14 +1081,17 @@ function maybePrompt(uuid: string): void {
 	// buttons provide; "never ask again" suppresses that prompt on this
 	// device.
 	if (pushConsented()) {
+		note(`connect ${short(uuid)}: no entry, permission granted — subscribing silently`);
 		void subscribe(uuid);
 		return;
 	}
 
 	if (storage.get(NEVER_ASK_KEY)) {
+		note(`connect ${short(uuid)}: no entry, never ask again is set`);
 		return;
 	}
 
+	note(`connect ${short(uuid)}: no entry, asking`);
 	askOrWait("subscribe", uuid, vapid);
 }
 
@@ -1070,6 +1208,12 @@ function answerPrompt(answer: PromptAnswer, network: string | undefined): void {
 }
 
 socket.on("webpush:state", ({network, action, endpoint, ok, code, reason}) => {
+	note(
+		`server ${short(network)}: ${action} ${endpointLabel(endpoint)} ${
+			ok ? "acknowledged" : `refused (${code ?? "?"}: ${reason ?? "no reason given"})`
+		}`
+	);
+
 	if (ok) {
 		refreshState();
 		return;
@@ -1131,10 +1275,19 @@ async function subscribeNow(uuid: string): Promise<void> {
 		// while iOS still allowed notifications, so a revoked subscription was
 		// never made again. subscribe() itself needs no gesture once the
 		// permission is granted (PushManager.cpp).
+		const permissionBefore = notificationPermission();
 		const permission =
-			pushBackend() === "native" || notificationPermission() === "granted"
+			pushBackend() === "native" || permissionBefore === "granted"
 				? "granted"
 				: await Notification.requestPermission();
+
+		note(
+			`subscribe ${short(uuid)}: permission ${permissionBefore}${
+				permissionBefore === "granted" || pushBackend() === "native"
+					? ""
+					: ` → asked → ${permission}`
+			}`
+		);
 
 		if (permission !== "granted") {
 			// Refused: by the user, or by WebKit for want of a gesture while the
@@ -1159,6 +1312,7 @@ async function subscribeNow(uuid: string): Promise<void> {
 		if (vapid === undefined) {
 			// The network is not connected, or cannot push (cap not negotiated
 			// or no key): nothing to subscribe against right now.
+			note(`subscribe ${short(uuid)}: the network is not connected or announced no key`);
 			refreshState();
 			return;
 		}
@@ -1168,6 +1322,7 @@ async function subscribeNow(uuid: string): Promise<void> {
 		const net = saved.get(uuid);
 
 		if (!net || !net.saslAccount) {
+			note(`subscribe ${short(uuid)}: the network has no SASL account`);
 			setState("blocked");
 			return;
 		}
@@ -1217,6 +1372,9 @@ async function subscribeNow(uuid: string): Promise<void> {
 			return; // the unsubscribe waiting for this run forgets the entry
 		}
 
+		note(
+			`subscribe ${short(uuid)}: WEBPUSH REGISTER sent (${endpointLabel(material.endpoint)})`
+		);
 		socket.emit("webpush:register", {
 			network: uuid,
 			endpoint: material.endpoint,
@@ -1233,6 +1391,8 @@ async function subscribeNow(uuid: string): Promise<void> {
 
 		refreshState();
 	} catch (error) {
+		note(`subscribe ${short(uuid)}: failed — ${describeError(error)}`);
+
 		// Push switched off for this network while the shell was subscribing:
 		// it withdrew the registration, and that is all that happened.
 		if (!pushOn(uuid) || nativePushCancelled(error)) {
@@ -1487,6 +1647,7 @@ function networkPushInfo(uuid: string): {
 loadStored();
 synced = loadNativePush()
 	.then(syncStoredWithBrowser)
+	.then(dropRootSubscription)
 	.catch(() => undefined);
 refreshState();
 
@@ -1584,7 +1745,20 @@ function recordSeenOnShell(uuid: string, msgid: string | undefined): void {
 // server's read push only follows a message it pushed — a notification the
 // page put on the worker while the account was attended has nobody else to
 // close it, and would otherwise come back counted in the next push.
-function readOnWorker(uuid: string, channel: ClientChan): void {
+/** How long a hidden page on Chrome waits before closing a notification
+ * for a read another session made: the server's relay of that read reaches
+ * the worker within seconds and, finding the notification still up, closes
+ * it itself just after its event — a relay that finds nothing is a silent
+ * push there (service-worker.js `readRelay`). */
+const ECHO_READ_DELAY_MS = 8000;
+
+/** WebKit on this page: where the worker's own 30 s rules apply, and where
+ * there is no silent-push budget to protect by waiting. */
+function webkitPage(): boolean {
+	return /AppleWebKit\//.test(navigator.userAgent) && !/Chrome\//.test(navigator.userAgent);
+}
+
+function readOnWorker(uuid: string, channel: ClientChan, echo = false): void {
 	const target = channel.name;
 
 	// The shell, not the backend: its notifications are closed even after
@@ -1601,7 +1775,12 @@ function readOnWorker(uuid: string, channel: ClientChan): void {
 
 	const send = (ts?: string) =>
 		void pushWorkerFor(uuid).then((worker) => worker?.postMessage({type: "read", target, ts}));
-	send();
+
+	if (echo && !webkitPage() && document.visibilityState !== "visible") {
+		again(`echo ${uuid} ${target}`, ECHO_READ_DELAY_MS, () => send());
+	} else {
+		send();
+	}
 
 	// WebKit refuses a close within 30 s of a show: read it again once that
 	// has passed, up to the newest message read now (a server time, as the
@@ -1654,7 +1833,7 @@ socket.on("markread", (data) => {
 	const found = data.unread === 0 ? store.getters.findChannel(data.chan) : undefined;
 
 	if (found) {
-		readOnWorker(found.network.uuid, found.channel);
+		readOnWorker(found.network.uuid, found.channel, true);
 	}
 });
 
@@ -1810,6 +1989,158 @@ if (browserSupported() && "serviceWorker" in navigator) {
 	});
 }
 
+/**
+ * Subscribe this device to every connected network that announced a push
+ * key and has push on — the Diagnostics button, a user gesture: the one
+ * road that works whatever the silent path did, and the one whose outcome
+ * the journal reports in the browser's own words.
+ */
+async function subscribeConnected(): Promise<void> {
+	const targets = saved
+		.list()
+		.filter((net) => pushOn(net.uuid) && announcedKey(net.uuid) !== undefined);
+
+	if (targets.length === 0) {
+		note("Subscribe now: no connected network announces a push key");
+		return;
+	}
+
+	for (const net of targets) {
+		note(`Subscribe now: ${short(net.uuid)} (${net.name || net.host})`);
+		await subscribe(net.uuid);
+	}
+}
+
+/**
+ * Everything this device knows about push, as text to copy: the
+ * environment, the permission, each network's announced key, stored entry,
+ * registration and live browser subscription, the journal, and the worker's
+ * own log (service-worker.js `logPush`). Endpoints and keys are shortened:
+ * the report is meant to be pasted where others read it.
+ */
+async function diagnostics(): Promise<string> {
+	const lines: string[] = [];
+	const standalone =
+		(typeof window.matchMedia === "function" &&
+			window.matchMedia("(display-mode: standalone)").matches) ||
+		window.navigator.standalone === true;
+
+	lines.push(`push diagnostics ${new Date().toISOString()}`);
+	lines.push(
+		`build ${process.env.SEANCE_VERSION || "dev"} (${BUILD}) at ${location.origin}${
+			location.pathname
+		}`
+	);
+	lines.push(`agent ${navigator.userAgent}`);
+	lines.push(
+		`backend=${pushBackend()} standalone=${standalone} secure=${window.isSecureContext} ` +
+			`PushManager=${"PushManager" in window} serviceWorker=${
+				"serviceWorker" in navigator
+			} ` +
+			`Notification=${typeof Notification !== "undefined"}`
+	);
+	lines.push(
+		`permission=${notificationPermission()} state=${store.state.pushNotificationState} ` +
+			`neverAsk=${storage.get(NEVER_ASK_KEY) !== null} consent=${
+				storage.get(CONSENT_KEY) !== null
+			} keyChange=${store.state.settings.pushKeyChange}`
+	);
+
+	for (const net of saved.list()) {
+		const server = servers.get(net.uuid);
+		const entry = subs[net.uuid];
+		const live = store.getters.findNetwork(net.uuid);
+
+		lines.push(
+			`network ${short(net.uuid)} ${net.name || net.host}: push=${
+				pushOn(net.uuid) ? "on" : "off"
+			} sasl=${net.saslAccount ? "account" : "none"} connected=${Boolean(
+				live && live.status.connected
+			)} announcedKey=${server ? short(server.vapid) : "not announced"} saslLogin=${
+				server ? server.sasl : "n/a"
+			}`
+		);
+		lines.push(
+			`  entry: ${
+				entry ? `${endpointLabel(entry.endpoint)} key=${short(entry.vapid)}` : "none"
+			}`
+		);
+
+		if (workerPush()) {
+			try {
+				const registration = await pushRegistration(net.uuid);
+
+				if (!registration) {
+					lines.push("  registration: none");
+				} else {
+					const subscription = await registration.pushManager.getSubscription();
+					lines.push(
+						`  registration: active=${Boolean(
+							registration.active
+						)} installing=${Boolean(registration.installing)} waiting=${Boolean(
+							registration.waiting
+						)}`
+					);
+					lines.push(
+						`  browser subscription: ${
+							subscription
+								? `${endpointLabel(subscription.endpoint)} key=${short(
+										subscription.toJSON().keys?.p256dh
+								  )} expires=${subscription.expirationTime ?? "never"}`
+								: "none"
+						}`
+					);
+				}
+			} catch (error) {
+				lines.push(`  registration: failed — ${describeError(error)}`);
+			}
+		}
+	}
+
+	if (workerPush()) {
+		try {
+			const registrations = await navigator.serviceWorker.getRegistrations();
+			lines.push(`service worker registrations: ${registrations.length}`);
+
+			for (const registration of registrations) {
+				const scope = registration.scope.replace(location.origin, "");
+				const subscription = await registration.pushManager.getSubscription();
+				lines.push(
+					`  ${scope} active=${Boolean(registration.active)} subscription=${
+						subscription ? endpointLabel(subscription.endpoint) : "none"
+					}`
+				);
+			}
+		} catch (error) {
+			lines.push(`service worker registrations: failed — ${describeError(error)}`);
+		}
+	}
+
+	lines.push("journal:");
+
+	for (const line of journal) {
+		lines.push(`  ${line}`);
+	}
+
+	lines.push("worker log:");
+
+	try {
+		const log = await idbGet<unknown>("pushlog");
+
+		if (Array.isArray(log) && log.length > 0) {
+			for (const line of log) {
+				lines.push(`  ${String(line)}`);
+			}
+		} else {
+			lines.push("  empty");
+		}
+	} catch (error) {
+		lines.push(`  unreadable — ${describeError(error)}`);
+	}
+
+	return lines.join("\n");
+}
+
 export default {
 	subscribe,
 	renew,
@@ -1823,4 +2154,6 @@ export default {
 	tidySoon,
 	pushPrompt,
 	answerPrompt,
+	subscribeConnected,
+	diagnostics,
 };

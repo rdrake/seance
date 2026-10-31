@@ -1123,3 +1123,185 @@ and a granted permission subscribes at once. Nothing to test under mocha
 WebKit functions. On a device: open the app once with notifications
 allowed — the lobby's `WEBPUSH REGISTER` echo, and Settings → Notifications
 no longer saying blocked, are the signs.
+
+### Diagnostics: the device says where push stops (2026-10-26)
+
+Three fixes made from WebKit's source and no device later, iPhones still
+reported no push — and nobody debugging it can hold one. So the device
+reports instead. **Settings → Notifications → Diagnostics** (a fold under
+the push section) builds a text report to copy (`webpush.ts`
+`diagnostics`): the build and page, the user agent, whether the page is
+standalone and secure, the Push API and permission state, the device-wide
+answers (`thelounge.push.neverAsk`, the consent, the key-change policy);
+for each saved network its push flag, SASL account, connection, the key the
+server announced, the stored entry, the push-only registration (active /
+installing / waiting) and the browser's live subscription; every service
+worker registration on the origin with its subscription; the page's
+**journal** — what `maybePrompt` decided on each connect and why (no SASL,
+no key, push off, iOS not installed, permission denied, entry matches,
+declined, policy, silent subscribe, asking), what `subscribeNow` saw (the
+permission before and after asking, the registration's state and existing
+subscription, a subscription made against another key dropped, the
+browser's answer or its error by name and message, the REGISTER sent) and
+every `webpush:state` the server returned; and the **worker's log**
+(`service-worker.js` `logPush`, IndexedDB `pushlog`, the last 40): each
+activation with its build and network, each push with its kind (message,
+read relay, generic, unparsed, error), its size, whether the strict rule
+applied and how many notifications it showed, a `showNotification` that
+failed in all three forms, every `pushsubscriptionchange`, every click.
+Endpoints are shown as host and path tail and keys by their first
+characters: the whole endpoint is a capability, and the report is meant to
+be pasted where others read it. **Subscribe now** subscribes every
+connected network that announced a key, as a tap — the user gesture a
+subscription may need and the manual road whatever the silent path did —
+and the journal then holds the browser's own words for what came of it.
+Copy uses the clipboard and otherwise selects the report.
+
+Reading a report: `permission=granted` with `registration: none` and
+`browser subscription: none` after a connect line saying "subscribing
+silently" is a `subscribe()` that failed — its error is in the journal;
+`browser subscription` present but no `server … acknowledged` line is the
+REGISTER not reaching or not pleasing the server; a subscription
+acknowledged and a worker log without a single `push` line is the push
+never arriving at the device — the server's log (`WebPush: delivery …`) is
+the next place to look; `push … shown=0` under `strict=true` is a silent
+push, three of which WebKit answers by revoking.
+
+Apple's push service, probed from here with a throwaway key and a bogus
+device token (`tools/`-less, in the job's scratch): it validates the
+`Authorization` before the token — no header `403 BadAuthorizationHeader`,
+an unparsable key `403 BadVapidPublicKey`, a wrong `aud` or `alg=none`
+`403 BadJwtToken` — and the ircd's exact JWT shape (`vapid t=…, k=…`, the
+endpoint's origin as `aud`, a `mailto:` subject, `exp` at 24 h; even an
+expired `exp`) reached `400 BadWebPushToken`, the token check. So the
+ircd's request is one Apple accepts; what Apple answers for a real token is
+in the ircd's log alone.
+
+Tests: `test/tests/service-worker.ts` § push log (a message, a read relay
+and an unparsable push each logged with its outcome and `shown`, a dropped
+push `shown=0`, the activation line, a click). Nothing under mocha covers
+`diagnostics()` (`webpush.ts` is Vue + store).
+
+### The read relay on Chrome: a brief "Marked as read" (2026-10-29)
+
+Reported once iOS worked: Chrome and Android users get Chrome's "This
+site has been updated in the background" around push notifications. Not a
+new silent path — every iOS addition is behind `strictUserVisible()` — but
+the one that was always there, now more frequent: the **read relay**
+(`:server MARKREAD <target> timestamp=…`, which nefarious2 pushes to every
+subscription of the account once a pushed conversation is read anywhere,
+`webpush_claim_outstanding`). The worker's job for it is to close, and
+Chrome counts the notifications visible on the registration when the push
+event ends: a relay that closed the last one, or found none — the reading
+device itself when it is not in the foreground (Mark read from the shade,
+or backgrounded within the seconds the relay takes), and every other device
+whose page already closed its copy on the `markread` echo — is a silent
+push. Chrome spends the origin's engagement budget on it and then shows the
+generic. With iPhones back in the subscription set and reads coming from
+phones, the relays multiplied.
+
+Now, on a tag-replacing browser, a relay that leaves no push notification up
+on the registration shows a silent "Marked as read" (`keepChromeCount`,
+tag `push-<network>/read/<target>`) and the worker closes it
+`BRIEF_READ_STUB_MS` (4 s) later — Chrome never refuses a close, and it
+counts at the event's end, which the stub outlives. A notification for
+another conversation still up is count enough and no stub is shown. The
+relay itself stays: removing Mark read would not remove it (reading in the
+app moves the same marker), and the phone in a pocket relies on it. Tests:
+`test/tests/service-worker.ts` (the brief stub and its close, no stub beside
+another conversation's notification, a relay with nothing to close).
+
+**Revised the same day — nothing new is shown.** The brief stub was a new
+notification in the shade for every conversation read elsewhere, silent
+or not (whether `silent` holds against Android's per-site channel was
+first doubted, then not). Showing nothing is better: on Chrome a read relay
+now **defers its closes** instead (`closeForTarget(…, defer)`,
+`DEFERRED_CLOSE_MS` = 0.5 s, a timer outside `waitUntil` — Chrome has counted long before, and the shorter the wait the less a worker Android stops early can leave behind; the log records each close that ran, and the app's own sweep on opening removes what one did not): what it found is
+still up when Chrome counts at the event's end, nothing new is shown, and
+it disappears a moment later. The stub is kept only for a relay that found
+nothing to close while no window of the app is visible (Chrome waives the
+rule for a visible window, so the device that is reading in the open app
+needs nothing). Two more sources of "found nothing" are closed off: **Mark
+read** tapped on a notification turns it, in place and without an alert
+(same tag, `renotify: false`), into a silent "Marked as read" that the
+server's relay of that read then finds and closes (`markedReadHere`; the
+worker closes it itself after `MARKED_READ_LINGER_MS` = 8 s if no relay
+comes), and a **hidden page** on Chrome waits `ECHO_READ_DELAY_MS` = 8 s
+before closing a notification for a read another session made
+(`webpush.ts` `readOnWorker(…, echo)`), so the relay gets there first;
+a read the user makes in the visible app still closes at once. Tests:
+the deferred close, no stub with a visible window, Mark read in place and
+its relay, the linger.
+
+**A late push is not a fresh card (2026-10-29).** Reported: "Marked as read"
+came and went, and then there were more notifications waiting. FCM
+delivers a dozing phone's backlog after the tap that woke it, and the
+worker showed every pushed message it had not seen, read or not. Now the
+worker keeps the read marker it knows per conversation (`reads` in
+IndexedDB: `<network>/<target>` → the newest read time, from a Mark read
+tapped here and from every relay, 50 entries, `rememberRead`), and a push
+whose message time is at or before it is read already (`alreadyRead`): no
+fresh card — under WebKit a quiet show, on Chrome what is up is count
+enough, else the brief silent "Marked as read" (`keepChromeCount`). The
+page's own notifications are not checked (the page knows what it shows).
+Tests: § read markers against late pushes.
+
+**The closes after the event survive the event (2026-10-30).** Reported from
+Android: "Marked as read" stayed, and a conversation read elsewhere kept its
+card. Every close a read left for after its event — the relay's deferred
+close, the 8 s linger, the 4 s stub — ran from a `setTimeout` outside
+`waitUntil`, and on Android Chrome reports the push job finished the moment
+the message is dispatched (`GCMNativeBackgroundTask.java`: "we hope that the
+system keeps us alive long enough to actually finish processing"), so a
+phone with its screen off ends the process with the event and the timer
+never fires. Now each such close is kept in IndexedDB (`closes`: per
+target, the cutoff `ts` and the earliest moment `at`; `scheduleClose`), the
+timer is still set (its own entry's due signal), a one-shot Background Sync
+(`seance-closes`) is registered — Chrome fires it at once under its own
+keep-alive, or when the device next can, and the handler sleeps inside its
+own `waitUntil` until the entry is due, a second at a time — and every
+event the worker gets (a push, a click, a page's message, the activation)
+sweeps what is due first (`sweepCloses`). Whichever runs first closes; the
+others find nothing. Where there is no Background Sync (WebKit, Firefox, the
+permission off) the timer and the next event are what there is. Tests:
+§ closes that outlive the event (harness `deadTimers`, `fireSync`).
+
+**A push the page took is not a silent push either (2026-10-30).** Reported
+from a Windows desktop: Chrome's "This site has been updated in the
+background" with every push. The page records every pushable message it
+receives as seen (`push-seen.ts`), whether or not it shows a notification for
+it, and the worker dropped a seen push with nothing shown — on Chrome a
+silent push whenever no window of the app was visible and nothing was up on
+that registration: a muted conversation, do not disturb, a network whose
+notifications are off, or the page's own card landing on another
+registration. The drop now goes through `keepChromeCount(target, tag)`:
+nothing while a window is visible or a notification is up on the
+registration, else a blank silent stub under the message's own tag (the
+page's card under that tag replaces it), closed `BRIEF_READ_STUB_MS` later
+by a scheduled close that closes stubs only (`scheduleStubClose`; the Marked
+as read linger and the relay's brief stub use it too). The worker's log says
+`dropped as seen <tag>` before the push's own line, so the diagnostics
+report shows the case. Which page-side reason it was on that desktop is
+read from the report, not guessed.
+
+**Background Sync needs a window, so a relay closes what it can inside its
+event (2026-10-30).** Reported from Android: "Marked as read" cards no
+longer went away by themselves. Chrome refuses a Background Sync
+registration from a worker with no window of the app open
+(`BackgroundSyncManager::RegisterDidCheckIfMainFrame` → `NOT_ALLOWED`),
+which is exactly the phone in a pocket, and the Android process ends with
+the event, so there the scheduled closes have only the next event. So
+`readRelay` on Chrome now goes through `closeOrConvert`: every notification
+the relay matched closes inside the event while another one stays up on the
+registration (the count is still one when Chrome looks: no silent push, no
+budget), and only when the matched ones are all there is does the newest of
+them turn, in place and silently, into "Marked as read" with a scheduled
+stub close (`scheduleStubClose`, `DEFERRED_CLOSE_MS`) — by the timer where
+the worker lives on, else by the next push or the app opening. Mark read
+tapped on a notification follows the same rule (`markedReadHere`): closed
+at once beside another card, "Marked as read" in place when it is the last.
+A burst of reads on another device therefore leaves at most one "Marked as
+read" in a closed app's shade. The sync registration is fire-and-forget and
+its refusal is logged once (`background sync refused: NotAllowedError`).
+The card's `data.time` is its newest line's, so a close that runs late
+(the sweep) never takes a card holding a line past the read marker.

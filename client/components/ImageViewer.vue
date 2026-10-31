@@ -7,7 +7,7 @@
 		@touchstart="onTouchStart"
 		@touchmove.passive.stop="onTouchMove"
 		@touchend.stop="onTouchEnd"
-		@touchcancel.stop="onTouchCancel"
+		@touchcancel.stop="endGesture"
 		@click="onClick"
 	>
 		<template v-if="link !== null">
@@ -358,10 +358,6 @@ export default defineComponent({
 			}
 		};
 
-		const onTouchCancel = () => {
-			endGesture();
-		};
-
 		const onTouchStart = (e: TouchEvent) => {
 			// prevent sidebar touchstart event, we don't want to interact with sidebar while in image viewer
 			e.stopImmediatePropagation();
@@ -543,6 +539,7 @@ export default defineComponent({
 			closeAria,
 			previousAria,
 			nextAria,
+			endGesture,
 			link,
 			channel,
 			image,
@@ -557,7 +554,6 @@ export default defineComponent({
 			onTouchStart,
 			onTouchMove,
 			onTouchEnd,
-			onTouchCancel,
 			previousImage,
 			nextImage,
 			computeImageStyles,
