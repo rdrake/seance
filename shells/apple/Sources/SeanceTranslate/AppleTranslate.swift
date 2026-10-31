@@ -182,7 +182,13 @@ public final class AppleTranslate {
         } else {
             code = "failed"
         }
-        return Failure(code: code, message: error.localizedDescription)
+        // The framework's description alone is often just "Unable to
+        // Translate"; its failure reason says why.
+        var message = error.localizedDescription
+        if let reason = (error as? LocalizedError)?.failureReason, !reason.isEmpty, reason != message {
+            message += " (\(reason))"
+        }
+        return Failure(code: code, message: message)
     }
 }
 
