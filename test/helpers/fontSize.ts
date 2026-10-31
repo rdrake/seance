@@ -1,4 +1,5 @@
 import {expect} from "chai";
+import {defaultFontSizeOn} from "../../client/js/helpers/platformDefaults";
 import {
 	defaultFontSize,
 	fontSizeIndex,
@@ -42,5 +43,17 @@ describe("fontSize", () => {
 		expect(fontSizeIndex("tiny")).to.equal(0);
 		expect(fontSizeIndex("huge")).to.equal(fontSizes.length - 1);
 		expect(fontSizeIndex("nonsense")).to.equal(fontSizes.indexOf(defaultFontSize));
+	});
+});
+
+describe("defaultFontSizeOn", function () {
+	it("starts a desktop window at the browser's own size, and the rest at large", function () {
+		for (const platform of ["macos", "windows", "linux"] as const) {
+			expect(defaultFontSizeOn(platform)).to.equal("medium");
+		}
+
+		for (const platform of ["web", "ios", "android"] as const) {
+			expect(defaultFontSizeOn(platform)).to.equal("large");
+		}
 	});
 });

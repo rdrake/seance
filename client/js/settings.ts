@@ -13,7 +13,7 @@ import {setClosedQueriesKept} from "./irc/closedQueries";
 import {forgetPrivateTerms, loadAll} from "./translate/channelStore";
 import {setKeepAlive} from "./helpers/keepAlive";
 import {effectiveTheme} from "./helpers/themeAppearance";
-import {currentPlatform, PLATFORM_DEFAULTS} from "./helpers/platformDefaults";
+import {currentPlatform, defaultFontSizeOn, PLATFORM_DEFAULTS} from "./helpers/platformDefaults";
 import {setMatchSystemTextSize} from "./helpers/systemTextSize";
 
 const defaultSettingConfig = {
@@ -261,7 +261,7 @@ const defaultConfig = {
 	// values live in style.css, keyed off <html data-font-size="...">, so
 	// themes and the custom stylesheet can override them.
 	fontSize: {
-		default: "large",
+		default: defaultFontSizeOn(currentPlatform()),
 		apply(store: TypedStore, value: string) {
 			document.documentElement.dataset.fontSize = normalizeFontSize(value);
 		},

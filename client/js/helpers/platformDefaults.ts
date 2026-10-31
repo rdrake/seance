@@ -3,13 +3,16 @@
 // guidelines ask an app to honour the system's settings, and off on the web,
 // where a browser keeps what it was given; following the system's text size
 // is on in the phone shells alone — a desktop has no system body size to
-// follow, and its windows take the page's own font-size step.
+// follow, and its windows take the page's own font-size step, which starts
+// at "medium" there (the browser's own 16px; the web's "large" made a Mac
+// window look zoomed in).
 // settings.ts takes the defaults from here, and so does a settings restore
 // (helpers/settingsBackup.ts), which moves a value that was only the source
 // platform's default onto this platform's. Vue-free; mocha loads it
 // (test/helpers/settingsBackup.ts). loading-error-handlers.js, which cannot
 // import, repeats the rule for matchSystemAppearance.
 
+import type {FontSize} from "./fontSize";
 import {nativePlatform} from "./shell";
 
 /** Where the app runs: a browser, or one of the app shells. */
@@ -25,6 +28,13 @@ export const PLATFORM_DEFAULTS: Readonly<Record<string, (platform: Platform) => 
 	matchSystemTextSize: onOnThePhones,
 	matchSystemAppearance: onInTheShells,
 };
+
+/** The font-size step a platform starts at. */
+export function defaultFontSizeOn(platform: Platform): FontSize {
+	return platform === "macos" || platform === "windows" || platform === "linux"
+		? "medium"
+		: "large";
+}
 
 /** The platform this page runs on. */
 export function currentPlatform(): Platform {
