@@ -2349,10 +2349,12 @@
   "translate.settings.models": "Mô hình",
   "translate.settings.nllbLicence": "NLLB-200 dùng giấy phép CC BY-NC 4.0: chỉ dành cho mục đích phi thương mại.",
   "translate.settings.opusDownloaded": {
+    "one": "Đã tải xuống {count} cặp · {size}",
     "other": "Đã tải xuống {count} cặp · {size}"
   },
   "translate.settings.opusNone": "Chưa tải cặp nào · khoảng {size} mỗi cặp",
   "translate.settings.opusPairs": {
+    "one": "{count} cặp ngôn ngữ",
     "other": "{count} cặp ngôn ngữ"
   },
   "translate.settings.runOn": "Chạy trên",
@@ -2374,9 +2376,11 @@
   "translate.strip.sendTranslation": "Gửi bản dịch",
   "translate.strip.sourceAuto": "tự động",
   "translate.threads.reload": {
+    "one": "Hãy tải lại ứng dụng để dùng {count} luồng CPU.",
     "other": "Hãy tải lại ứng dụng để dùng {count} luồng CPU."
   },
   "translate.threads.using": {
+    "one": "Đang dùng {count} luồng CPU.",
     "other": "Đang dùng {count} luồng CPU."
   },
   "translate.topic.showOriginal": "Hiện chủ đề gốc",

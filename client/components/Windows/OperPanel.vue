@@ -6,7 +6,6 @@
 		role="dialog"
 		aria-modal="true"
 		:aria-label="t('oper.panel.aria', {network: networkName})"
-		v-backdrop="close"
 	>
 		<div class="settings-modal oper-modal">
 			<div class="settings-modal-header">

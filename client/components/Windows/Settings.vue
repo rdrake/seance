@@ -6,7 +6,6 @@
 		role="dialog"
 		aria-modal="true"
 		:aria-label="dialogLabel"
-		v-backdrop="close"
 	>
 		<div class="settings-modal">
 			<div class="settings-modal-header">
