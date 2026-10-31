@@ -12,3 +12,4 @@ public.previous/
 # Data fixtures that mimic call-site trees for the toolchain tests; never
 # imported, deliberately not lint-clean.
 tools/i18n/fixtures/
+shells/tauri/src-tauri/

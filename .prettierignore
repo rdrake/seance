@@ -85,3 +85,10 @@ tools/i18n/fixtures/
 
 # Generated measurement tables (tools/translate-eval/roundtrip.ts); column padding would multiply their size.
 tools/translate-eval/results/
+
+shells/tauri/src-tauri/target/
+shells/tauri/src-tauri/icons/
+shells/tauri/src-tauri/gen/
+*.rs
+*.toml
+Cargo.lock
