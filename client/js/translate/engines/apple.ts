@@ -1,8 +1,8 @@
-// The system's own translator in the iOS shell: Apple's Translation
-// framework through the shell's `AppleTranslate` plugin
-// (shells/capacitor/ios/App/App/AppleTranslatePlugin.swift). Nothing is
-// downloaded by the page and nothing runs in the worker: the Capacitor
-// bridge exists only on the main thread, so this engine is called from
+// The system's own translator in the iOS and macOS shells: Apple's
+// Translation framework through the shell's `AppleTranslate` plugin (the
+// Swift both share is shells/apple). Nothing is downloaded by the page and
+// nothing runs in the worker: the shell's bridge exists only on the main
+// thread, so this engine is called from
 // service.ts directly, never through the worker's protocol.
 //
 // Measured against the page's own engines on the same sets
