@@ -27,8 +27,8 @@ final class SeanceAppleShell: ShellHost {
         bridge?.viewController
     }
 
-    func emit(_ plugin: String, _ event: String, _ data: [String: Any]) {
-        plugins[plugin]?.notifyListeners(event, data: data)
+    func emit(_ plugin: String, _ event: String, _ data: [String: Any], retain: Bool) {
+        plugins[plugin]?.notifyListeners(event, data: data, retainUntilConsumed: retain)
     }
 
     fileprivate func run(_ plugin: String, _ call: CAPPluginCall) {

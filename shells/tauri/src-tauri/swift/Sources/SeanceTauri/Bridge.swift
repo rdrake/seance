@@ -7,14 +7,14 @@ import SeanceApple
 // points:
 //
 // - `seance_apple_start(event)`, once at setup: makes the plugins and gives
-//   them `event(plugin, name, json)` for what they tell the page, on the main
-//   thread.
+//   them `event(plugin, name, json, retain)` for what they tell the page, on
+//   the main thread (`retain`: ShellHost.emit).
 // - `seance_apple_call(plugin, method, options, context, done)`: the options
 //   as JSON in, `{"ok": result}` or `{"err": {code, message}}` as JSON out,
 //   through `done(context, json)`, which may come on any thread.
 
 public typealias SeanceAppleDone = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>) -> Void
-public typealias SeanceAppleEvent = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void
+public typealias SeanceAppleEvent = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>, Bool) -> Void
 
 @_cdecl("seance_apple_start")
 public func seanceAppleStart(_ event: SeanceAppleEvent) {
@@ -81,8 +81,8 @@ private final class TauriHost: ShellHost {
         (NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first)?.contentView
     }
 
-    func emit(_ plugin: String, _ name: String, _ data: [String: Any]) {
+    func emit(_ plugin: String, _ name: String, _ data: [String: Any], retain: Bool) {
         let json = String(decoding: encode(data), as: UTF8.self)
-        plugin.withCString { p in name.withCString { n in json.withCString { d in event(p, n, d) } } }
+        plugin.withCString { p in name.withCString { n in json.withCString { d in event(p, n, d, retain) } } }
     }
 }

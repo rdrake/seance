@@ -6,9 +6,9 @@ frameworks. `shells/apple` is where that Swift lives. This plan is about making 
 **removing code** rather than adding it. The codebase is already large; each
 step below has to leave less to read than it found.
 
-Status (2026-10-31): step 0 and `Power` are built (§ 7), and the macOS
-icon (§ 6). Notifications are next, once (a) or (b) is decided. § 2 is the
-state this plan started from.
+Status (2026-10-31): step 0, `Power` and notifications (option b) are
+built (§ 7), and the macOS icon (§ 6). § 2 is the state this plan started
+from.
 
 ## 1. The rule
 
@@ -156,5 +156,17 @@ Mac icon is upscaled; a 1024 source in `public/img/` would sharpen it.
    `AppleTranslate.languages` answered). Owed: the phone (Translate,
    Low Power Mode toggled for real), and a real Low Power Mode toggle on a
    Mac laptop (toggling it needs `sudo pmset`).
-2. Notifications, (a) or (b) as decided, with its gates.
+2. **Done 2026-10-31, option (b).** `LocalNotifications` in `shells/apple`
+   (`Notifications.swift`) on both, `@capacitor/local-notifications` gone
+   from the iOS shell, and with it Android's `includePlugins` list and its
+   test (it only existed to keep that plugin out). `nativeAlerts.ts` treats
+   macOS as iOS. A retained event (`ShellHost.emit(retain:)`) is the
+   desktop's `retainUntilConsumed`, so a click that launches the app still
+   opens its conversation. The Mac's ping is bundled by
+   `bundle.macOS.files`. Checked: `cargo run` answers `unsupported` without
+   crashing; a debug `.app` answers `checkPermissions` from the real center
+   (`prompt`) and refuses `schedule` until permission is granted; iOS
+   Simulator build; mocha. Owed: the permission prompt, a banner with its
+   sound, a click opening the conversation and reading clearing it — on the
+   Mac and the phone; a click on an alert that launched the app.
 3. Anything from § 4.3 once decided.

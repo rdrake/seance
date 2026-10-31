@@ -63,18 +63,6 @@ const config: CapacitorConfig = {
 	},
 	android: {
 		allowMixedContent: false,
-		// Every plugin but local-notifications: Android's alerts go through
-		// the shell's own push service (client/js/helpers/nativeAlerts.ts),
-		// and the plugin would bring exact-alarm and boot permissions with it.
-		// A new plugin goes here too (test/tests/capacitorPlugins.ts checks).
-		includePlugins: [
-			"@capacitor/app",
-			"@capacitor/haptics",
-			"@capacitor/keyboard",
-			"@capacitor/splash-screen",
-			"@capacitor/status-bar",
-			"@capawesome/capacitor-badge",
-		],
 	},
 	ios: {
 		// The WebView fills the screen, status bar included, and the page

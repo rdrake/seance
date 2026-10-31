@@ -31,16 +31,25 @@ const PLATFORM: &str = "linux";
 
 /// `window.seanceShell`, defined before any of the page's scripts run. The
 /// object is frozen and the emit hook is not writable, so a page script can
-/// neither swap the bridge nor fake an event through it.
+/// neither swap the bridge nor fake an event through it. A retained event
+/// nobody listens to yet waits for its first listener, as Capacitor's
+/// `retainUntilConsumed` does.
 fn init_script(version: &str) -> String {
     format!(
         r#"(() => {{
 	const listeners = new Map();
+	const held = new Map();
+	const deliver = (cb, data) => {{
+		try {{ cb(data); }} catch (e) {{ console.error(e); }}
+	}};
 	Object.defineProperty(window, "__seanceShellEmit", {{
-		value: (plugin, event, data) => {{
-			for (const cb of listeners.get(plugin + "." + event) ?? []) {{
-				try {{ cb(data); }} catch (e) {{ console.error(e); }}
+		value: (plugin, event, data, retain) => {{
+			const key = plugin + "." + event;
+			const cbs = listeners.get(key) ?? [];
+			if (retain && !cbs.length) {{
+				held.set(key, [...(held.get(key) ?? []), data]);
 			}}
+			for (const cb of cbs) deliver(cb, data);
 		}},
 	}});
 	window.seanceShell = Object.freeze({{
@@ -51,6 +60,9 @@ fn init_script(version: &str) -> String {
 		listen(plugin, event, cb) {{
 			const key = plugin + "." + event;
 			listeners.set(key, [...(listeners.get(key) ?? []), cb]);
+			const waiting = held.get(key) ?? [];
+			held.delete(key);
+			for (const data of waiting) deliver(cb, data);
 		}},
 	}});
 }})();"#,
@@ -102,20 +114,45 @@ fn open_link(app: &AppHandle, link: String) {
     };
 
     if listening {
-        emit(app, "App", "appUrlOpen", json!({ "url": link }));
+        emit(app, "App", "appUrlOpen", json!({ "url": link }), false);
     }
 
     show_main(app);
 }
 
-fn emit(app: &AppHandle, plugin: &str, event: &str, data: Value) {
+/// Retained events that came while no page was loaded to hold them: a click
+/// on an alert that launched the app, or one during a reload.
+#[derive(Default)]
+struct Held {
+    loaded: bool,
+    scripts: Vec<String>,
+}
+
+/// Hand the page a plugin's event. A `retain`ed one is something the user did
+/// outside the window (a click on an alert): the window comes forward and the
+/// event waits for the page, then for its first listener.
+fn emit(app: &AppHandle, plugin: &str, event: &str, data: Value, retain: bool) {
+    let script = format!(
+        "window.__seanceShellEmit({}, {}, {}, {})",
+        json!(plugin),
+        json!(event),
+        data,
+        retain
+    );
+
+    if retain {
+        show_main(app);
+        let held = app.state::<Mutex<Held>>();
+        let mut held = held.lock().unwrap();
+
+        if !held.loaded {
+            held.scripts.push(script);
+            return;
+        }
+    }
+
     if let Some(window) = app.get_webview_window(MAIN) {
-        let _ = window.eval(format!(
-            "window.__seanceShellEmit({}, {}, {})",
-            json!(plugin),
-            json!(event),
-            data
-        ));
+        let _ = window.eval(script);
     }
 }
 
@@ -249,9 +286,27 @@ fn create_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
             open_external(&url);
             NewWindowResponse::Deny
         })
-        .on_page_load(move |_, payload| {
-            if payload.event() == PageLoadEvent::Started {
+        .on_page_load(move |webview, payload| {
+            let started = payload.event() == PageLoadEvent::Started;
+
+            if started {
                 handle.state::<Mutex<Links>>().lock().unwrap().listening = false;
+            }
+
+            let waiting = {
+                let held = handle.state::<Mutex<Held>>();
+                let mut held = held.lock().unwrap();
+                held.loaded = !started;
+
+                if started {
+                    Vec::new()
+                } else {
+                    std::mem::take(&mut held.scripts)
+                }
+            };
+
+            for script in waiting {
+                let _ = webview.eval(script);
             }
 
             #[cfg(debug_assertions)]
@@ -336,6 +391,7 @@ pub fn run() {
             launch: launch_arg,
             listening: false,
         }))
+        .manage(Mutex::new(Held::default()))
         .invoke_handler(tauri::generate_handler![seance_call])
         .setup(|app| {
             let handle = app.handle().clone();

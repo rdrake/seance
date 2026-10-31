@@ -17,8 +17,10 @@ public typealias Presenter = NSView
 public protocol ShellHost: AnyObject {
     /// Where a sheet is shown; nil when there is none.
     @MainActor func presenter() -> Presenter?
-    /// Hands the page a plugin's event. Called on the main thread.
-    func emit(_ plugin: String, _ event: String, _ data: [String: Any])
+    /// Hands the page a plugin's event. Called on the main thread. A
+    /// `retain`ed event is one the user caused outside the page (a click on an
+    /// alert): it waits until the page listens, and the app comes forward.
+    func emit(_ plugin: String, _ event: String, _ data: [String: Any], retain: Bool)
 }
 
 /// A refused call: the page's `NativeCallError` reads both.
@@ -41,15 +43,20 @@ public final class SeanceApple {
     /// Every plugin and its methods, for an adapter that has to declare them.
     public static let plugins: [String: [String]] = [
         "AppleTranslate": ["availability", "translate", "prepare", "languages"],
+        "LocalNotifications": Notifications.methods,
         "Power": Power.methods,
     ]
 
     private let power: Power
+    private let notifications: Notifications
     /// `AppleTranslate` from 26 on, nil before.
     private let translate: AnyObject?
 
     public init(host: ShellHost) {
-        power = Power { [weak host] data in host?.emit("Power", "changed", data) }
+        power = Power { [weak host] data in host?.emit("Power", "changed", data, retain: false) }
+        notifications = Notifications { [weak host] data in
+            host?.emit("LocalNotifications", "localNotificationActionPerformed", data, retain: true)
+        }
 
         if #available(iOS 26.0, macOS 26.0, *) {
             translate = AppleTranslate { [weak host] in host?.presenter() }
@@ -66,6 +73,8 @@ public final class SeanceApple {
         switch plugin {
         case "Power":
             return Power.status()
+        case "LocalNotifications":
+            return try await notifications.call(method, options)
         default:
             if #available(iOS 26.0, macOS 26.0, *), let engine = translate as? AppleTranslate {
                 return try await engine.call(method, options)

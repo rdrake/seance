@@ -11,7 +11,7 @@ use std::sync::{mpsc, OnceLock};
 use tauri::AppHandle;
 
 type Done = extern "C" fn(*mut c_void, *const c_char);
-type Event = extern "C" fn(*const c_char, *const c_char, *const c_char);
+type Event = extern "C" fn(*const c_char, *const c_char, *const c_char, bool);
 
 extern "C" {
     fn seance_apple_start(event: Event);
@@ -34,12 +34,12 @@ pub fn start(app: &AppHandle) {
     }
 }
 
-extern "C" fn event(plugin: *const c_char, name: *const c_char, data: *const c_char) {
+extern "C" fn event(plugin: *const c_char, name: *const c_char, data: *const c_char, retain: bool) {
     let text = |p: *const c_char| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned();
     let data = serde_json::from_str(&text(data)).unwrap_or(Value::Null);
 
     if let Some(app) = APP.get() {
-        super::emit(app, &text(plugin), &text(name), data);
+        super::emit(app, &text(plugin), &text(name), data, retain);
     }
 }
 
