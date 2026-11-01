@@ -191,6 +191,15 @@ async fn seance_call(
             links.listening = true;
             Ok(json!({ "url": links.launch }))
         }
+        // The Dock bounces once, the taskbar button flashes, the window is
+        // marked urgent; nothing while the window has the focus.
+        ("App", "requestAttention") => {
+            if !window.is_focused().unwrap_or(false) {
+                let _ =
+                    window.request_user_attention(Some(tauri::UserAttentionType::Informational));
+            }
+            Ok(json!({}))
+        }
         ("Badge", "checkPermissions" | "requestPermissions") if badge => {
             Ok(json!({ "display": "granted" }))
         }

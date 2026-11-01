@@ -11,7 +11,7 @@
 //   and a push are the same notification: merged per conversation, cleared
 //   on read (webpush.ts readOnWorker), tapped through helpers/nativePush.ts.
 
-import {isAndroidShell, nativeCall, nativeListen, nativePlatform} from "./shell";
+import {isAndroidShell, isDesktopShell, nativeCall, nativeListen, nativePlatform} from "./shell";
 
 /** The ping, as a path in the app bundle, which goes to `UNNotificationSound`
  * as is: the iOS bundle's copy of the web build (`App/public/`), and on macOS
@@ -148,4 +148,14 @@ export function onNativeAlertTap(handler: (network: string, target: string) => v
 			}
 		}
 	);
+}
+
+/** An alert came while the window was not in front: the desktop shells bounce
+ * the Dock icon (macOS), flash the taskbar button (Windows) or mark the
+ * window urgent (Linux). The shell does nothing while the window has the
+ * focus, and the platform stops it once the window comes forward. */
+export function requestAttention(): void {
+	if (isDesktopShell()) {
+		void nativeCall("App", "requestAttention");
+	}
 }
