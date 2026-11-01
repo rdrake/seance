@@ -38,10 +38,10 @@ strip = true
 [features]
 snapshot = ["dep:objc2", "dep:objc2-web-kit", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-core-foundation", "dep:block2"]
 
-# The OS's notifications on Windows and Linux (src/alerts.rs); macOS has the
-# Apple shells' LocalNotifications (src/apple.rs). zbus takes a Linux alert
-# back, which notify-rust only does from the handle its waiting thread holds.
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+# The OS's notifications (src/alerts.rs): toasts on Windows, the freedesktop
+# notification server over D-Bus on Linux. macOS has the Apple shells'
+# LocalNotifications (src/apple.rs).
+[target.'cfg(windows)'.dependencies]
 notify-rust = "=4.18.2"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]

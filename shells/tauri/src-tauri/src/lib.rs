@@ -163,11 +163,6 @@ fn show_main(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
-
-        // A window hidden in the notification area has no taskbar button,
-        // and the dot went with it.
-        #[cfg(windows)]
-        set_badge(&window, BADGE.load(std::sync::atomic::Ordering::Relaxed));
     }
 }
 
@@ -235,7 +230,10 @@ async fn seance_call(
     }
 }
 
-/// The last count asked for, put back when the window comes back (Windows).
+/// The last count asked for (Windows): a window hidden in the notification
+/// area has no taskbar button and its dot goes with it, and the button that
+/// comes back with the window exists only some time after `show()`, so the
+/// dot is put back when the window takes the focus.
 #[cfg(windows)]
 static BADGE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 
@@ -418,11 +416,16 @@ fn install_close_behaviour(app: &AppHandle) -> tauri::Result<()> {
 
     if let Some(window) = app.get_webview_window(MAIN) {
         let hide = window.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        window.on_window_event(move |event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = hide.hide();
             }
+            #[cfg(windows)]
+            tauri::WindowEvent::Focused(true) => {
+                set_badge(&hide, BADGE.load(std::sync::atomic::Ordering::Relaxed));
+            }
+            _ => {}
         });
     }
 
