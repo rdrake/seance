@@ -38,10 +38,14 @@ strip = true
 [features]
 snapshot = ["dep:objc2", "dep:objc2-web-kit", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-core-foundation", "dep:block2"]
 
-# The OS's notifications on Windows and Linux; macOS has the Apple shells'
-# LocalNotifications (src/apple.rs).
+# The OS's notifications on Windows and Linux (src/alerts.rs); macOS has the
+# Apple shells' LocalNotifications (src/apple.rs). zbus takes a Linux alert
+# back, which notify-rust only does from the handle its waiting thread holds.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-tauri-plugin-notification = "=2.8.0"
+notify-rust = "=4.18.2"
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+zbus = { version = "=5.19.0", default-features = false, features = ["blocking-api", "async-io"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }

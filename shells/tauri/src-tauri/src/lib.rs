@@ -432,9 +432,6 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_window_state::Builder::default().build());
 
-    #[cfg(not(target_os = "macos"))]
-    let builder = builder.plugin(tauri_plugin_notification::init());
-
     let app = builder
         .manage(Mutex::new(Links {
             launch: launch_arg,
