@@ -28,12 +28,16 @@ describe("highlighter — normalizeLang", () => {
 	it("knows the punctuation forms Prism's table has no alias for", () => {
 		expect(normalizeLang("c++")).to.equal("cpp");
 		expect(normalizeLang("c#")).to.equal("csharp");
+		expect(normalizeLang("f#")).to.equal("fsharp");
+		expect(normalizeLang("objective-c")).to.equal("objectivec");
 	});
 
 	it("says nothing for a tag Prism does not know", () => {
 		expect(normalizeLang("nope")).to.equal(undefined);
 		expect(normalizeLang("")).to.equal(undefined);
 		expect(normalizeLang(undefined)).to.equal(undefined);
+		// The table's own bookkeeping entry is not a language
+		expect(normalizeLang("meta")).to.equal(undefined);
 	});
 });
 
@@ -108,6 +112,18 @@ describe("highlighter — ensureLanguage", () => {
 	it("says so when the language is not one of Prism's", async () => {
 		expect(await ensureLanguage("nope")).to.be.false;
 	});
+
+	it("keeps a grammar that is already there instead of fetching it again", async () => {
+		const stub = {kw: /\bbf\b/};
+		Prism.languages.brainfuck = stub;
+
+		try {
+			expect(await ensureLanguage("brainfuck")).to.be.true;
+			expect(Prism.languages.brainfuck).to.equal(stub);
+		} finally {
+			delete Prism.languages.brainfuck;
+		}
+	});
 });
 
 describe("highlighter — guessLanguage", () => {
@@ -120,6 +136,12 @@ describe("highlighter — guessLanguage", () => {
 		const code = "def add(a, b):\n    return a + b\n\nprint(add(1, 2))";
 
 		expect(await guessLanguage(code)).to.equal("python");
+	});
+
+	it("says nothing when the guess is a tie", async () => {
+		// flourite scores these 2 : 2 (Python against YAML, Dockerfile against SQL)
+		expect(await guessLanguage("if x:\n  y")).to.equal(undefined);
+		expect(await guessLanguage("SELECT 1\nFROM t")).to.equal(undefined);
 	});
 
 	it("says nothing when nothing looks like code", async () => {
@@ -187,6 +209,35 @@ describe("highlighter — guessLanguage sees markup by its shape", () => {
 		const code = "const App = () => (\n  <div className={cls}>\n    <Hi />\n  </div>\n);";
 
 		expect(await guessLanguage(code)).to.not.equal("markup");
+	});
+
+	// Each of these is markup by its shape alone: flourite would not say so.
+	const shapeOnly: Record<string, string> = {
+		"an XML declaration flourite reads as C": '<?xml version="1.0"?>\n<cfg x="1"/>',
+		"a doctype flourite cannot decide on": "<!DOCTYPE note>\n<note>x</note>",
+		"a closing tag with a space before >": "<root>\n</root >",
+		"self-closing tags with digits in their names": "<a1/>\n<b2/>",
+		"self-closing tags with one attribute": "<a b/>\n<c d/>",
+		"self-closing tags with longer attributes": "<a bc/>\n<d ef/>",
+	};
+
+	for (const [name, code] of Object.entries(shapeOnly)) {
+		it(`guesses markup for ${name}`, async () => {
+			expect(await guessLanguage(code)).to.equal("markup");
+		});
+	}
+
+	it("needs the block to open with the tag", async () => {
+		// flourite takes this one for C++
+		expect(await guessLanguage("abc<root>\n</root>")).to.not.equal("markup");
+	});
+
+	it("needs a tag name the way markup writes one", async () => {
+		expect(await guessLanguage("<a+b>\n<c/>")).to.equal(undefined);
+	});
+
+	it("needs a tag that closes as well as one that opens", async () => {
+		expect(await guessLanguage("<p>hello\nworld")).to.equal(undefined);
 	});
 
 	it("does not turn other languages into markup", async () => {

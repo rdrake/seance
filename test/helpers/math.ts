@@ -49,4 +49,38 @@ describe("helpers/math — renderMath", () => {
 		expect(await renderMath("", false)).to.equal(undefined);
 		expect(await renderMath("   ", true)).to.equal(undefined);
 	});
+
+	it("links KaTeX's stylesheet with the first render, and only then", async () => {
+		// A fresh copy of the module, so nothing has asked for the sheet yet,
+		// and a stand-in page to put the <link> on.
+		const path = require.resolve("../../client/js/helpers/ircmessageparser/math");
+		const kept = require.cache[path];
+		delete require.cache[path];
+		type MathModule = typeof import("../../client/js/helpers/ircmessageparser/math");
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const fresh = require(path) as MathModule;
+		require.cache[path] = kept;
+
+		const links: {rel: string; href: string}[] = [];
+		const page = globalThis as unknown as {document?: unknown};
+		page.document = {
+			baseURI: "https://chat.example/app/",
+			createElement: () => ({rel: "", href: ""}),
+			head: {appendChild: (link: {rel: string; href: string}) => links.push(link)},
+		};
+
+		try {
+			expect(await fresh.renderMath("", false)).to.equal(undefined);
+			expect(links).to.be.empty;
+
+			await fresh.renderMath("a+b", false);
+			await fresh.renderMath("c+d", true);
+
+			expect(links).to.deep.equal([
+				{rel: "stylesheet", href: "https://chat.example/app/css/katex.min.css"},
+			]);
+		} finally {
+			delete page.document;
+		}
+	});
 });

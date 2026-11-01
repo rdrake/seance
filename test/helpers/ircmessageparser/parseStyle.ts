@@ -1120,4 +1120,33 @@ describe("parseStyle", () => {
 
 		expect(actual).to.deep.equal(expected);
 	});
+
+	it("reads a colour code only right after the colour character", () => {
+		const parts = parseStyle("\x0304red\x03 plain 7");
+
+		expect(parts.map((p) => [p.text, p.textColor])).to.deep.equal([
+			["red", 4],
+			[" plain 7", undefined],
+		]);
+	});
+
+	it("upper-cases a hex background colour", () => {
+		const [part] = parseStyle("\x04ff0000,aabbcctext");
+
+		expect(part.hexColor).to.equal("FF0000");
+		expect(part.hexBgColor).to.equal("AABBCC");
+	});
+
+	it("keeps runs apart that differ in their background alone", () => {
+		expect(parseStyle("\x0304,02a\x0304,05b").map((p) => [p.text, p.bgColor])).to.deep.equal([
+			["a", 2],
+			["b", 5],
+		]);
+		expect(
+			parseStyle("\x04FF0000,000000a\x04FF0000,FFFFFFb").map((p) => [p.text, p.hexBgColor])
+		).to.deep.equal([
+			["a", "000000"],
+			["b", "FFFFFF"],
+		]);
+	});
 });

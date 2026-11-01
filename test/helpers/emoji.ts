@@ -42,7 +42,32 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 		});
 
 		it("is loaded once and handed to every caller", async function () {
-			expect(await loadEmojiCatalog()).to.equal(catalog);
+			const again = await loadEmojiCatalog();
+
+			expect(again).to.be.an("array").with.lengthOf(9);
+			expect(again).to.equal(catalog);
+		});
+
+		it("is fetched by the first caller and shared by the ones after", async function () {
+			// A fresh copy of the module, so its memo starts empty.
+			const path = require.resolve("../../client/js/helpers/emoji");
+			const kept = require.cache[path];
+			delete require.cache[path];
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const fresh = require(path) as typeof import("../../client/js/helpers/emoji");
+			require.cache[path] = kept;
+
+			const first = fresh.loadEmojiCatalog();
+			const second = fresh.loadEmojiCatalog();
+
+			expect(first).to.be.an.instanceOf(Promise);
+			expect(second).to.equal(first);
+
+			const groups = await first;
+			expect(groups).to.be.an("array").with.lengthOf(9);
+			expect(groups.map((group) => group.key)).to.deep.equal(
+				catalog.map((group) => group.key)
+			);
 		});
 
 		it("gives every entry a name, a description and a lowercase haystack", function () {
@@ -88,6 +113,8 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 			expect(emojiForName("+1")).to.equal("👍");
 			expect(emojiForName("lol")).to.be.undefined;
 			expect(emojiForName("")).to.be.undefined;
+			expect(emojiForName("::tada::")).to.equal("🎉");
+			expect(emojiForName("ta:da")).to.be.undefined;
 			expect(first("lol")).to.equal("🍭");
 		});
 
@@ -99,6 +126,53 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 			expect(searchEmoji(catalog, "")).to.be.empty;
 			expect(searchEmoji(catalog, "   ")).to.be.empty;
 			expect(searchEmoji(catalog, "face", 5)).to.have.lengthOf(5);
+		});
+	});
+
+	describe("ranking", function () {
+		const entry = (emoji: string, name: string, description: string) => ({
+			emoji,
+			name,
+			description,
+			keywords: "",
+			haystack: ` ${name} ${description} `.toLowerCase(),
+		});
+		const rank = (entries: ReturnType<typeof entry>[], query: string) =>
+			searchEmoji([{key: "test", label: "Test", icon: "x", emoji: entries}], query).map(
+				(hit) => hit.emoji
+			);
+
+		it("ranks the whole query typed as a name above a closer word-by-word match", function () {
+			// Word by word, "sweaty" (2 + 4) ties "sweat_smile" (2 + 4) and comes
+			// first in the catalog; the whole query naming "sweat_smile" lifts it.
+			const entries = [entry("C", "sweaty", "unsmiled"), entry("B", "sweat_smile", "grin")];
+
+			expect(rank(entries, "sweat smile")).to.deep.equal(["B", "C"]);
+			expect(rank(entries, " Sweat  Smile ")).to.deep.equal(["B", "C"]);
+			expect(rank(entries, "sweat-smile")).to.deep.equal(["B", "C"]);
+		});
+
+		it("ranks a name typed in full above a name merely started", function () {
+			const entries = [entry("E", "firework", "hot"), entry("D", "fire", "hot")];
+
+			expect(rank(entries, "fire hot")).to.deep.equal(["D", "E"]);
+		});
+
+		it("ranks the start of a word above a fragment of one", function () {
+			const entries = [entry("G", "bbb", "bzap"), entry("F", "aaa", "zapper")];
+
+			expect(rank(entries, "zap")).to.deep.equal(["F", "G"]);
+		});
+
+		it("keeps catalog order between equal matches", function () {
+			const entries = ["1", "2", "3", "4"].map((n) => entry(n, `x${n}`, "qq"));
+
+			expect(rank(entries, "qq")).to.deep.equal(["1", "2", "3", "4"]);
+		});
+
+		it("strips the colons around a query, not inside it", function () {
+			expect(searchEmoji(catalog, "::tada::")[0]?.emoji).to.equal("🎉");
+			expect(searchEmoji(catalog, "ta:da")).to.be.empty;
 		});
 	});
 
@@ -124,6 +198,12 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 			expect(cut).to.equal("🎉".repeat(MAX_REACTION_LENGTH));
 		});
 
+		it("trims a cut that ends on a space", function () {
+			const text = "a".repeat(MAX_REACTION_LENGTH - 1) + " and more";
+
+			expect(normalizeReaction(text)).to.equal("a".repeat(MAX_REACTION_LENGTH - 1));
+		});
+
 		it("builds a reaction up one pick at a time", function () {
 			// Emoji sit flush against each other — that is the point of it —
 			// and anything with a word in it keeps its spaces.
@@ -134,6 +214,8 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 			expect(appendReaction("🎉", "nice")).to.equal("🎉 nice");
 			expect(appendReaction("nice", "🎉")).to.equal("nice 🎉");
 			expect(appendReaction("so ", "cool")).to.equal("so cool");
+			expect(appendReaction("so  ", "cool")).to.equal("so cool");
+			expect(appendReaction("so very", "cool")).to.equal("so very cool");
 			expect(appendReaction("🎉", "   ")).to.equal("🎉");
 		});
 
@@ -153,6 +235,7 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 			expect(isEmojiOnly("lol")).to.equal(false);
 			expect(isEmojiOnly("👍 nice")).to.equal(false);
 			expect(isEmojiOnly("")).to.equal(false);
+			expect(isEmojiOnly("   ")).to.equal(false);
 		});
 
 		it("knows one emoji from several", function () {
@@ -164,6 +247,7 @@ describe("emoji catalog and reaction text (helpers/emoji.ts)", function () {
 			expect(isSingleEmoji("👍 ❤️")).to.equal(false);
 			expect(isSingleEmoji("lol")).to.equal(false);
 			expect(isSingleEmoji("")).to.equal(false);
+			expect(isSingleEmoji("x👍")).to.equal(false);
 		});
 	});
 });

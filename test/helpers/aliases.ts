@@ -7,7 +7,9 @@ import {
 	MAX_ALIASES,
 	MAX_BODY_LENGTH,
 	MAX_DEPTH,
+	MAX_EXPANSIONS,
 	MAX_LINES,
+	MAX_NAME_LENGTH,
 	saveAliases,
 	STORAGE_KEY,
 	useStorageBackend,
@@ -114,8 +116,7 @@ describe("command aliases (helpers/aliases.ts)", function () {
 
 			set(list);
 			const result = expandAlias("/n0 go", {});
-			expect(result).to.have.length(1);
-			expect(result?.[0]).to.match(/^\/n\d+ deep$/);
+			expect(result).to.deep.equal([`/n${MAX_DEPTH} deep`]);
 		});
 
 		it("stops at MAX_LINES however the aliases multiply", function () {
@@ -149,6 +150,52 @@ describe("command aliases (helpers/aliases.ts)", function () {
 			const started = Date.now();
 			expect(expandAlias("/a", {})).to.deep.equal([]);
 			expect(Date.now() - started).to.be.below(1000);
+		});
+
+		it("takes the first of two aliases that differ only in case", function () {
+			const list = [
+				{name: "wave", body: "/me waves first"},
+				{name: "Wave", body: "/me waves second"},
+			];
+			expect(expandAlias("/WAVE", {}, list)).to.deep.equal(["/me waves first"]);
+		});
+
+		it("needs the slash: text that ends in an alias's name is text", function () {
+			set([{name: "ave", body: "/me hails"}]);
+			expect(expandAlias("wave", {})).to.equal(null);
+			expect(expandAlias("/ave", {})).to.deep.equal(["/me hails"]);
+		});
+
+		it("reads arguments past extra spaces", function () {
+			set([{name: "k", body: "/kick $1 $2"}]);
+			expect(expandAlias("/k  bob  spam", {})).to.deep.equal(["/kick bob spam"]);
+		});
+
+		it("trims every trailing space a missing argument leaves", function () {
+			set([{name: "s", body: "/say $1  $2"}]);
+			expect(expandAlias("/s hi", {})).to.deep.equal(["/say hi"]);
+		});
+
+		it("stops a single flat alias at MAX_LINES", function () {
+			const body = Array.from({length: MAX_LINES + 10}, (_, i) => `line ${i}`).join("\n");
+			const result = expandAlias("/many", {}, [{name: "many", body}]);
+
+			expect(result).to.have.length(MAX_LINES);
+			expect(result?.[MAX_LINES - 1]).to.equal(`line ${MAX_LINES - 1}`);
+		});
+
+		it("looks at exactly MAX_EXPANSIONS lines, the invocation included", function () {
+			// Each `/e` costs one look and expands to nothing.
+			const body = (empties: number) =>
+				[...Array<string>(empties).fill("/e"), "hi"].join("\n");
+			const list = (empties: number) => [
+				{name: "a", body: body(empties)},
+				{name: "e", body: "$1"},
+			];
+
+			expect(MAX_EXPANSIONS).to.equal(1000);
+			expect(expandAlias("/a", {}, list(MAX_EXPANSIONS - 2))).to.deep.equal(["hi"]);
+			expect(expandAlias("/a", {}, list(MAX_EXPANSIONS - 1))).to.deep.equal([]);
 		});
 
 		it("prefers an explicit list over storage (the settings preview)", function () {
@@ -194,6 +241,39 @@ describe("command aliases (helpers/aliases.ts)", function () {
 			expect(store.has(STORAGE_KEY)).to.equal(false);
 		});
 
+		it("treats storage that is valid JSON but not a list as unreadable", function () {
+			store.set(STORAGE_KEY, JSON.stringify("/me waves"));
+			expect(loadAliases()).to.deep.equal([]);
+			expect(store.has(STORAGE_KEY)).to.equal(false);
+		});
+
+		it("keeps the good entries around ones of the wrong shape", function () {
+			store.set(
+				STORAGE_KEY,
+				JSON.stringify([
+					null,
+					{name: ["wave"], body: "/me array name"},
+					{name: "num", body: 5},
+					{name: "ok", body: "/me fine"},
+				])
+			);
+			expect(loadAliases()).to.deep.equal([{name: "ok", body: "/me fine"}]);
+			expect(store.has(STORAGE_KEY)).to.equal(true);
+		});
+
+		it("takes a body up to MAX_BODY_LENGTH and no longer", function () {
+			const at = "/me " + "x".repeat(MAX_BODY_LENGTH - 4);
+			set([
+				{name: "fits", body: at},
+				{name: "over", body: at + "x"},
+			]);
+			expect(loadAliases().map((alias) => alias.name)).to.deep.equal(["fits"]);
+		});
+
+		it("is stored under the key the settings backup carries", function () {
+			expect(STORAGE_KEY).to.equal("thelounge.aliases");
+		});
+
 		it("caps the list at MAX_ALIASES", function () {
 			const list: Alias[] = [];
 
@@ -214,7 +294,8 @@ describe("command aliases (helpers/aliases.ts)", function () {
 			expect(isValidAliasName("-wave")).to.equal(false);
 			expect(isValidAliasName("wa ve")).to.equal(false);
 			expect(isValidAliasName("/wave")).to.equal(false);
-			expect(isValidAliasName("a".repeat(33))).to.equal(false);
+			expect(isValidAliasName("a".repeat(MAX_NAME_LENGTH))).to.equal(true);
+			expect(isValidAliasName("a".repeat(MAX_NAME_LENGTH + 1))).to.equal(false);
 		});
 	});
 });

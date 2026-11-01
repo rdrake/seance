@@ -1,5 +1,11 @@
 import {expect} from "chai";
-import {insertMessage, removePending} from "../../client/js/helpers/messageUpdates";
+import {
+	applyReaction,
+	findMessageById,
+	insertMessage,
+	removePending,
+	replyQuote,
+} from "../../client/js/helpers/messageUpdates";
 import type {SharedMsg} from "../../shared/types/msg";
 
 function msg(id: number, pending = false): SharedMsg {
@@ -92,6 +98,81 @@ describe("Pending messages in the message list (helpers/messageUpdates.ts)", fun
 			const messages = [msg(1), msg(2, true)];
 			expect(removePending(messages, 9)).to.equal(false);
 			expect(ids(messages)).to.deep.equal([1, 2]);
+		});
+
+		it("removes a pending message that is first in the list", function () {
+			const messages = [msg(1, true), msg(2)];
+			expect(removePending(messages, 1)).to.equal(true);
+			expect(ids(messages)).to.deep.equal([2]);
+		});
+
+		it("shows an original that is first in the list again", function () {
+			const messages = [{...msg(1), supersededBy: 2}, msg(2, true)];
+			expect(removePending(messages, 2)).to.equal(true);
+			expect(messages[0].supersededBy).to.equal(undefined);
+		});
+	});
+});
+
+describe("Message lookups and reactions (helpers/messageUpdates.ts)", function () {
+	describe("findMessageById", function () {
+		it("finds the first message as well as the last", function () {
+			const messages = [msg(1), msg(2), msg(3)];
+			expect(findMessageById(messages, 1)).to.equal(messages[0]);
+			expect(findMessageById(messages, 3)).to.equal(messages[2]);
+			expect(findMessageById(messages, 9)).to.equal(undefined);
+		});
+	});
+
+	describe("replyQuote", function () {
+		const said = (id: number, msgid: string, nick?: string, text?: string): SharedMsg => ({
+			...msg(id),
+			msgid,
+			...(nick ? {from: {nick}} : {}),
+			...(text !== undefined ? {text} : {}),
+		});
+
+		it("quotes the message with that msgid, wherever it is", function () {
+			const messages = [said(1, "a", "alice", "first"), said(2, "b", "bob", "second")];
+			expect(replyQuote(messages, "a")).to.deep.equal({id: 1, nick: "alice", text: "first"});
+			expect(replyQuote(messages, "zz")).to.equal(undefined);
+		});
+
+		it("does not quote an original an edit has replaced", function () {
+			const messages = [{...said(1, "a", "alice", "old"), supersededBy: 2}, said(2, "b")];
+			expect(replyQuote(messages, "a")).to.equal(undefined);
+		});
+
+		it("quotes a message with no sender or text as empty", function () {
+			expect(replyQuote([said(1, "a")], "a")).to.deep.equal({id: 1, nick: "", text: ""});
+		});
+	});
+
+	describe("applyReaction", function () {
+		it("changes nothing when the nick had not reacted with that text", function () {
+			const message: SharedMsg = {...msg(1), reactions: [{text: "👍", nicks: ["alice"]}]};
+			const before = message.reactions;
+
+			applyReaction(message, "👍", "bob", true);
+
+			expect(message.reactions).to.equal(before);
+		});
+
+		it("replaces the list rather than mutating it", function () {
+			const message: SharedMsg = {
+				...msg(1),
+				reactions: [
+					{text: "👍", nicks: ["alice", "bob"]},
+					{text: "🎉", nicks: ["bob"]},
+				],
+			};
+			const before = message.reactions!;
+
+			applyReaction(message, "🎉", "BOB", true);
+
+			expect(message.reactions).to.not.equal(before);
+			expect(message.reactions).to.deep.equal([{text: "👍", nicks: ["alice", "bob"]}]);
+			expect(before).to.have.lengthOf(2);
 		});
 	});
 });

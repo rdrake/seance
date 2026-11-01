@@ -151,4 +151,18 @@ describe("findChannels", () => {
 
 		expect(actual).to.deep.equal(expected);
 	});
+
+	it("finds every channel in the text, not only the first", () => {
+		expect(findChannels("join #one and #two", ["#"], ["@", "+"])).to.deep.equal([
+			{channel: "#one", start: 5, end: 9},
+			{channel: "#two", start: 14, end: 18},
+		]);
+	});
+
+	it("allows only the user modes before a channel, nothing else", () => {
+		expect(findChannels("ya#chan", ["#"], ["@", "+"])).to.deep.equal([]);
+		expect(findChannels("@+#chan", ["#"], ["@", "+"])).to.deep.equal([
+			{channel: "#chan", start: 2, end: 7},
+		]);
+	});
 });

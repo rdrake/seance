@@ -25,4 +25,16 @@ describe("anyIntersection", () => {
 		expect(anyIntersection(a, b)).to.equal(false);
 		expect(anyIntersection(b, a)).to.equal(false);
 	});
+
+	it("counts an empty part at the start or the end of another as intersecting it", () => {
+		const whole = {start: 0, end: 3};
+
+		for (const empty of [
+			{start: 0, end: 0},
+			{start: 3, end: 3},
+		]) {
+			expect(anyIntersection(whole, empty), JSON.stringify(empty)).to.equal(true);
+			expect(anyIntersection(empty, whole), JSON.stringify(empty)).to.equal(true);
+		}
+	});
 });

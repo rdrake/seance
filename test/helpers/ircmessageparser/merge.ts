@@ -156,4 +156,22 @@ describe("merge", () => {
 
 		expect(actual).to.deep.equal(expected);
 	});
+
+	it("keeps the first of two parts that overlap and drops the other", () => {
+		const parts = [
+			{start: 0, end: 5, channel: "#chan"},
+			{start: 2, end: 8, link: "http://x"},
+		];
+		const fragments = [{text: "#chan.and", start: 0, end: 9}];
+
+		const merged = merge(parts, fragments as any, "#chan.and");
+
+		type Seen = {start: number; end: number; channel?: string; link?: string};
+		const seen = merged.map((p) => p as unknown as Seen);
+
+		expect(seen.map((p) => [p.start, p.end, p.channel, p.link])).to.deep.equal([
+			[0, 5, "#chan", undefined],
+			[5, 9, undefined, undefined],
+		]);
+	});
 });

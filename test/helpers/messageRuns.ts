@@ -28,6 +28,9 @@ describe("message runs (helpers/messageRuns.ts)", function () {
 		expect(continuesRun(msg("kim", 0), {type: "message", time: at(1), from: null})).to.equal(
 			false
 		);
+		expect(continuesRun({type: "message", time: at(0), from: null}, msg("kim", 1))).to.equal(
+			false
+		);
 	});
 
 	it("takes the gap either way round (an edit keeps its original's time), and a time it cannot read as a new run", function () {
