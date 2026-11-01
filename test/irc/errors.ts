@@ -13,7 +13,10 @@ describe("irc/errors", function () {
 	describe("errorSpec", function () {
 		it("gives every 4xx/5xx numeric a non-empty code", function () {
 			for (const numeric of numerics(400, 599)) {
-				expect(errorSpec(numeric)?.code, numeric).to.match(/^[a-z0-9_]+$/);
+				const code = errorSpec(numeric)?.code;
+
+				expect(code, numeric).to.be.a("string");
+				expect(code, numeric).to.match(/^[a-z0-9_]+$/);
 			}
 		});
 

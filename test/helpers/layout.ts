@@ -450,6 +450,41 @@ describe("layout — monospace blocks", () => {
 	});
 });
 
+describe("layout — defaults and styles the other suites leave out", () => {
+	it("links # and & channels without being told the prefixes", () => {
+		expect(layout("see #seance and &local")).to.deep.equal([
+			text("see "),
+			{kind: "channel", channel: "#seance", children: [text("#seance")]},
+			text(" and "),
+			{kind: "channel", channel: "&local", children: [text("&local")]},
+		]);
+	});
+
+	it("finds a nick after the default status prefixes", () => {
+		expect(layout("hi @bob +carol", {users: ["bob", "carol"]})).to.deep.equal([
+			text("hi @"),
+			{kind: "nick", nick: "bob", children: [text("bob")]},
+			text(" +"),
+			{kind: "nick", nick: "carol", children: [text("carol")]},
+		]);
+	});
+
+	it("carries underline and both kinds of background colour", () => {
+		expect(layout("\x1funder\x1f")).to.deep.equal([text("under", {underline: true})]);
+		expect(layout("\x0304,02x")).to.deep.equal([text("x", {textColor: 4, bgColor: 2})]);
+		expect(layout("\x04ff0000,00ff00x")).to.deep.equal([
+			text("x", {hexColor: "FF0000", hexBgColor: "00FF00"}),
+		]);
+	});
+
+	it("keeps adjacent code blocks in different languages apart", () => {
+		expect(layout("```js\na\n```\n```py\nb\n```", markdown)).to.deep.equal([
+			codeBlock([text("a")], "js"),
+			codeBlock([text("b")], "py"),
+		]);
+	});
+});
+
 describe("toPlainText", () => {
 	it("concatenates the text of every node, markers gone", () => {
 		expect(toPlainText(layout("**a** `b` [c](https://example.com/)", markdown))).to.equal(
@@ -512,6 +547,24 @@ describe("codeBlocksOf", () => {
 // styled text nodes, every wrap folded into a style, cut at N visible
 // characters.
 describe("quoteLayout", () => {
+	it("sets maths in monospace and a header in bold, and spaces blocks apart", () => {
+		expect(quoteLayout("$`x`$ and $$\ny\n$$", 80, markdown)).to.deep.equal([
+			text("x", {monospace: true}),
+			text(" and "),
+			text("y", {monospace: true}),
+		]);
+		expect(quoteLayout("# h\nbody", 80, markdown)).to.deep.equal([
+			text("h", {bold: true}),
+			text(" "),
+			text("body"),
+		]);
+		expect(quoteLayout("> q\nz", 80, markdown)).to.deep.equal([
+			text("q"),
+			text(" "),
+			text("z"),
+		]);
+	});
+
 	const md = {markdown: true};
 
 	it("keeps IRC and markdown styles as styles, the markers gone", () => {

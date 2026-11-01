@@ -97,6 +97,14 @@ describe("markdown — italic", () => {
 	});
 });
 
+describe("markdown — italic after a letter outside the BMP or with a combining mark", () => {
+	it("reads the whole character before an underscore, so `_` stays intraword", () => {
+		expect(md("𠀀_a_")).to.deep.equal([{text: "𠀀_a_"}]);
+		expect(md("e\u0301_a_")).to.deep.equal([{text: "e\u0301_a_"}]);
+		expect(md("x _a_")).to.deep.equal([{text: "x "}, {text: "a", italic: true}]);
+	});
+});
+
 describe("markdown — underline and strikethrough", () => {
 	it("renders __text__ underlined", () => {
 		expect(md("__a__")).to.deep.equal([{text: "a", underline: true}]);
@@ -320,6 +328,11 @@ describe("markdown — lists", () => {
 		expect(md("1. a\n2. b")).to.deep.equal([{text: "a\nb", list: "ol:1"}]);
 	});
 
+	it("starts an ordered list at any digit, 0 and 9 included", () => {
+		expect(md("0. x")).to.deep.equal([{text: "x", list: "ol:0"}]);
+		expect(md("9. x")).to.deep.equal([{text: "x", list: "ol:9"}]);
+	});
+
 	it("reads the markers inside an item", () => {
 		expect(md("- **b**")).to.deep.equal([{text: "b", list: "ul", bold: true}]);
 	});
@@ -397,6 +410,22 @@ describe("markdown — pipe tables", () => {
 		expect(md("a | b\n---")).to.deep.equal([{text: "a | b\n---"}]);
 	});
 
+	it("leaves a list, header or quote marker in a table's first cell as text", () => {
+		for (const marker of ["1.", "-", "#", ">"]) {
+			expect(md(`${marker} a | b\n--- | ---`), marker).to.deep.equal([
+				{text: `${marker} a|b`, table: "ll"},
+			]);
+		}
+	});
+
+	it("reads the line after a table as markup again", () => {
+		expect(md("x\n1. a | b\n--- | ---\n2. c")).to.deep.equal([
+			{text: "x\n"},
+			{text: "1. a|b", table: "ll"},
+			{text: "c", list: "ol:2"},
+		]);
+	});
+
 	it("takes no table inside a code fence", () => {
 		expect(md("```\n| a |\n| - |\n```")).to.deep.equal([
 			{text: "| a |\n| - |", codeBlock: true},
@@ -414,6 +443,11 @@ describe("markdown — math", () => {
 			{text: "E=mc^2", math: "E=mc^2"},
 			{text: " done"},
 		]);
+	});
+
+	it("leaves an empty `$$$$` display block as text", () => {
+		expect(md("$$$$")).to.deep.equal([{text: "$$$$"}]);
+		expect(md("$$\n$$")).to.deep.equal([{text: "$$\n$$"}]);
 	});
 
 	it("renders `$$…$$` display, dropping the newlines around it", () => {
@@ -491,6 +525,23 @@ describe("markdown — header", () => {
 	it("takes one to six hashes and no more", () => {
 		expect(md("###### h")).to.deep.equal([{text: "h", header: 6}]);
 		expect(md("####### h")).to.deep.equal([{text: "####### h"}]);
+	});
+
+	it("drops the line feeds around a header unless a blank line stands there", () => {
+		expect(md("x\n# h\ny")).to.deep.equal([{text: "x"}, {text: "h", header: 1}, {text: "y"}]);
+		expect(md("x\n\n# h\ny")).to.deep.equal([
+			{text: "x\n\n"},
+			{text: "h", header: 1},
+			{text: "y"},
+		]);
+	});
+
+	it("joins consecutive headers of one level and keeps different levels apart", () => {
+		expect(md("# a\n# b")).to.deep.equal([{text: "a\nb", header: 1}]);
+		expect(md("# a\n## b")).to.deep.equal([
+			{text: "a", header: 1},
+			{text: "b", header: 2},
+		]);
 	});
 
 	it("needs the space and something after it", () => {
