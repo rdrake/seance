@@ -7,6 +7,8 @@
 // - Windows, Linux: the Tauri shell's LocalNotifications (src/alerts.rs), the
 //   same shapes; a click opens the conversation, and reading it takes the
 //   alert back on Linux alone (Windows cannot remove a shown toast).
+//
+// Reading a conversation clears its alert (webpush.ts readOnWorker).
 // - Android: the shell's push service (NativePush `show`), so a page alert
 //   and a push are the same notification: merged per conversation, cleared
 //   on read (webpush.ts readOnWorker), tapped through helpers/nativePush.ts.
@@ -123,7 +125,8 @@ export async function showNativeAlert(alert: NativeAlert): Promise<boolean> {
 	return true;
 }
 
-/** The conversation was read: its alert goes (iOS, macOS, Linux). */
+/** The conversation was read: its alert goes (iOS, macOS, Linux; Windows
+ * cannot take a toast back). */
 export function clearNativeAlert(network: string, target: string): void {
 	void nativeCall("LocalNotifications", "removeDeliveredNotifications", {
 		notifications: [{id: alertId(network, target)}],
