@@ -54,6 +54,21 @@ pub fn setup(app: &AppHandle) {
     });
 }
 
+/// The body as text. Freedesktop servers read a body as markup (links, images,
+/// bold), and an alert's body is what someone on IRC wrote: unescaped, a
+/// `<img src=…>` would have the desktop fetch it. Windows toasts take text.
+#[cfg(not(windows))]
+fn body_text(body: &str) -> String {
+    body.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+#[cfg(windows)]
+fn body_text(body: &str) -> String {
+    body.to_owned()
+}
+
 fn ids(options: &Value) -> Vec<i32> {
     options
         .get("notifications")
@@ -91,7 +106,7 @@ pub fn call(app: &AppHandle, method: &str, options: &Value) -> Result<Value, She
                     .builder()
                     .id(id)
                     .title(text("title"))
-                    .body(text("body"));
+                    .body(body_text(text("body")));
 
                 // The page names the Apple shells' bundled file; any sound
                 // asked for is the platform's own ping here.
@@ -122,5 +137,17 @@ pub fn call(app: &AppHandle, method: &str, options: &Value) -> Result<Value, She
             message: format!("LocalNotifications.{method} is not implemented"),
             code: "unimplemented".into(),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(not(windows))]
+    #[test]
+    fn a_body_is_never_markup() {
+        assert_eq!(
+            super::body_text(r#"<img src="https://x.test/a.png"> & <b>hi</b>"#),
+            r#"&lt;img src="https://x.test/a.png"&gt; &amp; &lt;b&gt;hi&lt;/b&gt;"#
+        );
     }
 }
