@@ -41,3 +41,24 @@ describe("Tauri shell (shells/tauri/src-tauri/tauri.conf.json)", function () {
 		expect(workers).to.include("blob:");
 	});
 });
+
+// Threads for the translation engines need a cross-origin-isolated page,
+// which the service worker gives a browser (branding.md § Threads) and no
+// shell has. Tauri sends the configured headers on every asset response, the
+// worker script's included; Tauri merges tauri.windows.conf.json over the base
+// file on Windows alone. Only WebView2 (Chromium) knows `credentialless`: a
+// WebKit view would take `require-corp` and lose every cross-origin preview.
+describe("Tauri shell headers (tauri.windows.conf.json)", function () {
+	const read = (file: string) =>
+		JSON.parse(readFileSync(`shells/tauri/src-tauri/${file}`, "utf8"));
+
+	it("isolates the page on Windows, without credentials rather than CORP", function () {
+		const headers = read("tauri.windows.conf.json").app.security.headers;
+		expect(headers["Cross-Origin-Opener-Policy"]).to.equal("same-origin");
+		expect(headers["Cross-Origin-Embedder-Policy"]).to.equal("credentialless");
+	});
+
+	it("isolates nothing on macOS or Linux, whose WebKit has no credentialless", function () {
+		expect(read("tauri.conf.json").app.security.headers).to.equal(undefined);
+	});
+});

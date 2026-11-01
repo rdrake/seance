@@ -86,6 +86,13 @@ compiled out of a release build.
   `connect-src` `ws: wss: https:` (the user picks the IRC host; uploads),
   no objects, frames, base-tag or form targets. `style-src` is left
   unmodified by Tauri, whose nonces would void `'unsafe-inline'`.
+- **Threads on Windows** (`tauri.windows.conf.json`, merged over the base
+  file there): `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: credentialless` on every asset, which the
+  service worker gives a browser (`docs/resources/branding.md` § Threads), so
+  the in-page translation engines run multi-threaded. Not on macOS (Apple's
+  translator) or Linux (WebKitGTK has no `credentialless`). Not yet run on
+  Windows.
 - **Navigation**: inside the app only; other http(s) links,
   `target="_blank"` and `window.open()` open in the user's browser.
 - **Links**: `deep-link` claims `web+irc:`; the launch link comes from
