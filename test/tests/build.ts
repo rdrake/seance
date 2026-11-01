@@ -37,7 +37,7 @@ describe("public folder", function () {
 		expect(html.includes("__APP_NAME__")).to.be.false;
 		expect(html.includes("__THEME_COLOR__")).to.be.false;
 		// No inline script: a Content-Security-Policy refuses those (the
-		// Electron shell's does, shells/electron/main.js), so everything that
+		// Tauri shell's does, shells/tauri/src-tauri/tauri.conf.json), so everything that
 		// runs before the bundle is a file — the pre-paint language script
 		// is js/prepaint.js.
 		expect(/<script(?![^>]*\ssrc=)[^>]*>/i.test(html), "an inline <script>").to.be.false;

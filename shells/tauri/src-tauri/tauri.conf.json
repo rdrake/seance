@@ -12,13 +12,13 @@
     "security": {
       "csp": {
         "default-src": "'self'",
-        "script-src": "'self'",
+        "script-src": "'self' 'wasm-unsafe-eval'",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob: https:",
         "media-src": "'self' data: blob: https:",
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost ws: wss: https:",
-        "worker-src": "'self'",
+        "worker-src": "'self' blob:",
         "manifest-src": "'self'",
         "object-src": "'none'",
         "frame-src": "'none'",

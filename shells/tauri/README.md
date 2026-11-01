@@ -76,7 +76,12 @@ compiled out of a release build.
 | `App`   | `getLaunchUrl`; event `appUrlOpen`                       | `web+irc:` links                            |
 | `Badge` | `checkPermissions`, `requestPermissions`, `set`, `clear` | macOS dock, Linux launchers; not on Windows |
 
-- **CSP** (`tauri.conf.json`): `'self'` scripts only, inline styles (the
+- **CSP** (`tauri.conf.json`): `'self'` scripts only, plus
+  `'wasm-unsafe-eval'` and `blob:` workers as the Electron shell allowed
+  for the in-page translation engines (Tauri sends the policy with HTML
+  only, so the worker most likely runs without it; see
+  `test/tests/tauriShell.ts`), and the hash of every bundled script Tauri
+  adds at build, inline styles (the
   user's CSS, Vue's), images and media from `https:`/`data:`/`blob:`,
   `connect-src` `ws: wss: https:` (the user picks the IRC host; uploads),
   no objects, frames, base-tag or form targets. `style-src` is left

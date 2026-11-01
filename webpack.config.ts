@@ -465,7 +465,7 @@ const config: webpack.Configuration = {
 					from: path.resolve(__dirname, "./client/js/prepaint.js"),
 					to: "js/[name][ext]",
 					// Copied for the same reason, and a file rather than an
-					// inline script because a CSP refuses those (the Electron
+					// inline script because a CSP refuses those (the Tauri
 					// shell's does); the locale list is written in here.
 					transform: (content: Buffer) => withAvailableLocales(content.toString()),
 				},
