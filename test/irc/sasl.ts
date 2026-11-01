@@ -169,8 +169,12 @@ describe("irc/sasl", function () {
 				auth,
 				":irc.test 900 alice alice!alice@host alice :You are now logged in as alice"
 			);
-			expect(res.done).to.equal(false);
-			expect(res.info).to.equal("You are now logged in as alice");
+			expect(res).to.deep.equal({
+				send: [],
+				done: false,
+				ok: false,
+				info: "You are now logged in as alice",
+			});
 		});
 
 		for (const [numeric, text] of [
@@ -200,8 +204,12 @@ describe("irc/sasl", function () {
 				auth,
 				":irc.test 908 alice PLAIN,EXTERNAL :are available SASL mechanisms"
 			);
-			expect(res.done).to.equal(false);
-			expect(res.info).to.equal("Available SASL mechanisms: PLAIN,EXTERNAL");
+			expect(res).to.deep.equal({
+				send: [],
+				done: false,
+				ok: false,
+				info: "Available SASL mechanisms: PLAIN,EXTERNAL",
+			});
 		});
 
 		it("aborts with AUTHENTICATE * (timeout) and reports failure", function () {
@@ -218,10 +226,35 @@ describe("irc/sasl", function () {
 			expect(auth.done).to.equal(true);
 
 			// Once done, nothing more is sent or reported.
-			expect(auth.abort().send).to.deep.equal([]);
-			expect(feed(auth, ":irc.test 906 alice :SASL authentication aborted").done).to.equal(
-				true
+			expect(auth.abort()).to.deep.equal({send: [], done: true, ok: false});
+			expect(feed(auth, ":irc.test 906 alice :SASL authentication aborted")).to.deep.equal({
+				send: [],
+				done: true,
+				ok: false,
+			});
+			expect(feed(auth, ":irc.test 903 alice :SASL authentication successful")).to.deep.equal(
+				{send: [], done: true, ok: false}
 			);
+		});
+
+		it("aborts without a word to the server when the exchange never started", function () {
+			const auth = new SaslAuth("PLAIN", {account: "alice", password: "pw"});
+
+			expect(auth.abort()).to.deep.equal({
+				send: [],
+				done: true,
+				ok: false,
+				error: "timed out",
+			});
+		});
+
+		it("sends empty PLAIN credentials when given none", function () {
+			const auth = new SaslAuth("PLAIN");
+			auth.start();
+
+			expect(feed(auth, "AUTHENTICATE +").send).to.deep.equal([
+				`AUTHENTICATE ${encodePlain("", "")}`,
+			]);
 		});
 
 		it("aborts on an unexpected non-empty challenge", function () {
@@ -229,18 +262,28 @@ describe("irc/sasl", function () {
 			auth.start();
 
 			const res = feed(auth, "AUTHENTICATE c29tZXRoaW5n");
-			expect(res.send).to.deep.equal(["AUTHENTICATE *"]);
-			expect(res).to.include({done: true, ok: false});
+			expect(res).to.deep.equal({
+				send: ["AUTHENTICATE *"],
+				done: true,
+				ok: false,
+				error: "unexpected challenge for PLAIN",
+			});
 		});
 
 		it("ignores unrelated messages and a second AUTHENTICATE +", function () {
 			const auth = new SaslAuth("PLAIN", {account: "alice", password: "pw"});
 			auth.start();
-			expect(
-				feed(auth, ":irc.test NOTICE * :*** Looking up your hostname").send
-			).to.deep.equal([]);
-			feed(auth, "AUTHENTICATE +");
-			expect(feed(auth, "AUTHENTICATE +").send).to.deep.equal([]);
+			expect(feed(auth, ":irc.test NOTICE * :*** Looking up your hostname")).to.deep.equal({
+				send: [],
+				done: false,
+				ok: false,
+			});
+			expect(feed(auth, "AUTHENTICATE +")).to.deep.equal({
+				send: [`AUTHENTICATE ${encodePlain("alice", "pw")}`],
+				done: false,
+				ok: false,
+			});
+			expect(feed(auth, "AUTHENTICATE +")).to.deep.equal({send: [], done: false, ok: false});
 			expect(auth.done).to.equal(false);
 		});
 	});

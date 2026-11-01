@@ -39,6 +39,15 @@ describe("Web Push subscription (draft/webpush)", function () {
 			expect(webpushVapidOf("bogus=1")).to.be.undefined;
 			expect(webpushVapidOf("vapid=")).to.be.undefined;
 		});
+
+		it("needs the vapid= name, at least 32 characters and only URL-safe base64", function () {
+			expect(webpushVapidOf(`keyid=${"A".repeat(40)}`)).to.be.undefined;
+			expect(webpushVapidOf(`vapid=${"A".repeat(31)}`)).to.be.undefined;
+			expect(webpushVapidOf(`vapid=${"A".repeat(32)}`)).to.equal("A".repeat(32));
+			expect(webpushVapidOf(`vapid=+${"A".repeat(40)}`)).to.be.undefined;
+			expect(webpushVapidOf(`vapid=${"A".repeat(40)}=`)).to.be.undefined;
+			expect(webpushVapidOf(`vapid=${"A".repeat(20)} ${"A".repeat(20)}`)).to.be.undefined;
+		});
 	});
 
 	describe("capability negotiation", function () {

@@ -26,6 +26,14 @@ describe("irc/message", function () {
 			expect(parseLine("@a=b :nick!u@h")).to.equal(null);
 		});
 
+		it("skips leading spaces before the command", function () {
+			expect(parseLine("  PING x")).to.include({command: "PING"});
+		});
+
+		it("leaves source off a message that has none", function () {
+			expect(parseLine("PING x")).to.not.have.property("source");
+		});
+
 		it("parses a bare command", function () {
 			const msg = parseLine("PING");
 			expect(msg).to.deep.include({command: "PING", params: [], raw: "PING"});
@@ -191,6 +199,13 @@ describe("irc/message", function () {
 			expect(formatTags(tags)).to.equal("b=1;a=x\\sy;c");
 		});
 
+		it("parseTags skips empty entries between semicolons", function () {
+			expect([...parseTags("a=1;;b;")]).to.deep.equal([
+				["a", "1"],
+				["b", ""],
+			]);
+		});
+
 		it("formatTags accepts a plain object", function () {
 			expect(formatTags({"+draft/reply": "id;1", label: "x"})).to.equal(
 				"+draft/reply=id\\:1;label=x"
@@ -245,6 +260,22 @@ describe("irc/message", function () {
 			expect(formatLine({command: "PRIVMSG", params: ["#chan", "hello world"]})).to.equal(
 				"PRIVMSG #chan :hello world"
 			);
+		});
+
+		it("rejects a source that is empty or contains whitespace", function () {
+			expect(() => formatLine({source: {name: ""}, command: "PING", params: ["x"]})).to.throw(
+				/Invalid source/
+			);
+			expect(() =>
+				formatLine({source: {name: "a b"}, command: "PING", params: ["x"]})
+			).to.throw(/Invalid source/);
+			expect(
+				formatLine({
+					source: {name: "n", user: "u", host: "h"},
+					command: "PING",
+					params: ["x"],
+				})
+			).to.equal(":n!u@h PING x");
 		});
 
 		it("adds a colon when the last param is empty", function () {
@@ -341,6 +372,31 @@ describe("irc/message", function () {
 			expect(utf8ByteLength("\udf89")).to.equal(3);
 		});
 
+		it("switches width exactly at each UTF-8 boundary", function () {
+			expect(utf8ByteLength("\u007f")).to.equal(1);
+			expect(utf8ByteLength("\u0080")).to.equal(2);
+			expect(utf8ByteLength("\u07ff")).to.equal(2);
+			expect(utf8ByteLength("\u0800")).to.equal(3);
+			expect(utf8ByteLength("\uffff")).to.equal(3);
+		});
+
+		it("counts a pair at either end of the surrogate ranges as 4 bytes", function () {
+			expect(utf8ByteLength("\ud800\udc00")).to.equal(4); // U+10000
+			expect(utf8ByteLength("\udbff\udfff")).to.equal(4); // U+10FFFF
+			expect(utf8ByteLength("\ud83c\udc00")).to.equal(4);
+			expect(utf8ByteLength("\ud83c\udfff")).to.equal(4);
+		});
+
+		it("pairs a high surrogate only with a low one that follows it", function () {
+			// A BMP character before a lone low surrogate is not a pair.
+			expect(utf8ByteLength("世\udc00")).to.equal(6);
+			// A lone high surrogate before a BMP character is not a pair either.
+			expect(utf8ByteLength("\ud83c世")).to.equal(6);
+			expect(utf8ByteLength("\ud83c\ud83c")).to.equal(6);
+			// U+E000 is just past the low surrogates.
+			expect(utf8ByteLength("\ud83c\ue000")).to.equal(6);
+		});
+
 		it("agrees with TextEncoder", function () {
 			const samples = ["plain", "héllo wörld", "日本語テキスト", "🎉🎊 mixed é", "\ud83c x"];
 
@@ -434,6 +490,44 @@ describe("irc/message", function () {
 			const chunks = splitMessage(prefix.length, text, prefix.length + 40);
 			check(chunks, prefix.length + 40);
 			expect(chunks.join(" ")).to.equal(text);
+		});
+
+		it("counts each character's width exactly at the UTF-8 boundaries", function () {
+			expect(splitMessage(0, "\u007f".repeat(5), 4)).to.deep.equal([
+				"\u007f".repeat(4),
+				"\u007f",
+			]);
+			expect(splitMessage(0, "\u0080".repeat(3), 4)).to.deep.equal([
+				"\u0080\u0080",
+				"\u0080",
+			]);
+			expect(splitMessage(0, "\u07ff".repeat(3), 4)).to.deep.equal([
+				"\u07ff\u07ff",
+				"\u07ff",
+			]);
+			expect(splitMessage(0, "\u0800".repeat(2), 4)).to.deep.equal(["\u0800", "\u0800"]);
+			expect(splitMessage(0, "\uffff".repeat(2), 4)).to.deep.equal(["\uffff", "\uffff"]);
+			expect(splitMessage(0, "\u{10000}".repeat(2), 7)).to.deep.equal([
+				"\u{10000}",
+				"\u{10000}",
+			]);
+		});
+
+		it("steps one UTF-16 unit over U+FFFF and two over U+10000", function () {
+			expect(splitMessage(0, "\uffff" + "a".repeat(5), 4)).to.deep.equal(["\uffffa", "aaaa"]);
+		});
+
+		it("breaks at a tab as at a space", function () {
+			expect(splitMessage(0, "aaaa\tbbbb", 6)).to.deep.equal(["aaaa", "bbbb"]);
+		});
+
+		it("drops a mixed run of spaces and tabs on both sides of the break", function () {
+			expect(splitMessage(0, "aaaa\t \tbbbb", 7)).to.deep.equal(["aaaa", "bbbb"]);
+			expect(splitMessage(0, "aa \t\t bb cc", 6)).to.deep.equal(["aa", "bb cc"]);
+		});
+
+		it("returns [] for empty text even when the prefix leaves no room", function () {
+			expect(splitMessage(MAX_LINE_BYTES, "")).to.deep.equal([]);
 		});
 
 		it("throws when the prefix leaves no room", function () {

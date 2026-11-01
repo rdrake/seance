@@ -166,6 +166,7 @@ describe("WsTransport", function () {
 			expect(t.state).to.equal("closed");
 			expect(events.map((e) => e.type)).to.deep.equal(["error", "close"]);
 			expect(events[0]).to.deep.equal({type: "error", message: "bad url"});
+			expect(events[1]).to.include({type: "close", code: 1006, reason: "", wasClean: false});
 		});
 	});
 
@@ -204,6 +205,14 @@ describe("WsTransport", function () {
 			last().message(new TextEncoder().encode("PRIVMSG #x :héllo\r\n").buffer);
 			expect(lines(events)).to.deep.equal(["PRIVMSG #x :héllo"]);
 		});
+
+		it("ignores a frame that is neither text nor binary", function () {
+			const {t, events} = make();
+			t.connect();
+			last().open();
+			expect(() => last().message({} as unknown as string)).to.not.throw();
+			expect(lines(events)).to.deep.equal([]);
+		});
 	});
 
 	describe("PING", function () {
@@ -230,6 +239,24 @@ describe("WsTransport", function () {
 				"PONG :token",
 				"PONG",
 			]);
+		});
+
+		it("answers a PING that carries several tags and a source", function () {
+			const {t} = make();
+			t.connect();
+			last().open();
+			last().message("@time=2026-01-01T00:00:00.000Z;msgid=ab :irc.test PING :x");
+			expect(last().sent).to.deep.equal(["PONG :x"]);
+		});
+
+		it("does not answer a PING on a socket that is no longer open", function () {
+			const {t} = make();
+			t.connect();
+			const ws = last();
+			ws.open();
+			t.close();
+			expect(() => ws.message("PING :late")).to.not.throw();
+			expect(ws.sent).to.deep.equal([]);
 		});
 
 		it("does not interpret anything else", function () {
@@ -393,6 +420,17 @@ describe("WsTransport", function () {
 			expect(t.state).to.equal("open");
 			expect(ws.closeCalls).to.have.length(0);
 		});
+
+		it("sends one PING for two probes in a row, and none while connecting", function () {
+			const {t} = make({reconnect: fastReconnect});
+			t.connect();
+			const ws = last();
+			expect(() => t.probe()).to.not.throw();
+			ws.open();
+			t.probe();
+			t.probe();
+			expect(ws.sent).to.deep.equal(["PING :probe"]);
+		});
 	});
 
 	describe("reconnect", function () {
@@ -535,6 +573,30 @@ describe("WsTransport", function () {
 			});
 		});
 
+		it("reconnects by default, after a jittered first delay", function () {
+			const random = sinon.stub(Math, "random").returns(0);
+
+			try {
+				const {t, events} = make();
+				t.connect();
+				last().open();
+				last().closed(1006);
+				expect(events.find((e) => e.type === "close")).to.include({willReconnect: true});
+				// Jitter at its low end: 3/4 of the 1 s first delay.
+				expect(events.find((e) => e.type === "reconnecting")).to.include({delayMs: 750});
+			} finally {
+				random.restore();
+			}
+		});
+
+		it("cancelReconnect() leaves an open connection alone", function () {
+			const {t} = make({reconnect: fastReconnect});
+			t.connect();
+			last().open();
+			t.cancelReconnect();
+			expect(t.state).to.equal("open");
+		});
+
 		it("cancelReconnect() stops the pending attempt", function () {
 			const {t} = make({reconnect: fastReconnect});
 			t.connect();
@@ -579,6 +641,13 @@ describe("WsTransport", function () {
 			off();
 			last().message("PING :x");
 			expect(seen).to.have.length(1);
+		});
+
+		it("reports an error with an empty message as a WebSocket error", function () {
+			const {t, events} = make();
+			t.connect();
+			last().error("");
+			expect(events).to.deep.equal([{type: "error", message: "WebSocket error"}]);
 		});
 
 		it("surfaces socket errors", function () {
@@ -673,6 +742,17 @@ describe("WsTransport foreground recovery", function () {
 		expect(t.state).to.equal("connecting");
 		last().open();
 		expect(t.state).to.equal("open");
+	});
+
+	it("redial() leaves an open connection alone", function () {
+		const {t} = make({reconnect: fastReconnect});
+		t.connect();
+		const ws = last();
+		ws.open();
+		t.redial();
+		expect(t.state).to.equal("open");
+		expect(FakeWebSocket.instances).to.have.length(1);
+		expect(ws.closeCalls).to.have.length(0);
 	});
 
 	it("redial() while waiting to reconnect just connects now", function () {

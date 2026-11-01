@@ -213,6 +213,43 @@ describe("irc/isupport", function () {
 	});
 
 	describe("nefarious2 transcript", function () {
+		it("takes only plain decimal integers", function () {
+			for (const bad of ["12x", "x12", "abc", "1.5", "-3"]) {
+				expect(make(`NICKLEN=${bad}`).nicklen, bad).to.equal(undefined);
+			}
+		});
+
+		it("ignores a PREFIX that does not start with the mode list", function () {
+			expect(make("PREFIX=x(qo)~@").prefix).to.deep.equal({modes: "ov", symbols: "@+"});
+		});
+
+		it("maps every prefix symbol to its mode and back, not just the first", function () {
+			const isupport = make("PREFIX=(qov)~@+");
+
+			expect(isupport.modeForPrefix("@")).to.equal("o");
+			expect(isupport.modeForPrefix("+")).to.equal("v");
+			expect(isupport.prefixForMode("v")).to.equal("+");
+			expect(isupport.prefixForMode("x")).to.equal(undefined);
+			expect(isupport.modeForPrefix("!")).to.equal(undefined);
+		});
+
+		it("reads an empty NETWORK, VAPID or BOT as absent", function () {
+			const isupport = make("NETWORK=", "VAPID=", "BOT=");
+
+			expect(isupport.network).to.equal(undefined);
+			expect(isupport.vapid).to.equal(undefined);
+			expect(isupport.bot).to.equal(undefined);
+		});
+
+		it("skips empty TARGMAX entries and limits that are not integers", function () {
+			expect([...make("TARGMAX=PRIVMSG:4,,JOIN:4x,PART:x4").targmax]).to.deep.equal([
+				["PRIVMSG", 4],
+				["JOIN", undefined],
+				["PART", undefined],
+			]);
+			expect(make("TARGMAX=").targmax.size).to.equal(0);
+		});
+
 		it("applies all three 005 lines", function () {
 			const isupport = new ISupport();
 			applyLines(isupport, NEFARIOUS_005);

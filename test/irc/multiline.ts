@@ -193,6 +193,19 @@ describe("multiline cap", function () {
 			});
 		});
 
+		it("takes only a plain decimal integer", function () {
+			for (const bad of ["1.5", "1e3", "0x10", "+5", " 5"]) {
+				expect(parseMultilineValue(`max-bytes=${bad}`), bad).to.equal(undefined);
+			}
+		});
+
+		it("ignores a token without '=' even when it starts with a known name", function () {
+			expect(parseMultilineValue("max-bytes=100,max-bytesZ")).to.deep.equal({
+				maxBytes: 100,
+				maxLines: Infinity,
+			});
+		});
+
 		it("rejects a value without a usable max-bytes", function () {
 			expect(parseMultilineValue("max-lines=100")).to.equal(undefined);
 			expect(parseMultilineValue("")).to.equal(undefined);
@@ -315,6 +328,16 @@ describe("multiline batches", function () {
 			).to.equal("\x01ACTION a\nb\x01");
 		});
 
+		it("unwraps only the lines of an action batch that carry the framing", function () {
+			expect(
+				joinMultiline(parsed(line("\x01ACTION waves\x01"), line("and bows")))?.text
+			).to.equal("\x01ACTION waves\nand bows\x01");
+		});
+
+		it("rejects a batch whose first line is not a message", function () {
+			expect(joinMultiline(parsed("@batch=ml :bob!b@h TAGMSG #seance"))).to.equal(undefined);
+		});
+
 		it("rejects an empty batch, mixed targets and mixed commands", function () {
 			expect(joinMultiline([])).to.equal(undefined);
 			expect(
@@ -380,6 +403,46 @@ describe("multiline batches", function () {
 		expect(shown.text).to.equal("one\ntwo");
 		expect(shown.msgid).to.equal("l1");
 		expect(shown.time.toISOString()).to.equal("2026-08-29T10:00:00.000Z");
+		expect(shown.fromAccount).to.equal("bobby");
+	});
+
+	it("falls back to the lines when they address another target than the opener", function () {
+		const {transport, chanId} = setup();
+
+		transport.lines(
+			":irc.test BATCH +ml draft/multiline #elsewhere",
+			line("one"),
+			line("two"),
+			":irc.test BATCH -ml"
+		);
+
+		expect(messages(chanId).map((m) => m.text)).to.deep.equal(["one", "two"]);
+	});
+
+	it("takes the lines' target when the opener names none", function () {
+		const {transport, chanId} = setup();
+
+		transport.lines(
+			":irc.test BATCH +ml draft/multiline",
+			line("one"),
+			line("two"),
+			":irc.test BATCH -ml"
+		);
+
+		expect(messages(chanId).map((m) => m.text)).to.deep.equal(["one\ntwo"]);
+	});
+
+	it("keeps the opener's msgid over the first line's", function () {
+		const {transport, chanId} = setup();
+
+		transport.lines(
+			"@msgid=opener :irc.test BATCH +ml draft/multiline #seance",
+			"@batch=ml;msgid=line;account=bobby :bob!b@h PRIVMSG #seance :one",
+			":irc.test BATCH -ml"
+		);
+
+		const [shown] = messages(chanId);
+		expect(shown.msgid).to.equal("opener");
 		expect(shown.fromAccount).to.equal("bobby");
 	});
 
@@ -635,6 +698,73 @@ describe("multiline sending", function () {
 			expect(
 				texts(planMultiline("aaa\nbbb", 0, {maxBytes: 20, maxLines: 100}, 9))
 			).to.deep.equal([["aaa"], ["bbb"]]);
+		});
+
+		it("breaks a long paragraph after the last space or tab that fits", function () {
+			// Budget 5: the break character stays at the end of its chunk.
+			expect(planMultiline("aa bbbbbbb", MAX_LINE_BYTES - 5, LIMITS)).to.deep.equal([
+				[
+					{text: "aa ", concat: false},
+					{text: "bbbbb", concat: true},
+					{text: "bb", concat: true},
+				],
+			]);
+			expect(texts(planMultiline("aa\tbbbbbbb", MAX_LINE_BYTES - 5, LIMITS))).to.deep.equal([
+				["aa\t", "bbbbb", "bb"],
+			]);
+		});
+
+		it("keeps the rest of a paragraph whole once it fits", function () {
+			expect(texts(planMultiline("aaaaaa b c", MAX_LINE_BYTES - 6, LIMITS))).to.deep.equal([
+				["aaaaaa", " b c"],
+			]);
+		});
+
+		it("never splits a surrogate pair or a character at U+FFFF", function () {
+			expect(texts(planMultiline("🎉🎉🎉", MAX_LINE_BYTES - 8, LIMITS))).to.deep.equal([
+				["🎉🎉", "🎉"],
+			]);
+			expect(
+				texts(planMultiline("\uffff\uffff\uffff", MAX_LINE_BYTES - 6, LIMITS))
+			).to.deep.equal([["\uffff\uffff", "\uffff"]]);
+		});
+
+		it("emits a character wider than the budget on its own line", function () {
+			expect(texts(planMultiline("éé", MAX_LINE_BYTES - 1, LIMITS))).to.deep.equal([
+				["é", "é"],
+			]);
+		});
+
+		it("throws when the prefix leaves no room", function () {
+			expect(() => planMultiline("x", MAX_LINE_BYTES, LIMITS)).to.throw(RangeError);
+		});
+
+		it("subtracts the body overhead from the line budget", function () {
+			// max-bytes 12 less 9 bytes of framing leaves 3 per line.
+			expect(
+				texts(planMultiline("abcdef", 0, {maxBytes: 12, maxLines: 100}, 9))
+			).to.deep.equal([["abc"], ["def"]]);
+		});
+
+		it("starts a split paragraph after another line on a new line, not a continuation", function () {
+			expect(planMultiline("a\nbbbbbb", MAX_LINE_BYTES - 3, LIMITS)).to.deep.equal([
+				[
+					{text: "a", concat: false},
+					{text: "bbb", concat: false},
+					{text: "bbb", concat: true},
+				],
+			]);
+		});
+
+		it("counts a line feed only before a line that is not a continuation", function () {
+			// abc + def (concat) is 6 bytes: no line feed between them.
+			expect(
+				texts(planMultiline("abcdef", MAX_LINE_BYTES - 3, {maxBytes: 6, maxLines: 100}))
+			).to.deep.equal([["abc", "def"]]);
+			// aaa + LF + bbb is 7 bytes, one over.
+			expect(texts(planMultiline("aaa\nbbb", 0, {maxBytes: 6, maxLines: 100}))).to.deep.equal(
+				[["aaa"], ["bbb"]]
+			);
 		});
 
 		it("never plans a line larger than one message may be", function () {
@@ -1102,6 +1232,41 @@ describe("multiline sending", function () {
 	});
 });
 
+describe("batchCooldownMs", function () {
+	// nefarious2's (2 + total_bytes / 128) s, rounded up to the ms, plus 1 s of margin.
+	it("charges 2 s plus a second per 128 bytes, plus the margin", function () {
+		expect(
+			batchCooldownMs({lines: [{text: "a".repeat(100), concat: false}], action: false})
+		).to.equal(3782);
+		expect(
+			batchCooldownMs({lines: [{text: "a".repeat(256), concat: false}], action: false})
+		).to.equal(5000);
+	});
+
+	it("counts the action framing on every line and a line feed before each new line", function () {
+		// (2 + 9) + LF + (2 + 9) = 23 bytes.
+		expect(
+			batchCooldownMs({
+				lines: [
+					{text: "ab", concat: false},
+					{text: "cd", concat: false},
+				],
+				action: true,
+			})
+		).to.equal(3180);
+		// A continuation joins without a line feed: 22 bytes.
+		expect(
+			batchCooldownMs({
+				lines: [
+					{text: "ab", concat: false},
+					{text: "cd", concat: true},
+				],
+				action: true,
+			})
+		).to.equal(3172);
+	});
+});
+
 describe("multiline cooldown", function () {
 	let clock: sinon.SinonFakeTimers;
 
@@ -1212,6 +1377,114 @@ describe("multiline cooldown", function () {
 		// Nothing is left queued behind a batch that is not going out.
 		clock.tick(MULTILINE_MAX_COOLDOWN_MS * 2);
 		expect(transport.sent).to.deep.equal([]);
+	});
+
+	function openers(transport: FakeTransport): number {
+		return transport.sent.filter((l) => /^(@\S+ )?BATCH \+/.test(l)).length;
+	}
+
+	function echoOwn(transport: FakeTransport, ref: string, text: string): void {
+		transport.lines(
+			`:alice!alice@host BATCH +${ref} draft/multiline #seance`,
+			`@batch=${ref} :alice!alice@host PRIVMSG #seance :${text}`,
+			`:alice!alice@host BATCH -${ref}`
+		);
+	}
+
+	it("waits out a cooldown of exactly the longest it will wait", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo");
+		transport.sent.length = 0;
+		cooldown(transport, MULTILINE_MAX_COOLDOWN_MS / 1000);
+
+		expect(messages(client.lobby.id)).to.have.length(0);
+
+		clock.tick(MULTILINE_MAX_COOLDOWN_MS + 1000);
+		expect(openers(transport)).to.equal(1);
+	});
+
+	it("holds a second message behind the batch still on the wire", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo");
+		client.input(chanId, "three\nfour");
+
+		expect(openers(transport)).to.equal(1);
+	});
+
+	it("does not let a delivered batch's verdict timer settle the next one", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo\nthree");
+		clock.tick(1000);
+		echoOwn(transport, "e1", "one");
+		// "one" is 3 bytes: (2 + 3/128) s rounded up, plus 1 s of margin.
+		clock.tick(3024);
+		expect(openers(transport)).to.equal(2);
+
+		// The first batch's 30 s verdict, had it been left running, would
+		// have settled the second one and paced the third out by 33.024 s.
+		// The second waits for its own verdict (34.024 s), then a cooldown.
+		clock.tick(34000 - 4024);
+		expect(openers(transport)).to.equal(2);
+
+		clock.tick(37048 - 34000);
+		expect(openers(transport)).to.equal(3);
+	});
+
+	it("is not released by someone else's multiline batch", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo");
+		transport.lines(
+			":bob!b@h BATCH +b1 draft/multiline #seance",
+			"@batch=b1 :bob!b@h PRIVMSG #seance :hi",
+			":bob!b@h BATCH -b1"
+		);
+		clock.tick(5000);
+
+		expect(openers(transport)).to.equal(1);
+	});
+
+	it("is not released by our own batch replayed inside history", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo");
+		transport.lines(
+			":irc.test BATCH +h chathistory #seance",
+			"@batch=h :alice!alice@host BATCH +r1 draft/multiline #seance",
+			"@batch=r1 :alice!alice@host PRIVMSG #seance :old",
+			":alice!alice@host BATCH -r1",
+			":irc.test BATCH -h"
+		);
+		clock.tick(5000);
+
+		expect(openers(transport)).to.equal(1);
+	});
+
+	it("sends the next message at once after giving up on a long cooldown", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo");
+		cooldown(transport, MULTILINE_MAX_COOLDOWN_MS / 1000 + 1);
+		transport.sent.length = 0;
+		client.input(chanId, "three\nfour");
+
+		expect(transport.sent.find((l) => l.includes("PRIVMSG"))).to.match(/ :three$/);
+	});
+
+	it("leaves no verdict timer behind a hard failure to hold up the next message", function () {
+		const {client, transport, chanId} = setup(ONE_PER_BATCH);
+
+		client.input(chanId, "one\ntwo");
+		transport.line(":irc.test FAIL BATCH MULTILINE_INVALID :Multiline batch is invalid");
+		// The dropped batch's 30 s verdict would come due here and pace.
+		clock.tick(30000);
+		transport.sent.length = 0;
+		client.input(chanId, "three\nfour");
+
+		expect(openers(transport)).to.equal(1);
 	});
 
 	it("drops what a hard failure was part of", function () {

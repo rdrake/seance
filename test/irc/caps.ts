@@ -144,7 +144,7 @@ describe("irc/caps", function () {
 			const res = feed(neg, ":s CAP * LS :multi-prefix");
 
 			expect(res.missingRequired).to.deep.equal(["server-time", "batch"]);
-			expect(res.error).to.be.a("string");
+			expect(res.error).to.equal("Missing required capabilities: server-time batch");
 			expect(res.send).to.deep.equal([]);
 			expect(res.done).to.equal(false);
 		});
@@ -246,6 +246,47 @@ describe("irc/caps", function () {
 			expect(feed(neg, ":s CAP * ACK :a").send).to.deep.equal([]);
 		});
 
+		it("never requests tls or sts, even when asked to", function () {
+			const neg = new CapNegotiator({required: [], wanted: ["tls", "sts", "a"]});
+			expect(feed(neg, ":s CAP * LS :tls sts=port=6697 a").send).to.deep.equal([
+				"CAP REQ :a",
+				"CAP END",
+			]);
+		});
+
+		it("ends on an LS with no list at all", function () {
+			const neg = new CapNegotiator({required: [], wanted: ["a"]});
+			expect(feed(neg, ":s CAP * LS").send).to.deep.equal(["CAP END"]);
+		});
+
+		it("emits CAP END once from end(), however often it is called", function () {
+			const neg = new CapNegotiator({required: [], wanted: ["sasl"]});
+			neg.beforeEnd = () => ["AUTHENTICATE PLAIN"];
+
+			expect(feed(neg, ":s CAP * LS :sasl").send).to.deep.equal([
+				"CAP REQ :sasl",
+				"AUTHENTICATE PLAIN",
+			]);
+			expect(neg.end()).to.deep.equal(["CAP END"]);
+			expect(neg.end()).to.deep.equal([]);
+		});
+
+		it("starts SASL once while it is pending, whatever arrives meanwhile", function () {
+			const neg = new CapNegotiator({required: [], wanted: ["sasl"]});
+			let opened = 0;
+
+			neg.beforeEnd = () => {
+				opened++;
+				return ["AUTHENTICATE PLAIN"];
+			};
+
+			feed(neg, ":s CAP * LS :sasl");
+			expect(feed(neg, ":s CAP * ACK :sasl").send).to.deep.equal([]);
+			expect(feed(neg, ":s CAP * LS :sasl").send).to.deep.equal([]);
+			expect(opened).to.equal(1);
+			expect(neg.end()).to.deep.equal(["CAP END"]);
+		});
+
 		it("deduplicates caps listed in both required and wanted", function () {
 			const neg = new CapNegotiator({required: ["a"], wanted: ["a", "b"]});
 			const res = feed(neg, ":s CAP * LS :a b");
@@ -330,6 +371,20 @@ describe("irc/caps", function () {
 			const neg = registered();
 			const res = feed(neg, ":irc.seance.test CAP seance2 NEW :batch");
 			expect(res.send).to.deep.equal([]);
+		});
+
+		it("asks NEW only for the caps it brings, not for one NAKed before", function () {
+			const neg = new CapNegotiator({required: [], wanted: ["a", "c"]});
+			feed(neg, ":s CAP * LS :a");
+			feed(neg, ":s CAP * NAK :a");
+			expect(feed(neg, ":s CAP * NEW :c").send).to.deep.equal(["CAP REQ :c"]);
+		});
+
+		it("asks again for a cap DELeted while its REQ was outstanding", function () {
+			const neg = new CapNegotiator({required: [], wanted: ["a"]});
+			feed(neg, ":s CAP * LS :a");
+			feed(neg, ":s CAP * DEL :a");
+			expect(feed(neg, ":s CAP * NEW :a").send).to.deep.equal(["CAP REQ :a"]);
 		});
 
 		it("removes caps on DEL from both available and enabled", function () {
