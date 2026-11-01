@@ -5,7 +5,15 @@ import storage from "../../client/js/localStorage";
 import {IrcClient, IrcClientOptions} from "../../client/js/irc/client";
 import {IdAllocator} from "../../client/js/irc/ids";
 import {commandNames} from "../../client/js/irc/commands";
-import {loadAliases} from "../../client/js/helpers/aliases";
+import {
+	loadAliases,
+	MAX_ALIASES,
+	MAX_BODY_LENGTH,
+	MAX_NAME_LENGTH,
+	saveAliases,
+} from "../../client/js/helpers/aliases";
+import eventbus from "../../client/js/eventbus";
+import {splitTarget} from "../../client/js/irc/commands/target";
 import {ignoreListFor} from "../../client/js/ignore";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
@@ -1008,6 +1016,744 @@ describe("irc commands", function () {
 			h.client.input(lobby, "/alias greet /say hi");
 			expect(lastMessage(lobby).text).to.equal("Alias /greet added.");
 			expect(loadAliases()).to.deep.equal([{name: "greet", body: "/say hi"}]);
+		});
+	});
+});
+
+describe("irc commands: edges", function () {
+	const MULTILINE = "batch message-tags draft/multiline=max-bytes=4096,max-lines=24";
+
+	beforeEach(function () {
+		dispatch = sinon.spy();
+		const data = new Map<string, string>();
+		sinon.stub(storage, "get").callsFake((key: string) => data.get(key) ?? null);
+		sinon
+			.stub(storage, "set")
+			.callsFake((key: string, value: string) => void data.set(key, value));
+		sinon.stub(storage, "remove").callsFake((key: string) => void data.delete(key));
+	});
+
+	afterEach(function () {
+		sinon.restore();
+		socket.unhandle("network:new");
+	});
+
+	/** Lines sent as a plain one-line PRIVMSG to `target` with `text`. */
+	function plainPrivmsg(sent: string[], target: string, text: string): boolean {
+		return sent.some(
+			(l) => l === `PRIVMSG ${target} :${text}` || l === `PRIVMSG ${target} ${text}`
+		);
+	}
+
+	describe("dispatchInput", function () {
+		it("lists the client-side and service commands for autocompletion, sorted", function () {
+			const names = commandNames();
+
+			for (const name of [
+				"/collapse",
+				"/expand",
+				"/search",
+				"/as",
+				"/bs",
+				"/cs",
+				"/ho",
+				"/hs",
+				"/ms",
+				"/ns",
+				"/os",
+				"/rs",
+			]) {
+				expect(names, name).to.include(name);
+			}
+
+			expect(names).to.not.include("/");
+			expect(names).to.deep.equal([...names].sort());
+		});
+
+		it("ignores an empty line, even in the lobby", function () {
+			const h = setup();
+			joined(h);
+			const lobby = h.client.lobby.id;
+			dispatch.resetHistory();
+			h.client.input(lobby, "");
+			h.client.input(lobby, "\n");
+			expect(messages(lobby)).to.deep.equal([]);
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+
+		it("says a line with a slash past its first character as typed", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "either/or");
+			h.client.input(id, "//usr/bin");
+			expect(h.sentAfter()).to.deep.equal([
+				"PRIVMSG #seance :either/or",
+				"PRIVMSG #seance :/usr/bin",
+			]);
+		});
+
+		it("reports an unknown command while disconnected instead of sending it", function () {
+			const h = setup();
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/frobnicate now");
+			expect(lastMessage(lobby).type).to.equal(MessageType.ERROR);
+			expect(lastMessage(lobby).text).to.equal(
+				"You are not connected to the IRC network, unable to send your command."
+			);
+			expect(h.transport.sent).to.deep.equal([]);
+		});
+
+		it("reports an unknown command where it was typed while the network is down", function () {
+			const h = setup();
+			const id = joined(h);
+			h.transport.closed(1006);
+			dispatch.resetHistory();
+			h.client.input(id, "/frobnicate now");
+			expect(lastMessage(id).text).to.equal(
+				"You are not connected to the IRC network, unable to send your command."
+			);
+			expect(messages(h.client.lobby.id)).to.deep.equal([]);
+		});
+
+		it("an edit without draft/multiline is one trimmed line", function () {
+			const h = setup();
+			const id = joined(h, "", "message-tags");
+			h.client.input(id, "  fixed\ntypo  ", {edit: "m1"});
+			const sent = h.sentAfter();
+			expect(sent).to.have.length(1);
+			expect(sent[0]).to.be.a("string");
+			expect(sent[0]).to.match(/ PRIVMSG #seance :fixed typo$/);
+		});
+
+		describe("with draft/multiline", function () {
+			it("keeps plain multi-line text one message", function () {
+				const h = setup();
+				const id = joined(h, "", MULTILINE);
+				h.client.input(id, "hello\nworld");
+				const sent = h.sentAfter();
+				expect(sent.some((l) => /^BATCH \+\S+ draft\/multiline #seance$/.test(l))).to.equal(
+					true
+				);
+				expect(plainPrivmsg(sent, "#seance", "world")).to.equal(false);
+			});
+
+			it("keeps an escaped slash line one message", function () {
+				const h = setup();
+				const id = joined(h, "", MULTILINE);
+				h.client.input(id, "//etc\nsecond");
+				const sent = h.sentAfter();
+				expect(sent.some((l) => /^BATCH \+\S+ draft\/multiline #seance$/.test(l))).to.equal(
+					true
+				);
+				expect(sent.some((l) => / PRIVMSG #seance :?\/etc$/.test(l))).to.equal(true);
+				expect(plainPrivmsg(sent, "#seance", "second")).to.equal(false);
+			});
+
+			for (const [typed, target] of [
+				["/msg bob first\nsecond", "bob"],
+				["/query bob first\nsecond", "bob"],
+				["/notice bob first\nsecond", "bob"],
+				["/say first\nsecond", "#seance"],
+				["/me first\nsecond", "#seance"],
+			]) {
+				it(`sends ${typed.split(" ")[0]} with a line break as one message`, function () {
+					const h = setup();
+					const id = joined(h, "", MULTILINE);
+					h.client.input(id, typed);
+					const sent = h.sentAfter();
+					expect(
+						sent.some((l) =>
+							new RegExp(`^BATCH \\+\\S+ draft/multiline ${target}$`).test(l)
+						)
+					).to.equal(true);
+					expect(plainPrivmsg(sent, "#seance", "second")).to.equal(false);
+				});
+			}
+
+			it("an alias body typed over several lines is one definition", function () {
+				const h = setup();
+				const id = joined(h, "", MULTILINE);
+				h.client.input(id, "/alias greet /say hi\n/say there");
+				expect(loadAliases()).to.deep.equal([{name: "greet", body: "/say hi\n/say there"}]);
+				expect(h.sentAfter()).to.deep.equal([]);
+			});
+
+			it("a /lua snippet over several lines is one snippet", function () {
+				const h = setup();
+				const id = joined(h, "", MULTILINE);
+				h.client.input(id, "/lua x = 1\nreturn x");
+				expect(plainPrivmsg(h.sentAfter(), "#seance", "return x")).to.equal(false);
+			});
+		});
+	});
+
+	describe("/join", function () {
+		it("a bare /join outside a channel is a usage error", function () {
+			const h = setup();
+			joined(h);
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/join");
+			expect(lastMessage(lobby).text).to.equal("Usage: /join <channel> [key]");
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+
+		it("drops empty names and keeps the keys in place", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/join #a,,#b");
+			h.client.input(id, "/join #a,#b,#c k1,,k3,");
+			h.client.input(id, "/join #a,#b k1,,");
+			expect(h.sentAfter()).to.deep.equal([
+				"JOIN #a,#b",
+				"JOIN #a,#b,#c k1,,k3",
+				"JOIN #a,#b k1",
+			]);
+		});
+
+		it("marks a listed channel for autojoin and keeps its key unless a new one is given", function () {
+			const h = setup();
+			const id = joined(h);
+			const chan = h.client.findChannel("#seance")!;
+			chan.autoJoin = false;
+
+			h.client.input(id, "/join #seance");
+			expect(chan.autoJoin).to.equal(true);
+			expect(chan.shared.key).to.equal("key");
+
+			h.client.input(id, "/join #seance newkey");
+			expect(chan.shared.key).to.equal("newkey");
+			h.client.input(id, "/join #seance");
+			expect(h.sentAfter()).to.deep.equal([
+				"JOIN #seance",
+				"JOIN #seance newkey",
+				"JOIN #seance",
+			]);
+
+			// A bare /join here now rejoins with the new key.
+			h.client.input(id, "/join");
+			expect(h.sentAfter()).to.deep.equal(["JOIN #seance newkey"]);
+		});
+
+		it("joins a channel not yet listed without touching another", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/join #fresh");
+			expect(h.sentAfter()).to.deep.equal(["JOIN #fresh"]);
+			expect(h.client.findChannel("#seance")!.shared.key).to.equal("key");
+		});
+	});
+
+	describe("/topic", function () {
+		it("queries a named channel from anywhere, and the current one from a channel", function () {
+			const h = setup();
+			const id = joined(h);
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/topic #seance");
+			h.client.input(lobby, "/topic #elsewhere");
+			h.client.input(id, "/topic");
+			h.client.input(id, "/topic   ");
+			expect(h.sentAfter()).to.deep.equal([
+				"TOPIC #seance",
+				"TOPIC #elsewhere",
+				"TOPIC #seance",
+				"TOPIC #seance",
+			]);
+			expect(h.client.findChannel("#seance")!.topicAsked).to.equal(true);
+		});
+
+		it("whitespace other than spaces is still a query, not a topic", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/topic \t");
+			expect(h.sentAfter()).to.deep.equal(["TOPIC #seance"]);
+		});
+
+		it("sets the topic here when the first word is not a channel", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/topic hello world");
+			h.client.input(id, "/topic #seance new topic");
+			expect(h.sentAfter()).to.deep.equal([
+				"TOPIC #seance :hello world",
+				"TOPIC #seance :new topic",
+			]);
+		});
+
+		it("outside a channel needs a channel name, and /cleartopic never takes one", function () {
+			const h = setup();
+			joined(h);
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/topic hello");
+			expect(lastMessage(lobby).text).to.equal("topic command can only be used in channels.");
+			h.client.input(lobby, "/cleartopic #seance");
+			expect(lastMessage(lobby).text).to.equal(
+				"cleartopic command can only be used in channels."
+			);
+			h.client.input(lobby, "/topic");
+			expect(lastMessage(lobby).text).to.equal("topic command can only be used in channels.");
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+	});
+
+	describe("/part", function () {
+		it("/close, /leave and /part part the named or current channel", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/close");
+			h.client.input(id, "/leave bye now");
+			h.client.input(h.client.lobby.id, "/part #seance later");
+			expect(h.sentAfter()).to.deep.equal([
+				"PART #seance :Seance",
+				"PART #seance :bye now",
+				"PART #seance :later",
+			]);
+		});
+
+		it("a first word that is no open window is the reason", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/part #nowhere");
+			expect(h.sentAfter()).to.deep.equal(["PART #seance :#nowhere"]);
+		});
+
+		it("parting a channel never records a closed query", function () {
+			const h = setup();
+			const id = joined(h, "", "message-tags");
+			h.transport.line(
+				"@msgid=c1;time=2026-10-01T10:00:00.000Z :bob!b@h PRIVMSG #seance :hello"
+			);
+			h.client.input(id, "/part");
+			expect(h.sentAfter()).to.deep.equal(["PART #seance :Seance"]);
+			expect(h.client.closed.entries()).to.deep.equal([]);
+		});
+
+		it("refuses to part the lobby", function () {
+			const h = setup();
+			joined(h);
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/part");
+			expect(lastMessage(lobby).text).to.equal(
+				"You can not part from networks, use /quit instead."
+			);
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+
+		it("works disconnected: the channel is dropped and leaves autojoin", function () {
+			const h = setup();
+			const id = joined(h);
+			const chan = h.client.findChannel("#seance")!;
+			h.transport.closed(1006);
+			h.client.input(id, "/part");
+			expect(chan.autoJoin).to.equal(false);
+			expect(h.client.findChannel("#seance")).to.equal(undefined);
+		});
+
+		it("closing a query only remembers the close when the server sent something there", function () {
+			const h = setup();
+			const id = joined(h, "", "message-tags");
+			h.transport.line(
+				"@msgid=q1;time=2026-10-01T10:00:00.000Z :bob!b@h PRIVMSG alice :psst"
+			);
+			const query = h.client.findChannel("bob")!;
+			h.client.input(query.id, "/close");
+			expect(h.client.findChannel("bob")).to.equal(undefined);
+			expect(h.client.closed.entries().map((e) => e.nick)).to.deep.equal(["bob"]);
+
+			h.client.input(id, "/query carol");
+			const empty = h.client.findChannel("carol")!;
+			h.client.input(empty.id, "/close");
+			expect(h.client.findChannel("carol")).to.equal(undefined);
+			expect(h.client.closed.entries().map((e) => e.nick)).to.deep.equal(["bob"]);
+		});
+	});
+
+	describe("/alias", function () {
+		it("treats whitespace alone as a bare /alias", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/alias   ");
+			expect(lastMessage(id).text).to.equal(
+				"No aliases defined. /alias <name> <commands> creates one."
+			);
+		});
+
+		it("trims the body and accepts a slash only before the name", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/alias greet    /say hi");
+			expect(loadAliases()).to.deep.equal([{name: "greet", body: "/say hi"}]);
+
+			h.client.input(id, "/alias gr/eet /say hi");
+			expect(lastMessage(id).type).to.equal(MessageType.ERROR);
+			expect(lastMessage(id).text).to.equal(
+				`Alias names are letters, digits, _ and - (up to ${MAX_NAME_LENGTH} characters).`
+			);
+			expect(loadAliases()).to.have.length(1);
+		});
+
+		it("takes a body of the maximum length and refuses a longer one", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, `/alias long /say ${"x".repeat(MAX_BODY_LENGTH - 5)}`);
+			expect(lastMessage(id).text).to.equal("Alias /long added.");
+
+			h.client.input(id, `/alias longer /say ${"x".repeat(MAX_BODY_LENGTH - 4)}`);
+			expect(lastMessage(id).type).to.equal(MessageType.ERROR);
+			expect(lastMessage(id).text).to.match(/^That alias is too long/);
+			expect(loadAliases().map((a) => a.name)).to.deep.equal(["long"]);
+		});
+
+		it("refuses a new alias past the limit but still updates an existing one", function () {
+			const h = setup();
+			const id = joined(h);
+			const full = Array.from({length: MAX_ALIASES - 1}, (_, i) => ({
+				name: `a${i}`,
+				body: "/say hi",
+			}));
+			saveAliases(full);
+
+			h.client.input(id, "/alias last /say bye");
+			expect(lastMessage(id).text).to.equal("Alias /last added.");
+			expect(loadAliases()).to.have.length(MAX_ALIASES);
+
+			h.client.input(id, "/alias onemore /say no");
+			expect(lastMessage(id).type).to.equal(MessageType.ERROR);
+			expect(lastMessage(id).text).to.equal(
+				`You already have ${MAX_ALIASES} aliases; delete one in Settings → Aliases first.`
+			);
+
+			h.client.input(id, "/alias a0 /say changed");
+			expect(lastMessage(id).text).to.equal("Alias /a0 updated.");
+			expect(loadAliases()).to.have.length(MAX_ALIASES);
+			expect(loadAliases()[0]).to.deep.equal({name: "a0", body: "/say changed"});
+		});
+	});
+
+	describe("/msg and /query", function () {
+		it("refuses query windows for channels, user prefixes and NULs", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/query #nowhere hello");
+			expect(lastMessage(id).text).to.equal(
+				"You can not open query windows for channels, use /join instead."
+			);
+			h.client.input(id, "/query @bob hello");
+			expect(lastMessage(id).text).to.equal(
+				"You can not open query windows for names starting with a user prefix."
+			);
+			h.client.input(id, "/query bo\0b hello");
+			expect(lastMessage(id).text).to.equal(
+				"You can not open query windows for names containing spaces."
+			);
+			expect(h.sentAfter()).to.deep.equal([]);
+			expect(h.client.findChannel("@bob")).to.equal(undefined);
+		});
+
+		it("/query of an open window just opens it", function () {
+			const h = setup();
+			const id = joined(h);
+			dispatch.resetHistory();
+			h.client.input(id, "/query #seance hello");
+			expect(messages(id).filter((m) => m.type === MessageType.ERROR)).to.deep.equal([]);
+			expect(h.sentAfter()).to.deep.equal(["PRIVMSG #seance :hello"]);
+		});
+
+		it("sends nothing without a body", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/msg bob");
+			h.client.input(id, "/msg");
+			h.client.input(id, "/query carol");
+			expect(h.sentAfter()).to.deep.equal([]);
+			expect(h.client.findChannel("carol")).to.not.equal(undefined);
+		});
+
+		it("a bare /msg or /notice to a query is not writing in it", function () {
+			const h = setup();
+			const id = joined(h);
+			h.transport.line(":bob!b@h PRIVMSG alice :psst");
+			const query = h.client.findChannel("bob")!;
+			expect(query.autoOpened).to.equal(true);
+			h.client.input(id, "/msg bob");
+			h.client.input(id, "/notice bob");
+			expect(query.autoOpened).to.equal(true);
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+
+		it("splitTarget keeps the body and names nothing for empty input", function () {
+			expect(splitTarget("bob hi there")).to.deep.equal({target: "bob", body: "hi there"});
+			expect(splitTarget("bob")).to.deep.equal({target: "bob", body: ""});
+			expect(splitTarget("")).to.deep.equal({target: "", body: ""});
+			expect(splitTarget(" bob")).to.deep.equal({target: "", body: ""});
+		});
+	});
+
+	describe("/react", function () {
+		function withMessage(h: Harness): number {
+			const id = joined(h, "", "message-tags");
+			h.transport.line("@msgid=abc :bob!b@h PRIVMSG #seance :hi");
+			h.sentAfter();
+			return id;
+		}
+
+		it("reacts to the newest message, or to the msgid given last", function () {
+			const h = setup();
+			const id = withMessage(h);
+			h.client.input(id, "/react 👍");
+			h.client.input(id, "/react abc");
+			h.client.input(id, "/react lol wow abc");
+			h.client.input(id, "/react  abc");
+			expect(h.sentAfter()).to.deep.equal([
+				"@+draft/react=👍;+draft/reply=abc TAGMSG #seance",
+				"@+draft/react=abc;+draft/reply=abc TAGMSG #seance",
+				"@+draft/react=lol\\swow;+draft/reply=abc TAGMSG #seance",
+				"@+draft/react=abc;+draft/reply=abc TAGMSG #seance",
+			]);
+		});
+
+		it("says when nothing here carries a msgid", function () {
+			const h = setup();
+			const id = joined(h, "", "message-tags");
+			h.client.input(id, "/react 👍");
+			expect(lastMessage(id).text).to.equal(
+				"No message to react to: none here carries a msgid."
+			);
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+	});
+
+	describe("/me and /slap", function () {
+		it("slaps the named user, and a bare /slap or /me sends nothing", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/slap");
+			h.client.input(id, "/me");
+			h.client.input(id, "/slap bob");
+			expect(h.sentAfter()).to.deep.equal([
+				"PRIVMSG #seance :\x01ACTION slaps bob around a bit with a large trout\x01",
+			]);
+		});
+
+		it("only works in channels and queries", function () {
+			const h = setup();
+			joined(h);
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/me waves");
+			expect(lastMessage(lobby).text).to.equal(
+				"me command can only be used in channels and queries."
+			);
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+	});
+
+	describe("/nick", function () {
+		it("validates the new nick before sending it", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/nick");
+			expect(lastMessage(id).text).to.equal("Usage: /nick <your new nick>");
+			h.client.input(id, "/nick  ");
+			expect(lastMessage(id).text).to.equal("Usage: /nick <your new nick>");
+			h.client.input(id, "/nick two words");
+			expect(lastMessage(id).text).to.equal("Nicknames may not contain spaces.");
+			h.client.input(id, `/nick ${"n".repeat(101)}`);
+			expect(lastMessage(id).text).to.equal("Nicknames may not be this long.");
+			expect(h.sentAfter()).to.deep.equal([]);
+
+			h.client.input(id, `/nick ${"n".repeat(100)}`);
+			expect(h.sentAfter()).to.deep.equal([`NICK ${"n".repeat(100)}`]);
+		});
+	});
+
+	describe("/mode", function () {
+		it("fills in the query's name, and /deop takes ops", function () {
+			const h = setup();
+			const id = joined(h);
+			h.transport.line(":bob!b@h PRIVMSG alice :psst");
+			const query = h.client.findChannel("bob")!;
+			h.sentAfter();
+			h.client.input(query.id, "/mode +x");
+			h.client.input(id, "/mode -m");
+			h.client.input(id, "/deop bob");
+			expect(h.sentAfter()).to.deep.equal([
+				"MODE bob +x",
+				"MODE #seance -m",
+				"MODE #seance -o bob",
+			]);
+		});
+
+		it("marks the modes as asked for only for a bare query", function () {
+			const h = setup();
+			const id = joined(h);
+			const chan = h.client.findChannel("#seance")!;
+			h.client.input(id, "/mode #seance +m");
+			expect(chan.modesAsked).to.not.equal(true);
+			h.client.input(id, "/mode #seance");
+			expect(chan.modesAsked).to.equal(true);
+		});
+	});
+
+	describe("/connect", function () {
+		it("skips empty words and takes only a whole number as the port", function () {
+			const created: {host: string; port: number}[] = [];
+			socket.handle("network:new", (data) => void created.push(data as never));
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/server  irc.other  7000");
+			h.client.input(id, "/server irc.other abc123");
+			h.client.input(id, "/server irc.other 123abc");
+			expect(created.map((c) => [c.host, c.port])).to.deep.equal([
+				["irc.other", 7000],
+				["irc.other", 8067],
+				["irc.other", 8067],
+			]);
+		});
+	});
+
+	describe("words split by a double space", function () {
+		it("are dropped before the command sees them", function () {
+			const h = setup();
+			const id = joined(h, "", "message-tags draft/message-redaction");
+			h.client.input(id, "/whois  bob");
+			h.client.input(id, "/who  #seance");
+			h.client.input(id, "/list  >5");
+			h.client.input(id, "/invite  bob");
+			h.client.input(id, "/ctcp  bob  version");
+			h.client.input(id, "/redact  m1");
+			expect(h.sentAfter()).to.deep.equal([
+				"WHOIS bob bob",
+				"WHO #seance",
+				"LIST >5",
+				"INVITE bob #seance",
+				"PRIVMSG bob :\x01VERSION\x01",
+				"REDACT #seance m1",
+			]);
+		});
+
+		it("/mute  #seance mutes it", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/mute  #seance");
+			expect(h.client.findChannel("#seance")!.shared.muted).to.equal(true);
+		});
+	});
+
+	describe("small commands", function () {
+		it("/raw, /send and /quote send the line; whitespace alone sends nothing", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/raw PING a");
+			h.client.input(id, "/send PING b");
+			h.client.input(id, "/quote PING c");
+			h.client.input(id, "/raw   ");
+			expect(h.sentAfter()).to.deep.equal(["PING a", "PING b", "PING c"]);
+		});
+
+		it("/notice without a body sends nothing", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/notice bob");
+			h.client.input(id, "/notice");
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+
+		it("/invite with one name outside a channel needs a target", function () {
+			const h = setup();
+			joined(h);
+			const lobby = h.client.lobby.id;
+			h.client.input(lobby, "/invite bob");
+			expect(lastMessage(lobby).text).to.equal(
+				"invite command can only be used in channels or by specifying a target."
+			);
+			expect(h.sentAfter()).to.deep.equal([]);
+		});
+
+		it("/kill keeps the reason's spaces; a bare /kill, /kick, /ban send nothing", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/kill");
+			h.client.input(id, "/kick");
+			h.client.input(id, "/ban");
+			expect(lastMessage(id).text).to.equal("Usage: /ban <nick>");
+			h.client.input(id, "/kill bob go away");
+			expect(h.sentAfter()).to.deep.equal(["KILL bob :go away"]);
+		});
+
+		it("a bare /quit uses the default reason", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/quit");
+			expect(h.sentAfter()).to.deep.equal(["QUIT :Seance"]);
+		});
+
+		it("a bare /disconnect uses the default reason", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/disconnect");
+			expect(h.sentAfter()).to.deep.equal(["QUIT :Seance"]);
+		});
+
+		it("/quit, /ignorelist, /lua and /investigate work while disconnected", function () {
+			const h = setup();
+			const lobby = h.client.lobby.id;
+			const investigations: unknown[] = [];
+			const listener = (data: unknown) => void investigations.push(data);
+			eventbus.on("oper:investigate", listener);
+
+			try {
+				h.client.input(lobby, "/ignorelist");
+				expect(lastMessage(lobby).text).to.equal("Ignorelist is empty");
+				h.client.input(lobby, "/lua");
+				expect(lastMessage(lobby).text).to.match(/^Usage: \/lua /);
+				h.client.input(lobby, "/investigate bob");
+				expect(investigations).to.deep.equal([
+					{network: h.client.uuid, kind: "user", target: "bob"},
+				]);
+				h.client.input(lobby, "/quit");
+				expect(payloads("quit")).to.deep.equal([{network: h.client.uuid}]);
+				expect(
+					messages(lobby).filter((m) => /You are not connected/.test(m.text ?? ""))
+				).to.deep.equal([]);
+			} finally {
+				eventbus.off("oper:investigate", listener);
+			}
+		});
+
+		it("a bare /ignore is a usage error", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/ignore");
+			expect(lastMessage(id).text).to.equal("Usage: /ignore <nick>[!ident][@host]");
+		});
+
+		it("/mute in a special window changes nothing", function () {
+			const h = setup();
+			const id = joined(h);
+			const muted: [number, boolean][] = [];
+			h.client.options.setMuteStatus = (chanId, value) => void muted.push([chanId, value]);
+			h.client.input(id, "/list");
+			h.transport.line(":irc.test 321 alice Channel :Users  Name");
+			const list = h.client.findChannel("Channel List")!;
+			h.client.input(list.id, "/mute");
+			expect(list.shared.muted).to.not.equal(true);
+			expect(muted).to.deep.equal([]);
+		});
+
+		it("/list starts a fresh list even when the last one never finished", function () {
+			const h = setup();
+			const id = joined(h);
+			h.client.input(id, "/list");
+			h.transport.lines(
+				":irc.test 321 alice Channel :Users  Name",
+				":irc.test 322 alice #old 3 :stale"
+			);
+			h.client.input(id, "/list");
+			h.transport.lines(
+				":irc.test 322 alice #new 5 :fresh",
+				":irc.test 323 alice :End of /LIST"
+			);
+			const final = payloads<{chan: number; data: any}>("msg:special").pop();
+			expect(final?.data).to.deep.equal([{channel: "#new", num_users: 5, topic: "fresh"}]);
 		});
 	});
 });
