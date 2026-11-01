@@ -181,10 +181,6 @@ async fn seance_call(
         });
     }
 
-    // The dock (macOS) and launchers that show a count (Linux); a Windows
-    // taskbar takes an overlay image, not a number.
-    let badge = PLATFORM != "windows";
-
     match (plugin.as_str(), method.as_str()) {
         ("App", "getLaunchUrl") => {
             let mut links = links.lock().unwrap();
@@ -200,20 +196,18 @@ async fn seance_call(
             }
             Ok(json!({}))
         }
-        ("Badge", "checkPermissions" | "requestPermissions") if badge => {
-            Ok(json!({ "display": "granted" }))
-        }
-        ("Badge", "set") if badge => {
+        ("Badge", "checkPermissions" | "requestPermissions") => Ok(json!({ "display": "granted" })),
+        ("Badge", "set") => {
             let count = options
                 .get("count")
                 .and_then(Value::as_i64)
                 .unwrap_or(0)
                 .max(0);
-            let _ = window.set_badge_count((count > 0).then_some(count));
+            set_badge(&window, count);
             Ok(json!({}))
         }
-        ("Badge", "clear") if badge => {
-            let _ = window.set_badge_count(None);
+        ("Badge", "clear") => {
+            set_badge(&window, 0);
             Ok(json!({}))
         }
         #[cfg(not(target_os = "macos"))]
@@ -234,6 +228,43 @@ async fn seance_call(
         }
         _ => native(&plugin, &method, &options).await,
     }
+}
+
+/// The unread count on the app's icon: the Dock (macOS) and launchers that
+/// show a count (Linux). A Windows taskbar button takes a small image over
+/// its icon, not a number, so there it is a dot while anything is unread.
+fn set_badge(window: &WebviewWindow, count: i64) {
+    #[cfg(windows)]
+    let _ = window.set_overlay_icon((count > 0).then(unread_dot));
+
+    #[cfg(not(windows))]
+    let _ = window.set_badge_count((count > 0).then_some(count));
+}
+
+/// A red dot with a white rim, 16 px as Windows draws an overlay, its edge
+/// anti-aliased.
+#[cfg(windows)]
+fn unread_dot() -> tauri::image::Image<'static> {
+    const SIZE: u32 = 16;
+    let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
+    let centre = SIZE as f32 / 2.0;
+
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let d = ((x as f32 + 0.5 - centre).powi(2) + (y as f32 + 0.5 - centre).powi(2)).sqrt();
+            let alpha = (centre - d).clamp(0.0, 1.0);
+            let rim = (d - (centre - 2.0)).clamp(0.0, 1.0);
+            let mix = |red: f32, white: f32| (red * (1.0 - rim) + white * rim) as u8;
+            rgba.extend_from_slice(&[
+                mix(220.0, 255.0),
+                mix(38.0, 255.0),
+                mix(38.0, 255.0),
+                (alpha * 255.0) as u8,
+            ]);
+        }
+    }
+
+    tauri::image::Image::new_owned(rgba, SIZE, SIZE)
 }
 
 /// What the shell's own Rust does not answer: on macOS the Apple shells'
