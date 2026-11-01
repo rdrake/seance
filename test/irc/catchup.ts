@@ -912,6 +912,107 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			]);
 		});
 
+		it("is asked once two channels wait behind the open one", function () {
+			const h = setup({join: "#seance,#two,#three", fakeLag: IRCU_FAKE_LAG});
+			register(h, CAPS);
+			h.client.open(h.client.findChannel("#seance")!.id);
+
+			for (const name of ["#seance", "#two", "#three"]) {
+				h.transport.line(`:alice!alice@host JOIN ${name}`);
+			}
+
+			expect(collect(h, 1, isTargets)).to.have.length(1);
+		});
+
+		it("reads rows with the request's timestamp= prefix, and folds a channel's rows by case", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, [
+				["#two", "timestamp=2026-08-27T12:00:50.000Z"],
+				["#FOUR", "2026-08-27T12:00:45.000Z"],
+				["#four", "2026-08-27T12:00:41.000Z"],
+			]);
+			// #two (12:00:50) then #four (12:00:45, the newer of its rows), #three unlisted.
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#two",
+				"#four",
+				"#three",
+			]);
+		});
+
+		it("takes a row without a usable time as no row", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			answerTargets(h, targets, [
+				["#two", "yesterday"],
+				["#three", "2026-08-27T12:05:00.000Z"],
+				["#four", "2026-08-27T12:00:40.000Z"],
+			]);
+			// #two is as good as unlisted: behind #three, ahead of quiet #four.
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#three",
+				"#two",
+				"#four",
+			]);
+		});
+
+		it("asks again on the next connection after a failure waiting may mend", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			const label = /^@label=(\S+) /.exec(targets)![1];
+			h.transport.line(
+				`@label=${label} :irc.test FAIL CHATHISTORY MESSAGE_ERROR TARGETS :Messages could not be retrieved`
+			);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#two",
+				"#three",
+				"#four",
+			]);
+
+			h.transport.closed();
+			register(h, CAPS);
+			h.sent();
+			joinAll(h);
+			expect(collect(h, 1, isTargets)).to.have.length(1);
+		});
+
+		it("is not answered by a FAIL carrying another label", function () {
+			const h = connected();
+			h.client.open(h.client.findChannel("#seance")!.id);
+			joinAll(h);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			h.transport.line(
+				"@label=someone-else :irc.test FAIL CHATHISTORY INVALID_PARAMS TARGETS :no"
+			);
+			expect(pendingCatchup(h.client).map((c) => c.name)).to.have.members([
+				"#two",
+				"#three",
+				"#four",
+			]);
+			answerTargets(h, targets, [["#four", "2026-08-27T12:00:00.000Z"]]);
+			expect(fetched(collect(h, 20).map((s) => s.line))[0]).to.equal("#four");
+		});
+
+		it("does not let the answer rank a channel joined after the question, even one it lists", function () {
+			const h = heldThenDropped(HELD);
+			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
+			h.client.joinChannels([{name: "#five"}]);
+			h.sent();
+			h.transport.line(":alice!alice@host JOIN #five");
+			answerTargets(h, targets, [
+				["#five", "2026-08-27T12:09:00.000Z"],
+				["#three", "2026-08-27T12:05:00.000Z"],
+			]);
+			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
+				"#three",
+				"#two",
+				"#four",
+				"#five",
+			]);
+		});
+
 		it("is not asked to order a single channel, nor while the server replays the gap", function () {
 			const one = setup({join: "#seance,#two", fakeLag: IRCU_FAKE_LAG});
 			register(one, CAPS);

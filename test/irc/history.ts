@@ -4,7 +4,13 @@ import socket from "../../client/js/socket";
 import {IrcClient} from "../../client/js/irc/client";
 import {IdAllocator} from "../../client/js/irc/ids";
 import {registerBusHandlers} from "../../client/js/irc/bus";
-import {HISTORY_TIMEOUT_MS, pendingHistory} from "../../client/js/irc/history";
+import {
+	formatRef,
+	HISTORY_TIMEOUT_MS,
+	historyLimit,
+	pendingHistory,
+} from "../../client/js/irc/history";
+import {ISupport} from "../../client/js/irc/isupport";
 import type {Transport} from "../../client/js/irc/types";
 import type {TransportEvent, TransportState} from "../../client/js/irc/transport";
 import {ChanType} from "../../shared/types/chan";
@@ -645,6 +651,20 @@ describe("Chat history (history.ts)", function () {
 			expect(shown.text).to.include("Failed to retrieve history");
 		});
 
+		it("a FAIL whose label is not ours is matched by the target it names", function () {
+			const h = setup();
+			const id = joined(h);
+
+			socket.emit("more", {target: id, lastId: -1, condensed: false});
+			h.sent();
+			h.transport.line(
+				"@label=elsewhere :irc.test FAIL CHATHISTORY MESSAGE_ERROR LATEST #SEANCE :Failed to retrieve history"
+			);
+
+			expect(mores(id)).to.have.length(1);
+			expect(pendingHistory(h.client)).to.have.length(0);
+		});
+
 		it("a labeled ACK answers `more` with nothing", function () {
 			const h = setup();
 			const id = joined(h);
@@ -1283,5 +1303,33 @@ describe("Chat history (history.ts)", function () {
 			const sent = reconnect(h);
 			expect(sent.find((l) => l.includes("CHATHISTORY"))).to.match(/LATEST #seance \* 50$/);
 		});
+	});
+});
+
+describe("history request helpers", function () {
+	function withIsupport(...tokens: string[]): IrcClient {
+		const isupport = new ISupport();
+		isupport.apply(["me", ...tokens, "are supported by this server"]);
+		return {isupport} as unknown as IrcClient;
+	}
+
+	it("caps the limit by ISUPPORT CHATHISTORY, and only by a positive one", function () {
+		expect(historyLimit(withIsupport("CHATHISTORY=30"), 100)).to.equal(30);
+		expect(historyLimit(withIsupport("CHATHISTORY=30"), 10)).to.equal(10);
+		expect(historyLimit(withIsupport("CHATHISTORY=0"), 100)).to.equal(100);
+		expect(historyLimit(withIsupport(), 100)).to.equal(100);
+	});
+
+	it("refers by msgid unless MSGREFTYPES leaves it out", function () {
+		const ref = {msgid: "abc", time: new Date("2026-08-28T12:00:00.000Z")};
+
+		expect(formatRef(withIsupport(), ref)).to.equal("msgid=abc");
+		expect(formatRef(withIsupport("MSGREFTYPES=timestamp,msgid"), ref)).to.equal("msgid=abc");
+		expect(formatRef(withIsupport("MSGREFTYPES=timestamp"), ref)).to.equal(
+			"timestamp=2026-08-28T12:00:00.000Z"
+		);
+		expect(formatRef(withIsupport(), {time: ref.time})).to.equal(
+			"timestamp=2026-08-28T12:00:00.000Z"
+		);
 	});
 });

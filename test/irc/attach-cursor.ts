@@ -494,6 +494,26 @@ describe("PERSISTENCE ATTACH catch-up cursor (irc/persistence.ts)", function () 
 			expect(h.lastMessage(h.client.lobby.id).text).to.match(/^Session resumed\./);
 			expect(h.lastMessage(h.client.lobby.id).type).to.equal(MessageType.NOTICE);
 		});
+		it("hides the closing NOTICE whatever its counts", function () {
+			const h = resumed();
+			h.transport.lines(
+				":irc.test NOTICE alice :Session resumed. Replayed 12 message(s) from 3 channel(s).",
+				":irc.test NOTICE alice :Session resumed. You are in 12 channel(s)."
+			);
+			expect(h.messages()).to.deep.equal([]);
+		});
+
+		it("shows a NOTICE that only looks like the summary", function () {
+			const h = resumed();
+			h.transport.line(":bob!bob@host NOTICE alice :Session resumed. Replayed 4 message(s).");
+			h.transport.line(
+				":irc.test NOTICE alice :Note: Session resumed. Replayed 4 message(s)."
+			);
+			expect(h.messages().map((m) => m.text)).to.deep.equal([
+				"Session resumed. Replayed 4 message(s).",
+				"Note: Session resumed. Replayed 4 message(s).",
+			]);
+		});
 	});
 
 	describe("standing down the per-channel catch-up", function () {
