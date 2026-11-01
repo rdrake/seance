@@ -38,6 +38,11 @@ strip = true
 [features]
 snapshot = ["dep:objc2", "dep:objc2-web-kit", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-core-foundation", "dep:block2"]
 
+# The OS's notifications on Windows and Linux; macOS has the Apple shells'
+# LocalNotifications (src/apple.rs).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-notification = "=2.8.0"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
 objc2-web-kit = { version = "0.3", optional = true, features = ["WKWebView", "WKSnapshotConfiguration", "block2", "objc2-app-kit", "objc2-core-foundation"] }

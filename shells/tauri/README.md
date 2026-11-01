@@ -11,8 +11,8 @@ This package is self-contained (`seance-tauri`, private): the Tauri CLI is its
 only npm dependency and nothing is added to the repository root.
 
 **Status: a spike.** It loads, connects, takes links and badges on macOS and
-Linux; Windows has not been run. Notifications, signing, the updater and
-installers are gate 4 of the plan.
+Linux; Windows has not been run. Signing, the updater and installers are
+gate 4 of the plan.
 
 ## Run from source
 
@@ -71,10 +71,11 @@ compiled out of a release build.
   page. No Tauri plugin API is exposed to the page
   (`capabilities/default.json`).
 
-| Plugin  | Methods / events                                         | Notes                                       |
-| ------- | -------------------------------------------------------- | ------------------------------------------- |
-| `App`   | `getLaunchUrl`; event `appUrlOpen`                       | `web+irc:` links                            |
-| `Badge` | `checkPermissions`, `requestPermissions`, `set`, `clear` | macOS dock, Linux launchers; not on Windows |
+| Plugin               | Methods / events                                                                                                               | Notes                                                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `App`                | `getLaunchUrl`; event `appUrlOpen`                                                                                             | `web+irc:` links                                                                                                                                                                                                          |
+| `Badge`              | `checkPermissions`, `requestPermissions`, `set`, `clear`                                                                       | macOS dock, Linux launchers; not on Windows                                                                                                                                                                               |
+| `LocalNotifications` | `checkPermissions`, `requestPermissions`, `schedule`, `removeDeliveredNotifications`; event `localNotificationActionPerformed` | Windows, Linux (`src/alerts.rs`); macOS answers from the Apple plugins. A click opens the conversation (on Windows only while the toast is on screen); reading it removes the alert on Linux only. Not yet run on Windows |
 
 - **CSP** (`tauri.conf.json`): `'self'` scripts only, plus
   `'wasm-unsafe-eval'` and `blob:` workers as the Electron shell allowed

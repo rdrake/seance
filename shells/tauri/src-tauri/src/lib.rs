@@ -10,6 +10,8 @@
 // use, and `listen(plugin, event, cb)` hears what `emit()` evaluates in the
 // page. No Tauri plugin API is exposed to the page (capabilities/default.json).
 
+#[cfg(not(target_os = "macos"))]
+mod alerts;
 #[cfg(target_os = "macos")]
 mod apple;
 
@@ -205,6 +207,8 @@ async fn seance_call(
             let _ = window.set_badge_count(None);
             Ok(json!({}))
         }
+        #[cfg(not(target_os = "macos"))]
+        ("LocalNotifications", _) => alerts::call(window.app_handle(), &method, &options),
         #[cfg(all(debug_assertions, feature = "snapshot"))]
         ("Smoke", "snapshot") => {
             let path = options
@@ -376,7 +380,7 @@ fn install_close_behaviour(app: &AppHandle) -> tauri::Result<()> {
 pub fn run() {
     let launch_arg = std::env::args().skip(1).find(|arg| is_irc_link(arg));
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // First: a second launch hands its argv (Windows, Linux: the link)
         // to this one and exits.
         .plugin(tauri_plugin_single_instance::init(
@@ -386,7 +390,12 @@ pub fn run() {
             },
         ))
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build());
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+
+    let app = builder
         .manage(Mutex::new(Links {
             launch: launch_arg,
             listening: false,
@@ -412,6 +421,8 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             apple::start(app.handle());
+            #[cfg(not(target_os = "macos"))]
+            alerts::setup(app.handle());
 
             create_main(app.handle())?;
             install_close_behaviour(app.handle())?;

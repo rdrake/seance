@@ -4,6 +4,9 @@
 //
 // - iOS, macOS: the Apple shells' LocalNotifications plugin (shells/apple),
 //   which presents them in front too.
+// - Windows, Linux: the Tauri shell's LocalNotifications (src/alerts.rs), the
+//   same shapes; a click opens the conversation, and reading it takes the
+//   alert back on Linux alone (Windows cannot remove a shown toast).
 // - Android: the shell's push service (NativePush `show`), so a page alert
 //   and a push are the same notification: merged per conversation, cleared
 //   on read (webpush.ts readOnWorker), tapped through helpers/nativePush.ts.
@@ -13,11 +16,12 @@ import {isAndroidShell, nativeCall, nativeListen, nativePlatform} from "./shell"
 /** The ping, as a path in the app bundle, which goes to `UNNotificationSound`
  * as is: the iOS bundle's copy of the web build (`App/public/`), and on macOS
  * the one file the Tauri shell puts there (tauri.conf.json `bundle.macOS`).
- * Android's alert takes its channel's sound (PushService `messages`). */
+ * Android's alert takes its channel's sound (PushService `messages`), and
+ * Windows and Linux the platform's own ping. */
 const APPLE_SOUND = "public/audio/pop.wav";
 
 export function nativeAlertsAvailable(): boolean {
-	return ["ios", "android", "macos"].includes(nativePlatform());
+	return ["ios", "android", "macos", "windows", "linux"].includes(nativePlatform());
 }
 
 let asking: Promise<boolean | null> | null = null;
@@ -119,14 +123,14 @@ export async function showNativeAlert(alert: NativeAlert): Promise<boolean> {
 	return true;
 }
 
-/** The conversation was read: its alert goes (iOS, macOS). */
+/** The conversation was read: its alert goes (iOS, macOS, Linux). */
 export function clearNativeAlert(network: string, target: string): void {
 	void nativeCall("LocalNotifications", "removeDeliveredNotifications", {
 		notifications: [{id: alertId(network, target)}],
 	});
 }
 
-/** A tapped alert (iOS, macOS): the conversation it was about. Android's
+/** A tapped alert (iOS, macOS, Windows, Linux): the conversation it was about. Android's
  * taps come through helpers/nativePush.ts. */
 export function onNativeAlertTap(handler: (network: string, target: string) => void): void {
 	if (isAndroidShell()) {
