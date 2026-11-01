@@ -9,6 +9,10 @@ describe("irc/casemap", function () {
 			expect(casefold("NiCk", "rfc1459-strict")).to.equal("nick");
 		});
 
+		it("folds A and Z but not the characters either side of them", function () {
+			expect(casefold("@AZ[", "ascii")).to.equal("@az[");
+		});
+
 		it("defaults to rfc1459", function () {
 			expect(casefold("A[]\\~")).to.equal("a{}|^");
 		});

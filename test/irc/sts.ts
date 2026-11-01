@@ -154,6 +154,23 @@ describe("STS", function () {
 			});
 			expect(sts.parseStsValue("")).to.deep.equal({preload: false});
 		});
+		it("trims keys and values, and takes ports 1-65535 and durations as plain integers", function () {
+			expect(sts.parseStsValue(" PORT = 6697 , Duration = 60 ")).to.deep.equal({
+				port: 6697,
+				duration: 60,
+				preload: false,
+			});
+			expect(sts.parseStsValue("port=65535").port).to.equal(65535);
+			expect(sts.parseStsValue("port=1").port).to.equal(1);
+
+			for (const bad of ["0", "65536", "6697x", "x6697", "66.97"]) {
+				expect(sts.parseStsValue(`port=${bad}`).port, bad).to.equal(undefined);
+			}
+
+			for (const bad of ["300x", "x300", "3e2"]) {
+				expect(sts.parseStsValue(`duration=${bad}`).duration, bad).to.equal(undefined);
+			}
+		});
 	});
 
 	describe("policy store", function () {
@@ -233,6 +250,49 @@ describe("STS", function () {
 			expect(sts.allPolicies()).to.deep.equal({
 				ok: {port: 5, expiresAt: T0 + 1, preload: false},
 			});
+		});
+		it("drops stored entries whose port or expiry is not a valid one", function () {
+			data.set(
+				sts.STORAGE_KEY,
+				JSON.stringify({
+					zero: {port: 0, expiresAt: T0 + 1},
+					high: {port: 65536, expiresAt: T0 + 1},
+					top: {port: 65535, expiresAt: T0 + 1},
+					fraction: {port: 1.5, expiresAt: T0 + 1},
+					noexpiry: {port: 5},
+					textexpiry: {port: 5, expiresAt: "soon"},
+					nullexpiry: {port: 5, expiresAt: null},
+					nothing: null,
+				})
+			);
+			expect(Object.keys(sts.allPolicies())).to.deep.equal(["top"]);
+		});
+
+		it("reads stored JSON that is not an object as no policies", function () {
+			for (const raw of ["[]", '[{"port":5}]', "null", "5", '"x"']) {
+				data.set(sts.STORAGE_KEY, raw);
+				expect(sts.allPolicies(), raw).to.deep.equal({});
+			}
+		});
+
+		it("drops a policy at the very moment it expires", function () {
+			sts.setPolicy("a.example", {port: 1, expiresAt: T0 + 1000, preload: false});
+			clock.tick(1000);
+			sts.clearExpired();
+			expect(data.has(sts.STORAGE_KEY)).to.equal(false);
+		});
+
+		it("leaves a stored policy alone when a value brings no duration", function () {
+			sts.applyDuration("irc.example.org", 8443, {duration: 300, preload: false});
+			sts.applyDuration("irc.example.org", 8443, {preload: false});
+			expect(sts.getPolicy("irc.example.org")?.expiresAt).to.equal(T0 + 300_000);
+		});
+
+		it("refreshPolicy leaves a policy without a duration as it was", function () {
+			sts.setPolicy("irc.example.org", {port: 8443, expiresAt: T0 + 1000, preload: false});
+			clock.tick(500);
+			sts.refreshPolicy("irc.example.org");
+			expect(sts.getPolicy("irc.example.org")?.expiresAt).to.equal(T0 + 1000);
 		});
 	});
 
