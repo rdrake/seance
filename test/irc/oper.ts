@@ -288,6 +288,67 @@ describe("oper tools: labeled requests (irc/request.ts)", function () {
 		expect(unit.lines.map((m) => m.command)).to.deep.equal(["481"]);
 	});
 
+	it("ends on a FAIL even with end numerics given", async function () {
+		const {client, transport} = setup();
+		const reply = request(client, "GLINE +x@y * 1h :z", {end: ["281"]});
+		transport.line(`@label=${lastLabel(transport)} :irc.test FAIL GLINE NO_PRIVS :Not allowed`);
+
+		const unit = await reply;
+		expect(unit).to.include({outcome: "lines"});
+		expect(unit.lines.map((m) => m.command)).to.deep.equal(["FAIL"]);
+	});
+
+	it("does not take a NOTICE into our batch from a user, or to anyone but us", async function () {
+		const {client, transport} = setup();
+		const reply = request(client, "STATS w");
+		const label = lastLabel(transport);
+
+		transport.lines(
+			`@label=${label} :irc.test BATCH +AD labeled-response`,
+			":bob!b@h NOTICE opr :not part of it",
+			":irc.test NOTICE * :*** Notice -- not part of it either",
+			"@batch=AD :irc.test 219 opr w :End of /STATS report",
+			":irc.test BATCH -AD"
+		);
+
+		const unit = await reply;
+		expect(unit.lines.map((m) => m.command)).to.deep.equal(["219"]);
+	});
+
+	it("collects a named untagged reply only from the server and outside other batches", async function () {
+		const {client, transport} = setup();
+		const reply = request(client, "PRIVS", {untagged: ["270"]});
+		const label = lastLabel(transport);
+
+		transport.lines(
+			":bob!b@h 270 opr opr :FAKE",
+			":irc.test BATCH +X other",
+			"@batch=X :irc.test 270 opr opr :SOMEONE ELSE'S",
+			":irc.test BATCH -X",
+			":irc.test 270 opr opr :CHAN_LIMIT KILL CHECK",
+			`@label=${label} :irc.test ACK`
+		);
+
+		const unit = await reply;
+		expect(unit.lines.map((m) => m.params.at(-1))).to.deep.equal(["CHAN_LIMIT KILL CHECK"]);
+	});
+
+	it("resolves `closed` with nothing at once when it cannot ask, and honours its own timeout", async function () {
+		const clock = sinon.useFakeTimers({toFake: ["setTimeout", "clearTimeout"]});
+
+		try {
+			const {client, transport} = setup();
+			const quick = request(client, "STATS g", {timeoutMs: 1000});
+			clock.tick(1001);
+			expect((await quick).outcome).to.equal("timeout");
+
+			transport.close();
+			expect(await request(client, "STATS g")).to.deep.equal({lines: [], outcome: "closed"});
+		} finally {
+			clock.restore();
+		}
+	});
+
 	it("leaves someone else's labeled batch to the normal handlers", function () {
 		const {client, transport} = setup();
 		const chan = client.findChannel("#seance")!;
