@@ -163,6 +163,11 @@ fn show_main(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+
+        // A window hidden in the notification area has no taskbar button,
+        // and the dot went with it.
+        #[cfg(windows)]
+        set_badge(&window, BADGE.load(std::sync::atomic::Ordering::Relaxed));
     }
 }
 
@@ -230,12 +235,19 @@ async fn seance_call(
     }
 }
 
+/// The last count asked for, put back when the window comes back (Windows).
+#[cfg(windows)]
+static BADGE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
 /// The unread count on the app's icon: the Dock (macOS) and launchers that
 /// show a count (Linux). A Windows taskbar button takes a small image over
 /// its icon, not a number, so there it is a dot while anything is unread.
 fn set_badge(window: &WebviewWindow, count: i64) {
     #[cfg(windows)]
-    let _ = window.set_overlay_icon((count > 0).then(unread_dot));
+    {
+        BADGE.store(count, std::sync::atomic::Ordering::Relaxed);
+        let _ = window.set_overlay_icon((count > 0).then(unread_dot));
+    }
 
     #[cfg(not(windows))]
     let _ = window.set_badge_count((count > 0).then_some(count));
