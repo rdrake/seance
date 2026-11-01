@@ -47,3 +47,16 @@ describe("push scope — appUrlFromScope", () => {
 		);
 	});
 });
+
+describe("push scope — edges", () => {
+	it("leaves a scope that only looks pushed-to in the middle alone", () => {
+		expect(appUrlFromScope("https://a.test/push/x/")).to.equal("https://a.test/");
+		expect(appUrlFromScope("https://a.test/push/x/y/")).to.equal("https://a.test/push/x/y/");
+		expect(appUrlFromScope("https://a.test/push/x/push/y/")).to.equal("https://a.test/push/x/");
+	});
+
+	it("reads nothing from a scope without the push tail", () => {
+		expect(networkFromScope("https://a.test/push/")).to.equal(undefined);
+		expect(networkFromScope("https://a.test/push/%E0%A4%A/")).to.equal(undefined);
+	});
+});

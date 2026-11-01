@@ -78,3 +78,11 @@ describe("pushKeys — keyChangePolicy", () => {
 		expect(keyChangePolicy(true)).to.equal("ask");
 	});
 });
+
+describe("pushKeys — padding", () => {
+	it("strips only trailing padding, however much of it", () => {
+		expect(usableApplicationServerKey(TESTNET_VAPID + "===")).to.equal(true);
+		const mid = TESTNET_VAPID.slice(0, 40) + "=" + TESTNET_VAPID.slice(40);
+		expect(usableApplicationServerKey(mid)).to.equal(false);
+	});
+});

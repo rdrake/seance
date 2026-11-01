@@ -7,6 +7,8 @@ import {CATCHUP_STEP_COST_MS, MARKER_HOLD_MS} from "../../client/js/irc/catchup"
 import {MARKREAD_DEBOUNCE_MS} from "../../client/js/irc/handlers/markread";
 import * as saved from "../../client/js/irc/saved-networks";
 import {
+	flushQueryLogs,
+	forgetNetworkLog,
 	MAX_CHARS,
 	MAX_MESSAGES,
 	MAX_QUERIES,
@@ -735,6 +737,541 @@ describe("Query log (irc/querylog.ts)", function () {
 			first.client.removeChannel(first.client.findChannel("bob")!);
 			clock.tick(SAVE_DELAY_MS);
 			expect(stored()).to.equal(null);
+		});
+	});
+});
+
+describe("Query log storage edges (irc/querylog.ts)", function () {
+	/** Counts writes, so "nothing changed" can be told from "wrote the same". */
+	class CountingBackend extends MemoryBackend {
+		sets = 0;
+
+		set(key: string, value: string): void {
+			this.sets++;
+			super.set(key, value);
+		}
+	}
+
+	const KEY = QUERY_LOG_PREFIX + UUID;
+	let backend: CountingBackend;
+	let clock: sinon.SinonFakeTimers;
+	let logs: QueryLog[];
+
+	const open = (persist?: () => boolean): QueryLog => {
+		const log = new QueryLog(UUID, fold, persist);
+		logs.push(log);
+		return log;
+	};
+
+	const raw = (): any => JSON.parse(backend.get(KEY) ?? "null");
+
+	const write = (queries: unknown, v: unknown = 1): void => {
+		backend.data.set(KEY, JSON.stringify({v, queries}));
+	};
+
+	beforeEach(function () {
+		backend = new CountingBackend();
+		useStorageBackend(backend);
+		logs = [];
+		clock = sinon.useFakeTimers({
+			now: Date.UTC(2026, 8, 26, 12),
+			toFake: ["setTimeout", "clearTimeout", "Date"],
+		});
+	});
+
+	afterEach(function () {
+		logs.forEach((l) => l.dispose());
+		clock.restore();
+		setQueryLogEnabled(true);
+		useStorageBackend(null);
+	});
+
+	describe("what a line keeps", function () {
+		it("stores every field of a line and reads exactly those back", function () {
+			const log = open();
+			log.append(
+				"bob",
+				line({
+					msgid: "full",
+					self: true,
+					highlight: true,
+					replyTo: "r0",
+					editedAt: new Date("2026-09-26T10:05:00.000Z"),
+					fromAccount: "bobacct",
+					reactions: [{text: "👍", nicks: ["carol"]}],
+					previews: [],
+				})
+			);
+			log.append(
+				"bob",
+				line({
+					msgid: undefined,
+					from: undefined,
+					time: new Date("2026-09-26T10:01:00.000Z"),
+					text: "bare",
+				})
+			);
+			log.flush();
+
+			expect(raw().queries[0].messages).to.deep.equal([
+				{
+					msgid: "full",
+					time: "2026-09-26T10:00:00.000Z",
+					type: MessageType.MESSAGE,
+					text: "hi",
+					nick: "bob",
+					self: true,
+					highlight: true,
+					replyTo: "r0",
+					editedAt: "2026-09-26T10:05:00.000Z",
+					fromAccount: "bobacct",
+					reactions: [{text: "👍", nicks: ["carol"]}],
+				},
+				{time: "2026-09-26T10:01:00.000Z", type: MessageType.MESSAGE, text: "bare"},
+			]);
+
+			const back = open().messages("bob");
+			expect(back).to.deep.equal([
+				{
+					id: 0,
+					time: new Date("2026-09-26T10:00:00.000Z"),
+					type: MessageType.MESSAGE,
+					text: "hi",
+					users: [],
+					msgid: "full",
+					from: {nick: "bob", mode: ""},
+					self: true,
+					highlight: true,
+					replyTo: "r0",
+					editedAt: new Date("2026-09-26T10:05:00.000Z"),
+					fromAccount: "bobacct",
+					reactions: [{text: "👍", nicks: ["carol"]}],
+				},
+				{
+					id: 0,
+					time: new Date("2026-09-26T10:01:00.000Z"),
+					type: MessageType.MESSAGE,
+					text: "bare",
+					users: [],
+				},
+			]);
+		});
+
+		it("reads a line back from memory with no keys it does not have", function () {
+			const log = open();
+			log.append("bob", line({msgid: undefined, from: undefined, text: "bare"}));
+			expect(log.messages("bob")).to.deep.equal([
+				{
+					id: 0,
+					time: new Date("2026-09-26T10:00:00.000Z"),
+					type: MessageType.MESSAGE,
+					text: "bare",
+					users: [],
+				},
+			]);
+		});
+
+		it("copies reactions, so a later change to the message does not reach the log", function () {
+			const log = open();
+			const msg = line({msgid: "a", reactions: [{text: "👍", nicks: ["carol"]}]});
+			log.append("bob", msg);
+			msg.reactions![0].nicks.push("dave");
+			const back = log.messages("bob");
+			expect(back[0].reactions).to.deep.equal([{text: "👍", nicks: ["carol"]}]);
+			back[0].reactions![0].nicks.push("erin");
+			expect(log.messages("bob")[0].reactions).to.deep.equal([
+				{text: "👍", nicks: ["carol"]},
+			]);
+		});
+
+		it("keeps no line whose time is not a time, and no line without text", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a", time: "not a time" as unknown as Date}));
+			log.append("bob", line({msgid: "b", text: undefined as unknown as string}));
+			log.append("bob", line({msgid: "c", time: "2026-09-26T09:00:00.000Z" as any}));
+			expect(log.messages("bob").map((m) => m.msgid)).to.deep.equal(["c"]);
+		});
+	});
+
+	describe("what it reads from storage", function () {
+		const good = {time: "2026-09-26T10:00:00.000Z", type: "message", text: "ok"};
+
+		it("reads nothing from an empty, foreign-version or broken log", function () {
+			for (const value of ["", "{", "null", "[]", '"x"']) {
+				backend.data.set(KEY, value);
+				expect(open().names(), value).to.deep.equal([]);
+			}
+
+			write([{name: "bob", touched: 1, messages: [good]}], 2);
+			expect(open().names()).to.deep.equal([]);
+			write({name: "bob", touched: 1, messages: [good]});
+			expect(open().names()).to.deep.equal([]);
+		});
+
+		it("drops a query without a name or a message list, keeps the rest", function () {
+			write([
+				{touched: 3, messages: [good]},
+				{name: 7, touched: 3, messages: [good]},
+				{name: "nolist", touched: 3, messages: "x"},
+				null,
+				{name: "bob", touched: 2, messages: [good]},
+			]);
+			const log = open();
+			expect(log.names()).to.deep.equal(["bob"]);
+			expect(log.messages("bob").map((m) => m.text)).to.deep.equal(["ok"]);
+		});
+
+		it("drops a line that is not one, keeps the good ones", function () {
+			write([
+				{
+					name: "bob",
+					touched: 1,
+					messages: [
+						null,
+						"line",
+						{...good, time: 0},
+						{...good, time: "garbage"},
+						{time: good.time, text: "no type"},
+						{time: good.time, type: "message"},
+						{...good, type: 1},
+						{...good, text: 5},
+						good,
+					],
+				},
+			]);
+			expect(open().messages("bob")).to.deep.equal([
+				{
+					id: 0,
+					time: new Date(good.time),
+					type: "message",
+					text: "ok",
+					users: [],
+				},
+			]);
+		});
+
+		it("orders queries by their newest line, whatever order they were stored in", function () {
+			write([
+				{name: "mid", touched: 2, messages: [good]},
+				{name: "old", touched: 1, messages: [good]},
+				{name: "new", touched: 3, messages: [good]},
+				{name: "none", touched: "late", messages: [good]},
+			]);
+			const log = open();
+			expect(log.names()).to.deep.equal(["new", "mid", "old", "none"]);
+			expect(log.newestAt("mid")).to.equal(2);
+			expect(log.newestAt("none")).to.equal(0);
+		});
+
+		it("knows nothing of a query it does not hold", function () {
+			const log = open();
+			expect(log.messages("nobody")).to.deep.equal([]);
+			expect(log.aliases("nobody")).to.deep.equal([]);
+			expect(log.newestAt("nobody")).to.equal(undefined);
+			expect(log.readUpTo("nobody")).to.equal(undefined);
+			log.setRead("nobody", new Date());
+			log.edit("nobody", "a", "b");
+			log.redact("nobody", "a");
+			log.react("nobody", "a", "👍", "bob", false);
+			log.forget("nobody");
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(0);
+		});
+
+		it("reads a log written before read points were kept, and moves its read point", function () {
+			write([{name: "bob", touched: 5, messages: [good]}]);
+			const log = open();
+			expect(log.readUpTo("bob")).to.equal(undefined);
+			log.setRead("bob", new Date(1000));
+			expect(log.readUpTo("bob")?.getTime()).to.equal(1000);
+			log.flush();
+			expect(raw().queries[0].read).to.equal(1000);
+			expect(open().readUpTo("bob")?.getTime()).to.equal(1000);
+		});
+
+		it("reads a stored read point back, and a new query starts read at nothing", function () {
+			write([{name: "bob", touched: 5, read: 4, messages: [good]}]);
+			const log = open();
+			expect(log.readUpTo("bob")?.getTime()).to.equal(4);
+			log.append("carol", line({msgid: "c"}));
+			expect(log.readUpTo("carol")?.getTime()).to.equal(0);
+		});
+
+		it("only ever moves a read point forward, and writes only when it moves", function () {
+			write([{name: "bob", touched: 5, read: 4000, messages: [good]}]);
+			const log = open();
+			log.setRead("bob", new Date(4000));
+			log.setRead("bob", new Date(3000));
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(0);
+			expect(log.readUpTo("bob")?.getTime()).to.equal(4000);
+			log.setRead("bob", new Date(5000));
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(1);
+		});
+	});
+
+	describe("changes", function () {
+		it("writes once for a burst of lines, on the trailing edge", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			clock.tick(SAVE_DELAY_MS / 2);
+			log.append("bob", line({msgid: "b"}));
+			clock.tick(SAVE_DELAY_MS / 2 - 1);
+			expect(backend.sets).to.equal(0);
+			clock.tick(1);
+			expect(backend.sets).to.equal(1);
+			expect(raw().queries[0].messages).to.have.length(2);
+			clock.tick(SAVE_DELAY_MS * 3);
+			expect(backend.sets).to.equal(1);
+		});
+
+		it("flush writes only what is pending", function () {
+			const log = open();
+			log.flush();
+			expect(backend.sets).to.equal(0);
+			log.append("bob", line({msgid: "a"}));
+			log.flush();
+			expect(backend.sets).to.equal(1);
+			log.flush();
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(1);
+		});
+
+		it("clearing calls off a pending write", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			clock.tick(500);
+			log.clear();
+			clock.tick(100);
+			log.append("bob", line({msgid: "b"}));
+			clock.tick(400); // the first write would have been due now
+			expect(backend.get(KEY)).to.equal(null);
+			clock.tick(600);
+			expect(raw().queries[0].messages.map((m: {msgid: string}) => m.msgid)).to.deep.equal([
+				"b",
+			]);
+		});
+
+		it(`keeps exactly ${MAX_MESSAGES} lines when it has exactly that many`, function () {
+			const log = open();
+			lines(MAX_MESSAGES).forEach((m) => log.append("bob", m));
+			const kept = log.messages("bob");
+			expect(kept).to.have.length(MAX_MESSAGES);
+			expect(kept[0].text).to.equal("line 0");
+		});
+
+		it("cuts a lone conversation too big for the budget from its old end", function () {
+			const log = open();
+			const long = "x".repeat(2000);
+
+			for (let i = 0; i < 180; i++) {
+				log.append(
+					"bob",
+					line({msgid: `b${i}`, time: new Date(Date.UTC(2026, 8, 26, 9, i)), text: long})
+				);
+			}
+
+			log.flush();
+			const value = backend.get(KEY);
+			expect(value).to.be.a("string");
+			expect(value!.length).to.be.at.most(MAX_CHARS);
+			const kept = open().messages("bob");
+			expect(kept.length).to.be.within(100, 150);
+			expect(kept.at(-1)?.msgid).to.equal("b179");
+		});
+
+		it("writes no conversation that has no lines left, and removes the key when none has", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			log.append("carol", line({msgid: "c"}));
+			log.flush();
+			log.redact("bob", "a");
+			log.flush();
+			expect(raw().queries.map((q: {name: string}) => q.name)).to.deep.equal(["carol"]);
+			expect(open().names()).to.deep.equal(["carol"]);
+			log.redact("carol", "c");
+			log.flush();
+			expect(backend.get(KEY)).to.equal(null);
+		});
+
+		it("an edit, a redaction and a reaction are written", function () {
+			const log = open();
+			const [a, b] = lines(2);
+			log.append("bob", a);
+			log.append("bob", b);
+			log.append(
+				"bob",
+				line({msgid: "e1", time: new Date(Date.UTC(2026, 8, 26, 11)), text: "fixed"})
+			);
+			log.flush();
+
+			log.edit("bob", "m0", "e1");
+			clock.tick(SAVE_DELAY_MS);
+			let again = open();
+			expect(again.messages("bob").map((m) => m.text)).to.deep.equal(["fixed", "line 1"]);
+			expect(again.aliases("bob")).to.deep.equal([["e1", 0]]);
+
+			log.react("bob", "m1", "👍", "carol", false);
+			clock.tick(SAVE_DELAY_MS);
+			again = open();
+			expect(again.messages("bob")[1].reactions).to.deep.equal([
+				{text: "👍", nicks: ["carol"]},
+			]);
+
+			log.redact("bob", "m1");
+			clock.tick(SAVE_DELAY_MS);
+			expect(
+				open()
+					.messages("bob")
+					.map((m) => m.msgid)
+			).to.deep.equal(["m0"]);
+		});
+
+		it("an edit it cannot place changes nothing", function () {
+			const log = open();
+			const [a, b] = lines(2);
+			log.append("bob", a);
+			log.append("bob", b);
+			log.flush();
+			const sets = backend.sets;
+
+			log.edit("bob", "m0", "missing");
+			log.edit("bob", "missing", "m1");
+			log.edit("bob", "m0", "m0");
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(sets);
+			expect(log.messages("bob").map((m) => [m.msgid, m.text])).to.deep.equal([
+				["m0", "line 0"],
+				["m1", "line 1"],
+			]);
+			expect(log.aliases("bob")).to.deep.equal([]);
+		});
+
+		it("a redaction of a line it does not hold changes nothing", function () {
+			const log = open();
+			lines(2).forEach((m) => log.append("bob", m));
+			log.flush();
+			const sets = backend.sets;
+			log.redact("bob", "missing");
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(sets);
+			expect(log.messages("bob").map((m) => m.msgid)).to.deep.equal(["m0", "m1"]);
+		});
+
+		it("keeps each reaction apart, each nick once, and drops a reaction nobody holds", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			log.flush();
+			const sets = backend.sets;
+
+			log.react("bob", "missing", "👍", "carol", false);
+			log.react("bob", "a", "👍", "carol", true); // nothing to take off
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(sets);
+			expect(log.messages("bob")[0].reactions).to.equal(undefined);
+
+			log.react("bob", "a", "👍", "carol", false);
+			log.react("bob", "a", "🎉", "dave", false);
+			log.react("bob", "a", "👍", "erin", false);
+			log.react("bob", "a", "👍", "CAROL", false); // already there
+			log.react("bob", "a", "🎉", "nobody", true); // not among its nicks
+			expect(log.messages("bob")[0].reactions).to.deep.equal([
+				{text: "👍", nicks: ["carol", "erin"]},
+				{text: "🎉", nicks: ["dave"]},
+			]);
+
+			log.react("bob", "a", "🎉", "Dave", true);
+			log.flush();
+			expect(raw().queries[0].messages[0].reactions).to.deep.equal([
+				{text: "👍", nicks: ["carol", "erin"]},
+			]);
+			log.react("bob", "a", "👍", "carol", true);
+			log.react("bob", "a", "👍", "erin", true);
+			log.flush();
+			expect(raw().queries[0].messages[0]).not.to.have.property("reactions");
+		});
+
+		it("forgetting a query it does not hold forgets nothing", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			log.append("carol", line({msgid: "b", time: new Date(Date.UTC(2026, 8, 26, 11))}));
+			log.flush();
+			const sets = backend.sets;
+			log.forget("nobody");
+			clock.tick(SAVE_DELAY_MS);
+			expect(backend.sets).to.equal(sets);
+			expect(log.names()).to.deep.equal(["carol", "bob"]);
+			log.forget("CAROL");
+			expect(log.names()).to.deep.equal(["bob"]);
+		});
+	});
+
+	describe("every log at once", function () {
+		const OTHER = "33333333-3333-4333-8333-333333333333";
+
+		it("flushQueryLogs writes every pending log now", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			flushQueryLogs();
+			expect(raw().queries[0].name).to.equal("bob");
+		});
+
+		it("a disposed log writes what was pending and is no longer flushed with the rest", function () {
+			const log = new QueryLog(UUID, fold);
+			log.append("bob", line({msgid: "a"}));
+			log.dispose();
+			expect(backend.sets).to.equal(1);
+			log.append("bob", line({msgid: "b"}));
+			flushQueryLogs();
+			expect(backend.sets).to.equal(1);
+			log.flush(); // its own timer still stands; leave nothing behind
+		});
+
+		it("forgetting one network's log leaves another network's alone", function () {
+			const mine = open();
+			const theirs = new QueryLog(OTHER, fold);
+			logs.push(theirs);
+			mine.append("bob", line({msgid: "a"}));
+			theirs.append("carol", line({msgid: "b"}));
+			flushQueryLogs();
+
+			forgetNetworkLog(UUID);
+			expect(mine.names()).to.deep.equal([]);
+			expect(backend.get(KEY)).to.equal(null);
+			expect(theirs.names()).to.deep.equal(["carol"]);
+			expect(backend.get(QUERY_LOG_PREFIX + OTHER)).to.be.a("string");
+		});
+
+		it("forgetting a network no live log holds removes its stored log", function () {
+			// A uuid no QueryLog in this run was ever made for.
+			const key = `${QUERY_LOG_PREFIX}44444444-4444-4444-8444-444444444444`;
+			backend.data.set(key, JSON.stringify({v: 1, queries: []}));
+			forgetNetworkLog("44444444-4444-4444-8444-444444444444");
+			expect(backend.get(key)).to.equal(null);
+		});
+
+		it("switching it on deletes nothing", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			log.flush();
+			setQueryLogEnabled(true);
+			expect(log.names()).to.deep.equal(["bob"]);
+			expect(raw().queries[0].name).to.equal("bob");
+		});
+
+		it("switched off over a backend that cannot list its keys, still clears the live logs", function () {
+			const log = open();
+			log.append("bob", line({msgid: "a"}));
+			log.flush();
+			const bare: StorageBackend = {
+				get: (k) => backend.get(k),
+				set: (k, v) => backend.set(k, v),
+				remove: (k) => backend.remove(k),
+			};
+			useStorageBackend(bare);
+			expect(() => setQueryLogEnabled(false)).not.to.throw();
+			expect(backend.get(KEY)).to.equal(null);
 		});
 	});
 });

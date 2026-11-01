@@ -81,6 +81,27 @@ describe("last opened channel (helpers/lastChannel.ts)", function () {
 		expect(getLastChannel()).to.equal(null);
 	});
 
+	it("keeps its key, and reads only a whole record", function () {
+		expect(STORAGE_KEY).to.equal("thelounge.state.lastChannel");
+		expect(getLastChannel()).to.equal(null);
+
+		for (const value of [
+			null,
+			"x",
+			{network: "net-1"},
+			{network: "net-1", target: ""},
+			{network: "net-1", target: 5},
+			{network: "", target: "#seance"},
+			{network: 5, target: "#seance"},
+		]) {
+			store.set(STORAGE_KEY, JSON.stringify(value));
+			expect(getLastChannel(), JSON.stringify(value)).to.equal(null);
+		}
+
+		store.set(STORAGE_KEY, JSON.stringify({network: "net-1", target: "#seance", x: 1}));
+		expect(getLastChannel()).to.deep.equal({network: "net-1", target: "#seance"});
+	});
+
 	it("channelOpened remembers channels and queries, never the lobby or a special window", function () {
 		channelOpened("net-1", "SeanceDev", ChanType.LOBBY);
 		expect(getLastChannel()).to.equal(null);

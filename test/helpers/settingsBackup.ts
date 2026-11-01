@@ -11,6 +11,7 @@ import {
 	hasPasswords,
 	isBackupKey,
 	networkCount,
+	type SettingsBackup,
 	useStorageBackend,
 	VERSION,
 } from "../../client/js/helpers/settingsBackup";
@@ -354,5 +355,259 @@ describe("settings backup (helpers/settingsBackup.ts)", function () {
 		expect(fileName("", new Date("2026-01-02T00:00:00Z"))).to.equal(
 			"seance-2026-01-02.seance-settings"
 		);
+	});
+
+	describe("edges", function () {
+		const encode = (text: string) => new TextEncoder().encode(text);
+		const backup = (
+			entries: Record<string, unknown>,
+			platform?: "web" | "ios" | "android"
+		): SettingsBackup => ({
+			format: FORMAT,
+			version: VERSION,
+			exportedAt: "",
+			...(platform ? {platform} : {}),
+			entries,
+		});
+
+		it("names its format and every key it carries as earlier files did", function () {
+			expect(FORMAT).to.equal("seance-settings");
+
+			for (const key of [
+				"settings",
+				"thelounge.networks",
+				"thelounge.networks.collapsed",
+				"thelounge.sort.networks",
+				"thelounge.sort.channels",
+				"thelounge.muted",
+				"thelounge.media.trusted",
+				"thelounge.reactions.recent",
+				"thelounge.aliases",
+				"thelounge.scripts",
+				"thelounge.oper",
+				"thelounge.dnd",
+				"thelounge.ignore.a",
+				"thelounge.script_storage.a",
+			]) {
+				expect(isBackupKey(key), key).to.equal(true);
+			}
+
+			expect(isBackupKey("")).to.equal(false);
+		});
+
+		it("collects the entries in key order", function () {
+			store.set("thelounge.muted", "[]");
+			store.set("settings", "{}");
+			store.set("thelounge.aliases", "{}");
+			expect(Object.keys(collectBackup().entries)).to.deep.equal([
+				"settings",
+				"thelounge.aliases",
+				"thelounge.muted",
+			]);
+		});
+
+		it("skips a listed key that holds nothing", function () {
+			useStorageBackend({
+				get: (key) => store.get(key) ?? null,
+				set: (key, value) => void store.set(key, value),
+				remove: (key) => void store.delete(key),
+				keys: () => [...store.keys(), "thelounge.muted"],
+			});
+			expect(collectBackup().entries).to.deep.equal({});
+		});
+
+		it("leaves a network entry that is not an object as it is when stripping passwords", function () {
+			store.set(
+				"thelounge.networks",
+				JSON.stringify([null, "x", {uuid: "a", saslPassword: "p", rememberPassword: true}])
+			);
+			expect(collectBackup().entries["thelounge.networks"]).to.deep.equal([
+				null,
+				"x",
+				{uuid: "a", rememberPassword: false},
+			]);
+		});
+
+		it("counts only a non-empty string as a password", function () {
+			expect(
+				hasPasswords(backup({"thelounge.networks": [null, {saslPassword: ""}]}))
+			).to.equal(false);
+			expect(hasPasswords(backup({"thelounge.networks": [{saslPassword: 5}]}))).to.equal(
+				false
+			);
+			expect(
+				hasPasswords(backup({"thelounge.networks": [null, {saslPassword: "p"}]}))
+			).to.equal(true);
+		});
+
+		it("restores settings that are not an object as they are", function () {
+			for (const settings of [null, [1], "str", 5]) {
+				applyBackup(backup({settings}, "ios"), "web", {});
+				expect(store.get("settings"), JSON.stringify(settings)).to.equal(
+					JSON.stringify(settings)
+				);
+			}
+		});
+
+		it("adds no platform setting a file does not hold, and keeps one that is not a default", function () {
+			applyBackup(backup({settings: {theme: "day"}}, "ios"), "web", {});
+			expect(JSON.parse(store.get("settings")!)).to.deep.equal({theme: "day"});
+			applyBackup(backup({settings: {matchSystemTextSize: "yes"}}, "ios"), "web", {});
+			expect(JSON.parse(store.get("settings")!)).to.deep.equal({matchSystemTextSize: "yes"});
+		});
+
+		it("rebases and disarms only the settings and the scripts", function () {
+			const nets = [{uuid: "n", host: "h", enabled: true}];
+			const dnd = {matchSystemAppearance: true, enableScripting: true};
+			applyBackup(
+				backup(
+					{
+						"thelounge.networks": nets,
+						"thelounge.dnd": dnd,
+						"thelounge.aliases": {enableScripting: true},
+					},
+					"ios"
+				),
+				"web",
+				{}
+			);
+			expect(JSON.parse(store.get("thelounge.networks")!)).to.deep.equal(nets);
+			expect(JSON.parse(store.get("thelounge.dnd")!)).to.deep.equal(dnd);
+			expect(JSON.parse(store.get("thelounge.aliases")!)).to.deep.equal({
+				enableScripting: true,
+			});
+		});
+
+		it("leaves a stored script that is not an object as it is", function () {
+			applyBackup(
+				backup({"thelounge.scripts": [null, [1], "x", {id: "a", enabled: true}]}),
+				"web",
+				{}
+			);
+			expect(JSON.parse(store.get("thelounge.scripts")!)).to.deep.equal([
+				null,
+				[1],
+				"x",
+				{id: "a", enabled: false},
+			]);
+		});
+
+		it("a restore that runs out of storage removes the keys it had added", function () {
+			seed();
+			const before = new Map(store);
+			useStorageBackend({
+				get: (key) => store.get(key) ?? null,
+				set: (key, value) => void (key === "thelounge.networks" || store.set(key, value)),
+				remove: (key) => void store.delete(key),
+				keys: () => [...store.keys()],
+			});
+
+			let error: unknown;
+
+			try {
+				applyBackup(
+					backup({"thelounge.aliases": {a: "b"}, "thelounge.networks": [{uuid: "n"}]}),
+					"web",
+					{}
+				);
+			} catch (e) {
+				error = e;
+			}
+
+			expect(error).to.be.instanceOf(BackupStorageError);
+			expect((error as Error).message).to.equal(
+				"There isn't room on this device to import that file. Nothing was changed."
+			);
+			expect(store).to.deep.equal(before);
+		});
+
+		it("names a file with one dash for any run of other characters", function () {
+			expect(fileName("My  App!!", new Date("2026-01-02T00:00:00Z"))).to.equal(
+				"my-app-2026-01-02.seance-settings"
+			);
+		});
+
+		it("tells a damaged gzip file from a file that is not one", async function () {
+			const messageOf = async (bytes: Uint8Array) =>
+				((await failure(bytes)) as Error)?.message;
+			expect(await messageOf(new Uint8Array([0x1f, 0x8b, 1, 2, 3, 4]))).to.equal(
+				"This file is damaged."
+			);
+
+			for (const bytes of [
+				[0x1f, 0x8b],
+				[0x1f, 0x41, 0x41, 0x41],
+				[0x41, 0x8b, 0x41, 0x41],
+				[0x41, 0x41, 0x41, 0x41],
+			]) {
+				expect(await messageOf(new Uint8Array(bytes)), String(bytes)).to.equal(
+					"This isn't a settings file."
+				);
+			}
+		});
+
+		it("says why a file was refused", async function () {
+			const messageOf = async (text: string) =>
+				((await failure(encode(text))) as Error)?.message;
+
+			for (const text of ["null", "5", '"x"', '{"format":"other"}']) {
+				expect(await messageOf(text), text).to.equal("This isn't a settings file.");
+			}
+
+			expect(
+				await messageOf(JSON.stringify({format: FORMAT, version: "1", entries: {}}))
+			).to.equal("This file was made by a newer version.");
+
+			for (const entries of [null, [], "x", 5]) {
+				expect(
+					await messageOf(JSON.stringify({format: FORMAT, version: VERSION, entries})),
+					JSON.stringify(entries)
+				).to.equal("This file is damaged.");
+			}
+		});
+
+		it("reads the file's optional fields only when they are strings", async function () {
+			const decoded = async (extra: object) =>
+				decodeBackup(
+					encode(
+						JSON.stringify({format: FORMAT, version: VERSION, entries: {}, ...extra})
+					)
+				);
+			expect(await decoded({exportedAt: 5, app: 5})).to.deep.equal({
+				format: FORMAT,
+				version: VERSION,
+				exportedAt: "",
+				entries: {},
+			});
+			expect(await decoded({exportedAt: "then", app: "Seance"})).to.deep.equal({
+				format: FORMAT,
+				version: VERSION,
+				exportedAt: "then",
+				app: "Seance",
+				entries: {},
+			});
+		});
+
+		it("writes plain JSON where the browser cannot gzip, and says it cannot read gzip without it", async function () {
+			const g = globalThis as Record<string, unknown>;
+			const cs = g.CompressionStream;
+			const ds = g.DecompressionStream;
+			const zipped = await encodeBackup(collectBackup({now: new Date(0)}));
+
+			try {
+				g.CompressionStream = undefined;
+				g.DecompressionStream = undefined;
+				const bytes = await encodeBackup(collectBackup({now: new Date(0)}));
+				expect(JSON.parse(new TextDecoder().decode(bytes)).format).to.equal(FORMAT);
+				expect(((await failure(zipped)) as Error)?.message).to.equal(
+					"This browser can't read compressed files."
+				);
+			} finally {
+				g.CompressionStream = cs;
+				g.DecompressionStream = ds;
+			}
+
+			expect(zipped[0]).to.equal(0x1f);
+		});
 	});
 });

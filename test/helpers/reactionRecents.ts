@@ -12,6 +12,7 @@ import {
 	useStorageBackend,
 } from "../../client/js/helpers/reactionRecents";
 import eventbus from "../../client/js/eventbus";
+import {MAX_REACTION_LENGTH} from "../../client/js/helpers/emoji";
 
 describe("recently used reactions (helpers/reactionRecents.ts)", function () {
 	let store: Map<string, string>;
@@ -104,5 +105,33 @@ describe("recently used reactions (helpers/reactionRecents.ts)", function () {
 		}
 
 		expect(seen).to.deep.equal([["👍"], ["❤️", "👍"]]);
+	});
+
+	it("keeps its names and defaults as other builds know them", function () {
+		expect(STORAGE_KEY).to.equal("thelounge.reactions.recent");
+		expect(RECENTS_CHANGED).to.equal("reactions:recent");
+		expect(DEFAULT_REACTIONS).to.deep.equal(["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥", "👀"]);
+	});
+
+	it(`reads at most ${MAX_RECENT} stored reactions`, function () {
+		store.set(
+			STORAGE_KEY,
+			JSON.stringify(Array.from({length: MAX_RECENT + 4}, (_, i) => `r${i}`))
+		);
+		const list = recentReactions();
+		expect(list).to.have.length(MAX_RECENT);
+		expect(list[0]).to.equal("r0");
+	});
+
+	it(`keeps a reaction of exactly ${MAX_REACTION_LENGTH} characters, not one more`, function () {
+		const at = "a".repeat(MAX_REACTION_LENGTH);
+		store.set(STORAGE_KEY, JSON.stringify([at, `${at}a`]));
+		expect(recentReactions()).to.deep.equal([at]);
+	});
+
+	it("leaves an empty stored value alone", function () {
+		store.set(STORAGE_KEY, "");
+		expect(recentReactions()).to.deep.equal([]);
+		expect(store.get(STORAGE_KEY)).to.equal("");
 	});
 });

@@ -81,3 +81,29 @@ describe("pushStore — anyStale", () => {
 		expect(anyStale(entries, new Map([["net1", undefined]]))).to.equal(false);
 	});
 });
+
+describe("pushStore — malformed entries", () => {
+	it("drops an entry whose keys or endpoint are not what they should be", () => {
+		const raw = JSON.stringify({
+			a: null,
+			b: "x",
+			c: {...entry, endpoint: 5},
+			d: {...entry, keys: null},
+			e: {...entry, keys: {p256dh: "P"}},
+			f: {...entry, keys: {p256dh: 5, auth: "A"}},
+			g: {...entry, keys: {p256dh: "P", auth: 5}},
+			h: {...entry, keys: "PA"},
+			ok: entry,
+		});
+		expect(parseStoredSubscriptions(raw)).to.deep.equal({entries: {ok: entry}, legacy: []});
+	});
+
+	it("reads a list, null or garbage as nothing", () => {
+		for (const raw of [JSON.stringify([entry]), "null", "{", "", null]) {
+			expect(parseStoredSubscriptions(raw), String(raw)).to.deep.equal({
+				entries: {},
+				legacy: [],
+			});
+		}
+	});
+});

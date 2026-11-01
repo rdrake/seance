@@ -120,3 +120,59 @@ describe("push/line", function () {
 		});
 	});
 });
+
+describe("push/line: edges", function () {
+	it("reads an empty tag block", function () {
+		expect(parsePushLine("@ :bob!b@h PRIVMSG #c :hi")).to.deep.equal({
+			tags: {},
+			nick: "bob",
+			command: "PRIVMSG",
+			target: "#c",
+			text: "hi",
+		});
+	});
+
+	it("reads a command with no parameters", function () {
+		expect(parsePushLine(":srv PING")).to.deep.equal({
+			tags: {},
+			nick: "srv",
+			command: "PING",
+			target: "",
+			text: "",
+		});
+		expect(parsePushLine(":srv ")).to.equal(null);
+	});
+
+	it("reads a trailing parameter that comes first", function () {
+		expect(parsePushLine(":bob PRIVMSG :hello world")).to.deep.include({
+			target: "",
+			text: "hello world",
+		});
+	});
+
+	it("skips empty words between parameters", function () {
+		expect(parsePushLine(":bob PRIVMSG  #c :hi")).to.deep.include({target: "#c", text: "hi"});
+	});
+
+	it("takes a MARKREAD timestamp from the middle parameters only", function () {
+		expect(parsePushLine(":srv MARKREAD #c :x timestamp=2026")).not.to.have.property(
+			"timestamp"
+		);
+		expect(parsePushLine(":bob PRIVMSG timestamp=2026 :hi")).not.to.have.property("timestamp");
+	});
+
+	it("reads several digits in each part of the line tag, and nothing around them", function () {
+		expect(lineIndexOf({"evilnet.github.io/line": "10/12/15"})).to.deep.equal({
+			index: 10,
+			sent: 12,
+			total: 15,
+		});
+		expect(lineIndexOf({"evilnet.github.io/line": "1/1/1"})).to.deep.equal({
+			index: 1,
+			sent: 1,
+			total: 1,
+		});
+		expect(lineIndexOf({"evilnet.github.io/line": "x1/2/3"})).to.equal(null);
+		expect(lineIndexOf({"evilnet.github.io/line": "1/2/3x"})).to.equal(null);
+	});
+});

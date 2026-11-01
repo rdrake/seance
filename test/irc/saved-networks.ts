@@ -489,3 +489,351 @@ describe("saved-networks", function () {
 		expect(saved.presenceModeOf(saved.get(net.uuid))).to.equal("global");
 	});
 });
+
+describe("saved-networks: storage edges", function () {
+	const UUID = "11111111-1111-4111-8111-111111111111";
+	class CountingBackend extends MemoryBackend {
+		sets = 0;
+
+		set(key: string, value: string): void {
+			this.sets++;
+			super.set(key, value);
+		}
+	}
+
+	let backend: CountingBackend;
+
+	beforeEach(function () {
+		backend = new CountingBackend();
+		saved.useStorageBackend(backend);
+	});
+
+	afterEach(function () {
+		saved.useStorageBackend(null);
+	});
+
+	it("stores under the keys every other module and old builds read", function () {
+		expect(saved.STORAGE_KEY).to.equal("thelounge.networks");
+		expect(saved.CHANNEL_ORDER_KEY).to.equal("thelounge.sort.channels");
+		saved.save(entry());
+		saved.setChannelOrder(UUID, ["#a"]);
+		expect(backend.get("thelounge.networks")).to.be.a("string");
+		expect(backend.get("thelounge.sort.channels")).to.be.a("string");
+	});
+
+	describe("hostnameOf", function () {
+		it("strips every scheme it knows, and only at the start", function () {
+			for (const scheme of ["ws", "wss", "http", "https", "irc", "ircs", "WSS"]) {
+				expect(saved.hostnameOf(`${scheme}://irc.example.org:8443/path`), scheme).to.equal(
+					"irc.example.org:8443"
+				);
+			}
+
+			expect(saved.hostnameOf("abcws://def")).to.equal("abcws:");
+			expect(saved.hostnameOf("  wss://irc.example.org/x  ")).to.equal("irc.example.org");
+			expect(saved.hostnameOf("irc.example.org")).to.equal("irc.example.org");
+		});
+	});
+
+	describe("newUuid", function () {
+		const real = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+		const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+		const withCrypto = (value: unknown, fn: () => void): void => {
+			Object.defineProperty(globalThis, "crypto", {
+				value,
+				configurable: true,
+				writable: true,
+			});
+
+			try {
+				fn();
+			} finally {
+				if (real) {
+					Object.defineProperty(globalThis, "crypto", real);
+				} else {
+					delete (globalThis as {crypto?: unknown}).crypto;
+				}
+			}
+		};
+
+		it("uses the runtime's randomUUID when there is one", function () {
+			withCrypto({randomUUID: () => "from-runtime"}, () => {
+				expect(saved.newUuid()).to.equal("from-runtime");
+			});
+		});
+
+		it("builds a v4 uuid from getRandomValues without randomUUID", function () {
+			withCrypto(
+				{
+					getRandomValues(bytes: Uint8Array) {
+						bytes.fill(0xff);
+						return bytes;
+					},
+				},
+				() => {
+					expect(saved.newUuid()).to.equal("ffffffff-ffff-4fff-bfff-ffffffffffff");
+				}
+			);
+		});
+
+		it("falls back to Math.random without any crypto", function () {
+			withCrypto(undefined, () => {
+				const id = saved.newUuid();
+				expect(id).to.match(V4);
+			});
+		});
+	});
+
+	describe("normalize", function () {
+		it("gives a fixed shape with defaults for everything left out", function () {
+			expect(saved.normalize({uuid: UUID, name: null, host: " h "})).to.deep.equal({
+				uuid: UUID,
+				name: "",
+				host: "h",
+				port: 9998,
+				tls: true,
+				nick: "",
+				join: "",
+				sasl: "",
+				saslAccount: "",
+				saslPassword: "",
+				autoconnect: false,
+				rememberPassword: false,
+				pushEnabled: true,
+				notifyEnabled: true,
+				commands: [],
+			});
+		});
+
+		it("reads a loose boolean as off only for the off words", function () {
+			for (const off of ["", "0", "false", "off", "OFF", " False ", false, null]) {
+				expect(saved.normalize({uuid: UUID, autoconnect: off})?.autoconnect, String(off)).to
+					.be.false;
+			}
+
+			for (const on of ["on", "1", "yes", true, 1]) {
+				expect(saved.normalize({uuid: UUID, autoconnect: on})?.autoconnect, String(on)).to
+					.be.true;
+			}
+		});
+
+		it("keeps a port only when it is a whole number in range", function () {
+			const port = (value: unknown, tls = true) =>
+				saved.normalize({uuid: UUID, port: value, tls})?.port;
+			expect(port(1)).to.equal(1);
+			expect(port(65535)).to.equal(65535);
+			expect(port("6697")).to.equal(6697);
+			expect(port(0)).to.equal(9998);
+			expect(port(-1)).to.equal(9998);
+			expect(port(65536)).to.equal(9998);
+			expect(port(8443.5)).to.equal(9998);
+			expect(port("nope", false)).to.equal(8067);
+		});
+
+		it("drops a cursor it cannot use and a time that is not a number", function () {
+			for (const cursor of [null, "m1", {msgid: ""}, {time: 5}]) {
+				expect(
+					saved.normalize({uuid: UUID, cursor}),
+					JSON.stringify(cursor)
+				).not.to.have.property("cursor");
+			}
+
+			expect(
+				saved.normalize({uuid: UUID, cursor: {msgid: "m1", time: "5"}})?.cursor
+			).to.deep.equal({msgid: "m1", time: 0});
+			expect(
+				saved.normalize({uuid: UUID, cursor: {msgid: "m1", time: Infinity}})?.cursor
+			).to.deep.equal({msgid: "m1", time: 0});
+			expect(
+				saved.normalize({uuid: UUID, cursor: {msgid: "m1", time: 7}})?.cursor
+			).to.deep.equal({msgid: "m1", time: 7});
+		});
+
+		it("reads a services block without bots as every role empty", function () {
+			expect(saved.asServices(null)).to.equal(undefined);
+			expect(saved.asServices({package: "x3"})).to.deep.equal({
+				package: "x3",
+				bots: {oper: "", account: "", channel: "", report: "", snoop: ""},
+			});
+		});
+
+		it("keeps lastUsed, presenceMode and presenceAt only when they are what they say", function () {
+			const bad = saved.normalize({
+				uuid: UUID,
+				lastUsed: "5",
+				presenceMode: "bogus",
+				presenceAt: -5,
+			});
+			expect(bad).not.to.have.property("lastUsed");
+			expect(bad).not.to.have.property("presenceMode");
+			expect(bad).not.to.have.property("presenceAt");
+			expect(saved.normalize({uuid: UUID, lastUsed: Infinity})).not.to.have.property(
+				"lastUsed"
+			);
+			expect(saved.normalize({uuid: UUID, presenceAt: 1.5})).not.to.have.property(
+				"presenceAt"
+			);
+
+			const good = saved.normalize({
+				uuid: UUID,
+				lastUsed: 5,
+				presenceMode: "dnd",
+				presenceAt: 9,
+			});
+			expect(good?.lastUsed).to.equal(5);
+			expect(good?.presenceMode).to.equal("dnd");
+			expect(good?.presenceAt).to.equal(9);
+			expect(saved.presenceModeOf(undefined)).to.equal("global");
+		});
+	});
+
+	describe("fromForm", function () {
+		it("turns every absent checkbox off, and keeps a field sent as undefined", function () {
+			const existing = saved.normalize({
+				uuid: UUID,
+				name: "Kept",
+				host: "h",
+				tls: true,
+				autoconnect: true,
+				rememberPassword: true,
+				pushEnabled: true,
+				notifyEnabled: true,
+			})!;
+			const net = saved.fromForm({uuid: UUID, name: undefined}, existing);
+			expect(net.name).to.equal("Kept");
+			expect(net.tls).to.be.false;
+			expect(net.autoconnect).to.be.false;
+			expect(net.rememberPassword).to.be.false;
+			expect(net.pushEnabled).to.be.false;
+			expect(net.notifyEnabled).to.be.false;
+		});
+
+		it("a typed password replaces the stored one; a blank one keeps it", function () {
+			const existing = saved.normalize({
+				uuid: UUID,
+				host: "h",
+				sasl: "plain",
+				saslPassword: "old",
+			})!;
+			expect(
+				saved.fromForm({uuid: UUID, sasl: "plain", saslPassword: "new"}, existing)
+					.saslPassword
+			).to.equal("new");
+			expect(
+				saved.fromForm({uuid: UUID, sasl: "plain", saslPassword: ""}, existing).saslPassword
+			).to.equal("old");
+		});
+	});
+
+	describe("the list", function () {
+		it("skips an entry that is not an object, and keeps the rest", function () {
+			backend.set(saved.STORAGE_KEY, JSON.stringify([null, 5, "x", entry()]));
+			expect(saved.list().map((n) => n.uuid)).to.deep.equal([UUID]);
+		});
+
+		it("orders by most recently used, then by name", function () {
+			backend.set(
+				saved.STORAGE_KEY,
+				JSON.stringify([
+					entry({uuid: "a", name: "A", lastUsed: 1}),
+					entry({uuid: "c", name: "C", lastUsed: 3}),
+					entry({uuid: "b", name: "B", lastUsed: 2}),
+					entry({uuid: "z", name: "Z"}),
+					entry({uuid: "y", name: "Y"}),
+				])
+			);
+			expect(saved.list().map((n) => n.uuid)).to.deep.equal(["c", "b", "a", "y", "z"]);
+		});
+
+		it("refuses to save an entry without a host", function () {
+			expect(() => saved.save(entry({host: ""}))).to.throw(/required/);
+			expect(() => saved.save(entry({uuid: ""}))).to.throw(/required/);
+			expect(backend.get(saved.STORAGE_KEY)).to.equal(null);
+		});
+
+		it("removing a network it does not hold writes nothing", function () {
+			saved.save(entry());
+			const sets = backend.sets;
+			saved.remove("not-there");
+			expect(backend.sets).to.equal(sets);
+			expect(saved.list()).to.have.length(1);
+		});
+
+		it("touching or moving the cursor of a network it does not hold changes nothing", function () {
+			saved.save(entry());
+			const sets = backend.sets;
+			expect(() => saved.touchLastUsed("not-there", 5)).not.to.throw();
+			saved.setCursor("not-there", {msgid: "m", time: 1});
+			expect(backend.sets).to.equal(sets);
+			expect(saved.get(UUID)).not.to.have.property("cursor");
+			expect(saved.get(UUID)).not.to.have.property("lastUsed");
+		});
+
+		it("finds a matching entry by host, port and nick, all three", function () {
+			saved.save(entry({host: "wss://irc.example.org/ws"}));
+			expect(saved.findMatching("IRC.example.org", 8443, " Alice ")?.uuid).to.equal(UUID);
+			expect(saved.findMatching("other.example.org", 8443, "alice")).to.equal(undefined);
+			expect(saved.findMatching("irc.example.org", 6697, "alice")).to.equal(undefined);
+			expect(saved.findMatching("irc.example.org", 8443, "bob")).to.equal(undefined);
+		});
+	});
+
+	describe("removing a network forgets what is kept beside it", function () {
+		it("its oper preferences, its presence sync time and its notice log", async function () {
+			const operprefs = await import("../../client/js/irc/operprefs");
+			const presenceSync = await import("../../client/js/irc/presenceSync");
+			const noticelog = await import("../../client/js/irc/noticelog");
+			const removed: string[] = [];
+			noticelog.useNoticeLogBackend({
+				load: () => Promise.resolve(undefined),
+				save: () => Promise.resolve(),
+				remove(uuid) {
+					removed.push(uuid);
+					return Promise.resolve();
+				},
+			});
+			operprefs.useOperPrefsBackend(backend);
+			presenceSync.useStorageBackend(backend);
+
+			try {
+				backend.set(operprefs.OPER_PREFS_KEY, JSON.stringify({[UUID]: {wasOper: true}}));
+				backend.set(presenceSync.PRESENCE_SYNC_KEY, JSON.stringify({[UUID]: 5, other: 6}));
+				saved.save(entry());
+				saved.remove(UUID);
+
+				expect(
+					JSON.parse(backend.get(operprefs.OPER_PREFS_KEY) ?? "{}")
+				).not.to.have.property(UUID);
+				expect(JSON.parse(backend.get(presenceSync.PRESENCE_SYNC_KEY)!)).to.deep.equal({
+					other: 6,
+				});
+				expect(removed).to.deep.equal([UUID]);
+			} finally {
+				noticelog.useNoticeLogBackend(null);
+				operprefs.useOperPrefsBackend(null);
+				presenceSync.useStorageBackend(null);
+			}
+		});
+	});
+
+	describe("channel order", function () {
+		it("keeps only the names of a stored order", function () {
+			backend.set(
+				saved.CHANNEL_ORDER_KEY,
+				JSON.stringify({[UUID]: ["#a", 5, null, "#b"], x: "no"})
+			);
+			expect(saved.channelOrder(UUID)).to.deep.equal(["#a", "#b"]);
+			expect(saved.channelOrder("x")).to.deep.equal([]);
+			expect(saved.channelOrder("none")).to.deep.equal([]);
+		});
+
+		it("reads a stored null as no orders, and drops a broken store", function () {
+			backend.set(saved.CHANNEL_ORDER_KEY, "null");
+			expect(saved.channelOrder(UUID)).to.deep.equal([]);
+			backend.set(saved.CHANNEL_ORDER_KEY, "{not json");
+			expect(saved.channelOrder(UUID)).to.deep.equal([]);
+			expect(backend.get(saved.CHANNEL_ORDER_KEY)).to.equal(null);
+		});
+	});
+});

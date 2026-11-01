@@ -271,3 +271,109 @@ describe("push/merge", function () {
 		});
 	});
 });
+
+describe("push/merge: edges", function () {
+	const line = (index: number, sent: number, total: number) => ({index, sent, total});
+
+	it("joinLines gives a plain entry's text, even with an empty line map", function () {
+		expect(joinLines({from: "b", text: "orig", lines: {}})).to.equal("orig");
+	});
+
+	it("adds no trailing ellipsis when every line was sent", function () {
+		expect(
+			joinLines({
+				from: "b",
+				text: "",
+				lines: {"1": {text: "a", concat: false}},
+				sent: 1,
+				total: 1,
+			})
+		).to.equal("a");
+	});
+
+	it("keeps two batches apart", function () {
+		let entries: MergedMessage[] = [];
+		entries = addMessage(entries, {
+			from: "b",
+			text: "a1",
+			batch: "A",
+			line: line(1, 2, 2),
+		}).entries;
+		entries = addMessage(entries, {
+			from: "b",
+			text: "b1",
+			batch: "B",
+			line: line(1, 2, 2),
+		}).entries;
+		expect(entries.map((e) => [e.batch, e.text])).to.deep.equal([
+			["A", "a1\n…"],
+			["B", "b1\n…"],
+		]);
+	});
+
+	it("keeps the batch's first msgid once it has one", function () {
+		let entries: MergedMessage[] = [];
+		entries = addMessage(entries, {
+			from: "b",
+			text: "a1",
+			msgid: "m1",
+			batch: "A",
+			line: line(1, 2, 2),
+		}).entries;
+		entries = addMessage(entries, {
+			from: "b",
+			text: "a2",
+			msgid: "m2",
+			batch: "A",
+			line: line(2, 2, 2),
+		}).entries;
+		expect(entries).to.have.length(1);
+		expect(entries[0].msgid).to.equal("m1");
+	});
+
+	it("a new batch keeps the plain message before it", function () {
+		const {entries} = addMessage([{from: "c", text: "plain", msgid: "p"}], {
+			from: "b",
+			text: "a1",
+			batch: "A",
+			line: line(1, 1, 1),
+		});
+		expect(entries.map((e) => e.text)).to.deep.equal(["plain", "a1"]);
+	});
+
+	it("caps the list on every path, a batch line and a repeat included", function () {
+		const five: MergedMessage[] = Array.from({length: 5}, (_, i) => ({
+			from: "c",
+			text: `t${i}`,
+			msgid: `p${i}`,
+		}));
+		expect(
+			addMessage(five, {from: "b", text: "a1", batch: "A", line: line(1, 1, 1)}).entries
+		).to.have.length(4);
+		const again = addMessage(five, {from: "c", text: "t4", msgid: "p4"});
+		expect(again.isNew).to.equal(false);
+		expect(again.entries.map((e) => e.msgid)).to.deep.equal(["p1", "p2", "p3", "p4"]);
+	});
+
+	it("leaves a text exactly at the ellipsis length alone", function () {
+		const at = "x".repeat(48 + 18 + 1);
+		expect(midEllipsis(at)).to.equal(at);
+		expect(midEllipsis(`${at}y`)).to.equal(`${"x".repeat(48)}…${"x".repeat(17)}y`);
+	});
+
+	it("keeps three short lines, and drops lines only past the budget", function () {
+		const entries = (lengths: number[]): MergedMessage[] =>
+			lengths.map((n, i) => ({from: "", text: String(i).repeat(n)}));
+		expect(renderMergedBody(entries([1, 2, 3]), false)).to.equal("0\n11\n222");
+		// 67 + 67 + 34 and two newlines: exactly the budget.
+		expect(renderMergedBody(entries([67, 67, 34]), false).split("\n")[1]).to.equal(
+			"1".repeat(67)
+		);
+		// One more character: the middle line goes, its count before the newest.
+		expect(renderMergedBody(entries([67, 67, 35]), false).split("\n")).to.deep.equal([
+			"0".repeat(48 + 18 + 1),
+			"… +1 more",
+			"2".repeat(35),
+		]);
+	});
+});

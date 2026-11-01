@@ -76,3 +76,34 @@ describe("push/strip", function () {
 		});
 	});
 });
+
+describe("push/strip: block breaks and edges", function () {
+	it("keeps each block construct on its own line", function () {
+		expect(stripMarkdown("a\n# h\nb")).to.equal("a\nh\nb");
+		expect(stripMarkdown("a\n```\ncode\n```\nb")).to.equal("a\ncode\nb");
+		expect(stripMarkdown("a\n> q\nb")).to.equal("a\nq\nb");
+		expect(stripMarkdown("a\n- l\nb")).to.equal("a\nl\nb");
+		expect(stripMarkdown("a\n| x | y |\n|---|---|\n| 1 | 2 |\nb")).to.equal("a\nx|y\n1|2\nb");
+		expect(stripMarkdown("a\n$$\nx^2\n$$\nb")).to.equal("a\nx^2\nb");
+		expect(stripMarkdown("**b**\n# h")).to.equal("b\nh");
+		expect(stripMarkdown("a\n\n# h")).to.equal("a\n\nh");
+		expect(stripMarkdown("# h\n\nb")).to.equal("h\nb");
+		expect(stripMarkdown("a\n\n> # h")).to.equal("a\n\nh");
+	});
+
+	it("adds no break between inline runs", function () {
+		expect(stripMarkdown("a *b* `c` d")).to.equal("a b c d");
+	});
+
+	it("trims what the markers leave", function () {
+		expect(stripMarkdown("  hi  ")).to.equal("hi");
+	});
+
+	it("reads an ACTION only at the start, its text across lines", function () {
+		expect(splitAction("say \x01ACTION waves\x01")).to.deep.equal({
+			action: false,
+			body: "say \x01ACTION waves\x01",
+		});
+		expect(splitAction("\x01ACTION a\nb\x01")).to.deep.equal({action: true, body: "a\nb"});
+	});
+});

@@ -18,7 +18,9 @@ import {
 	setClosedQueriesKept,
 	decodeClosed,
 	encodeClosed,
+	forgetClosedQueries,
 	mergeClosed,
+	onClosedValue,
 	useStorageBackend,
 } from "../../client/js/irc/closedQueries";
 import type {SharedNetworkChan} from "../../shared/types/network";
@@ -647,6 +649,202 @@ describe("closed queries (irc/closedQueries.ts)", function () {
 			new ClosedQueries(h.client.uuid, (n) => n.toLowerCase()).close("bob", t0);
 			closedStorageChanged([h.client]);
 			expect(h.payloads<{chan: number}>("part")).to.deep.equal([{chan: id}]);
+		});
+	});
+});
+
+describe("closed queries: storage edges (irc/closedQueries.ts)", function () {
+	const NOW = Date.parse("2026-08-28T12:00:00.000Z");
+	const KEY = "thelounge.state.closedQueries";
+	const UNSHARED = "thelounge.state.closedUnshared";
+	const close = (nick: string, at: number, when: number) => ({nick, at, when});
+	const reopened = (nick: string, when: number) => ({nick, at: 0, when, open: true as const});
+	let data: Map<string, string>;
+	let sets: number;
+	let clock: sinon.SinonFakeTimers;
+
+	beforeEach(function () {
+		data = new Map();
+		sets = 0;
+		useStorageBackend({
+			get: (k) => data.get(k) ?? null,
+			set(k, v) {
+				sets++;
+				data.set(k, v);
+			},
+			remove: (k) => void data.delete(k),
+		});
+		clock = sinon.useFakeTimers({now: NOW, toFake: ["Date"]});
+	});
+
+	afterEach(function () {
+		clock.restore();
+		setClosedQueriesKept(true);
+		useStorageBackend(null);
+	});
+
+	const stored = (): Record<string, unknown> =>
+		JSON.parse(data.get(KEY) ?? "null") as Record<string, unknown>;
+
+	it("keeps an event for thirty days, under the key other tabs listen to", function () {
+		expect(CLOSED_TTL_MS).to.equal(30 * 24 * 3600 * 1000);
+		const day = 24 * 3600 * 1000;
+		expect(encodeClosed([close("bob", NOW - 2 * day, NOW - 2 * day)], 300, NOW)).to.equal(
+			`bob:${(NOW - 2 * day).toString(36)}`
+		);
+		expect(encodeClosed([close("bob", 0, NOW - CLOSED_TTL_MS)], 300, NOW)).to.not.equal("");
+		expect(encodeClosed([close("bob", 0, NOW - CLOSED_TTL_MS - 1)], 300, NOW)).to.equal("");
+
+		new ClosedQueries("net", (s) => s).close("bob", NOW - 1000);
+		expect(data.get(KEY)).to.be.a("string");
+		expect(Object.keys(stored())).to.deep.equal(["net"]);
+	});
+
+	it("keeps an event that fills the byte limit exactly", function () {
+		const value = encodeClosed([close("bob", NOW - 1000, NOW - 1000)], 300, NOW);
+		const size = new TextEncoder().encode(value).length;
+		expect(encodeClosed([close("bob", NOW - 1000, NOW - 1000)], size, NOW)).to.equal(value);
+		expect(encodeClosed([close("bob", NOW - 1000, NOW - 1000)], size - 1, NOW)).to.equal("");
+	});
+
+	it("skips an item with no nick or with trailing junk", function () {
+		const t = (NOW - 1000).toString(36);
+		expect(
+			decodeClosed(`:${t} ${"bob"}:${t}# carol:${t}`, NOW).map((e) => e.nick)
+		).to.deep.equal(["carol"]);
+	});
+
+	it("on a tie keeps the event it held first, and lists the merge newest first", function () {
+		expect(
+			mergeClosed([close("bob", NOW - 10, NOW - 5)], [close("bob", NOW - 20, NOW - 5)])
+		).to.deep.equal([close("bob", NOW - 10, NOW - 5)]);
+		expect(
+			mergeClosed([close("old", NOW - 9, NOW - 9)], [close("new", NOW - 1, NOW - 1)])
+		).to.deep.equal([close("new", NOW - 1, NOW - 1), close("old", NOW - 9, NOW - 9)]);
+		expect(
+			mergeClosed([reopened("bob", NOW - 5)], [close("bob", NOW - 9, NOW - 5)])
+		).to.deep.equal([close("bob", NOW - 9, NOW - 5)]);
+	});
+
+	it("reads only well-formed stored events", function () {
+		data.set(
+			KEY,
+			JSON.stringify({
+				net: [
+					null,
+					{nick: 5, at: 1, when: 2},
+					{nick: "b", at: "1", when: 2},
+					{nick: "c", at: 1},
+					{nick: "a", at: 1, when: 2},
+				],
+			})
+		);
+		expect(new ClosedQueries("net", (s) => s).entries()).to.deep.equal([
+			{nick: "a", at: 1, when: 2},
+		]);
+	});
+
+	it("a reopen is recorded only for a held close, unless a close may still arrive", function () {
+		const closed = new ClosedQueries("net", (s) => s.toLowerCase());
+		expect(closed.reopen("nobody")).to.equal(false);
+		expect(sets).to.equal(0);
+		closed.close("bob", NOW - 1000);
+		expect(closed.reopen("carol")).to.equal(false);
+		expect(closed.reopen("carol", true)).to.equal(true);
+		expect(closed.reopen("BOB")).to.equal(true);
+		expect(closed.reopen("bob")).to.equal(false); // already open
+	});
+
+	it("a close silences its own nick only", function () {
+		const closed = new ClosedQueries("net", (s) => s);
+		closed.close("bob", NOW - 1000);
+		expect(closed.suppresses("carol", new Date(NOW - 5000))).to.equal(false);
+		expect(closed.suppresses("bob", new Date(NOW - 5000))).to.equal(true);
+	});
+
+	it("adopting nothing new writes nothing", function () {
+		const closed = new ClosedQueries("net", (s) => s);
+		closed.close("bob", NOW - 1000);
+		const before = sets;
+		expect(closed.adopt([])).to.deep.equal([]);
+		expect(closed.adopt([close("bob", NOW - 9000, NOW - 9000)])).to.deep.equal([]);
+		expect(sets).to.equal(before);
+	});
+
+	it("an adopted event that has expired is not kept, and leaves no empty list behind", function () {
+		const closed = new ClosedQueries("net", (s) => s);
+		closed.adopt([close("bob", 1, NOW - CLOSED_TTL_MS - 5)]);
+		expect(closed.entries()).to.deep.equal([]);
+		expect(stored()).to.deep.equal({});
+	});
+
+	it("writing one network's events keeps the others'", function () {
+		new ClosedQueries("a", (s) => s).close("bob", NOW - 1000);
+		new ClosedQueries("b", (s) => s).close("carol", NOW - 1000);
+		expect(Object.keys(stored()).sort()).to.deep.equal(["a", "b"]);
+		expect(new ClosedQueries("a", (s) => s).entries().map((e) => e.nick)).to.deep.equal([
+			"bob",
+		]);
+	});
+
+	it("forgetting a network it holds nothing for writes nothing", function () {
+		forgetClosedQueries("nothing-here");
+		expect(sets).to.equal(0);
+		expect(data.has(KEY)).to.equal(false);
+	});
+
+	describe("kept or not", function () {
+		it("switching off deletes the stored closes; on again forgets this page's", function () {
+			const closed = new ClosedQueries("net", (s) => s);
+			closed.close("bob", NOW - 1000);
+			setClosedQueriesKept(false);
+			expect(data.has(KEY)).to.equal(false);
+			expect(closed.entries()).to.deep.equal([]);
+
+			closed.close("carol", NOW - 1000);
+			expect(closed.entries().map((e) => e.nick)).to.deep.equal(["carol"]);
+			setClosedQueriesKept(false); // no change: memory kept
+			expect(closed.entries().map((e) => e.nick)).to.deep.equal(["carol"]);
+
+			data.set(UNSHARED, JSON.stringify(["net"]));
+			setClosedQueriesKept(true);
+			expect(data.has(UNSHARED)).to.equal(false);
+			expect(closed.entries()).to.deep.equal([]);
+
+			setClosedQueriesKept(false);
+			expect(closed.entries()).to.deep.equal([]); // memory was cleared
+		});
+
+		it("switching on when it is on already touches nothing", function () {
+			data.set(UNSHARED, JSON.stringify(["net"]));
+			setClosedQueriesKept(true);
+			expect(data.get(UNSHARED)).to.equal('["net"]');
+		});
+
+		it("deletes the account's list once per network after sharing stopped", function () {
+			const unshareClosed = sinon.spy();
+			const client = (uuid: string) =>
+				({
+					uuid,
+					closed: new ClosedQueries(uuid, (s: string) => s),
+					findChannel: () => undefined,
+					unshareClosed,
+					closedKnown: false,
+					closedPending: false,
+					writeClosed: () => undefined,
+				} as unknown as Parameters<typeof onClosedValue>[0]);
+			setClosedQueriesKept(false);
+
+			onClosedValue(client("a"), "", true);
+			expect(JSON.parse(data.get(UNSHARED)!)).to.deep.equal(["a"]);
+			onClosedValue(client("b"), "", true);
+			expect(JSON.parse(data.get(UNSHARED)!)).to.deep.equal(["a", "b"]);
+
+			const t = (NOW - 1000).toString(36);
+			onClosedValue(client("a"), `bob:${t}`, true);
+			expect(unshareClosed.called).to.equal(false);
+			onClosedValue(client("c"), `bob:${t}`, true);
+			expect(unshareClosed.calledOnce).to.equal(true);
 		});
 	});
 });
