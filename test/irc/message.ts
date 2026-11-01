@@ -515,6 +515,10 @@ describe("irc/message", function () {
 
 		it("steps one UTF-16 unit over U+FFFF and two over U+10000", function () {
 			expect(splitMessage(0, "\uffff" + "a".repeat(5), 4)).to.deep.equal(["\uffffa", "aaaa"]);
+			expect(splitMessage(0, "\u{10000}" + "a".repeat(5), 5)).to.deep.equal([
+				"\u{10000}a",
+				"aaaa",
+			]);
 		});
 
 		it("breaks at a tab as at a space", function () {

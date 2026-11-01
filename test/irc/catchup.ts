@@ -912,7 +912,7 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			]);
 		});
 
-		it("is asked once two channels wait behind the open one", function () {
+		it("is asked when two channels wait behind the open one", function () {
 			const h = setup({join: "#seance,#two,#three", fakeLag: IRCU_FAKE_LAG});
 			register(h, CAPS);
 			h.client.open(h.client.findChannel("#seance")!.id);
@@ -944,11 +944,12 @@ describe("Connect burst: batched JOIN, catch-up paced by fake lag, lazy MODE (ir
 			const h = heldThenDropped(HELD);
 			const [targets] = collect(h, 1, isTargets).map((s) => s.line);
 			answerTargets(h, targets, [
-				["#two", "yesterday"],
 				["#three", "2026-08-27T12:05:00.000Z"],
+				["#two", "2026-08-27T12:01:00.000Z"],
+				["#two", "yesterday"],
 				["#four", "2026-08-27T12:00:40.000Z"],
 			]);
-			// #two is as good as unlisted: behind #three, ahead of quiet #four.
+			// The unusable row changes nothing: #two by its 12:01 row, after #three.
 			expect(fetched(collect(h, 20).map((s) => s.line))).to.deep.equal([
 				"#three",
 				"#two",

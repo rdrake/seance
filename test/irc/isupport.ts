@@ -210,9 +210,7 @@ describe("irc/isupport", function () {
 			expect(targmax.get("KICK")).to.equal(undefined);
 			expect(targmax.size).to.equal(5);
 		});
-	});
 
-	describe("nefarious2 transcript", function () {
 		it("takes only plain decimal integers", function () {
 			for (const bad of ["12x", "x12", "abc", "1.5", "-3"]) {
 				expect(make(`NICKLEN=${bad}`).nicklen, bad).to.equal(undefined);
@@ -249,7 +247,9 @@ describe("irc/isupport", function () {
 			]);
 			expect(make("TARGMAX=").targmax.size).to.equal(0);
 		});
+	});
 
+	describe("nefarious2 transcript", function () {
 		it("applies all three 005 lines", function () {
 			const isupport = new ISupport();
 			applyLines(isupport, NEFARIOUS_005);

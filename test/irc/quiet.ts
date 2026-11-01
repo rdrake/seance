@@ -48,7 +48,11 @@ describe("irc/quiet", function () {
 
 		sendQuiet(client, "PRIVMSG O3 :whois bob");
 		sendQuiet(client, "PRIVMSG O3 :whois carol");
-		const [first, second] = client.sent.map((l) => /^@label=(\S+) /.exec(l)![1]);
+		expect(client.sent).to.deep.equal([
+			"@label=svc1 PRIVMSG O3 :whois bob",
+			"@label=svc2 PRIVMSG O3 :whois carol",
+		]);
+		const [first, second] = ["svc1", "svc2"];
 
 		expect(
 			dropQuietLine(client, line(`@label=${first} :alice!a@h PRIVMSG O3 :whois bob`))

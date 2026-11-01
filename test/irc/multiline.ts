@@ -1400,7 +1400,10 @@ describe("multiline cooldown", function () {
 
 		expect(messages(client.lobby.id)).to.have.length(0);
 
-		clock.tick(MULTILINE_MAX_COOLDOWN_MS + 1000);
+		clock.tick(MULTILINE_MAX_COOLDOWN_MS);
+		expect(openers(transport)).to.equal(0);
+
+		clock.tick(1000);
 		expect(openers(transport)).to.equal(1);
 	});
 
@@ -1411,6 +1414,17 @@ describe("multiline cooldown", function () {
 		client.input(chanId, "three\nfour");
 
 		expect(openers(transport)).to.equal(1);
+
+		// The first message goes out whole before the second starts.
+		echoOwn(transport, "e1", "one");
+		clock.tick(3024);
+		echoOwn(transport, "e2", "two");
+		clock.tick(3024);
+		expect(
+			transport.sent
+				.filter((l) => / PRIVMSG #seance :/.test(l))
+				.map((l) => l.split(" :").at(-1))
+		).to.deep.equal(["one", "two", "three"]);
 	});
 
 	it("does not let a delivered batch's verdict timer settle the next one", function () {
