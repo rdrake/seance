@@ -6,6 +6,8 @@ ignore:
   - "test/e2e/**"
   - "test/public/**"
 extension: ["ts", "js"]
+require:
+  - "test/hooks.ts"
 node-option:
   - "import=tsx"
 global:
