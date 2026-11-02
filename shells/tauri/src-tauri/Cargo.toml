@@ -46,6 +46,9 @@ notify-rust = "=4.18.2"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 zbus = { version = "=5.19.0", default-features = false, features = ["blocking-api", "async-io"] }
+# Spell checking in the web view (lib.rs enable_spell_checking); the version
+# wry already pulls in.
+webkit2gtk = "=2.0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }

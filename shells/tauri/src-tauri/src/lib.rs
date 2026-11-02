@@ -371,6 +371,52 @@ fn create_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .build()
 }
 
+/// Misspellings underlined in text fields, with the guesses on a right-click
+/// (WebKitGTK's own menu). WebView2 and WKWebView spell-check out of the box;
+/// WebKitGTK ships with it off and, with no languages named, checks against
+/// none, so it gets the locale's (a language without a dictionary installed
+/// is skipped).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn enable_spell_checking(window: &WebviewWindow) {
+    use webkit2gtk::{WebContextExt, WebViewExt};
+
+    let languages = locale_languages();
+    let _ = window.with_webview(move |webview| {
+        if let Some(context) = webview.inner().context() {
+            let names: Vec<&str> = languages.iter().map(String::as_str).collect();
+            context.set_spell_checking_languages(&names);
+            context.set_spell_checking_enabled(true);
+        }
+    });
+}
+
+/// The user's languages as dictionary names (`en_US`), most wanted first:
+/// gettext's order — `LANGUAGE`'s list, then the first of `LC_ALL`,
+/// `LC_MESSAGES` and `LANG` that is set.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn locale_languages() -> Vec<String> {
+    let var = |name| std::env::var(name).ok().filter(|v| !v.is_empty());
+    let mut found = Vec::new();
+    let candidates = var("LANGUAGE")
+        .into_iter()
+        .flat_map(|list| list.split(':').map(str::to_owned).collect::<Vec<_>>())
+        .chain(["LC_ALL", "LC_MESSAGES", "LANG"].into_iter().find_map(var));
+
+    for locale in candidates {
+        // en_US.UTF-8@euro → en_US
+        let name = locale.split(['.', '@']).next().unwrap_or("").to_owned();
+
+        if !name.is_empty() && name != "C" && name != "POSIX" && !found.contains(&name) {
+            found.push(name);
+        }
+    }
+
+    found
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn enable_spell_checking(_: &WebviewWindow) {}
+
 /// Close follows the platform (desktop-shells.md § 5.2): a Mac app keeps
 /// running in the Dock and the window comes back from its icon; on Windows
 /// the window goes to the notification area; on Linux, where a tray may not
@@ -476,7 +522,8 @@ pub fn run() {
             #[cfg(not(target_os = "macos"))]
             alerts::setup(app.handle());
 
-            create_main(app.handle())?;
+            let main = create_main(app.handle())?;
+            enable_spell_checking(&main);
             install_close_behaviour(app.handle())?;
 
             #[cfg(debug_assertions)]
