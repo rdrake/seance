@@ -1,0 +1,20 @@
+diff --git a/test/helpers/parseMarkdown.ts b/test/helpers/parseMarkdown.ts
+index 2464b5a5e..dcb22cbb3 100644
+--- a/test/helpers/parseMarkdown.ts
++++ b/test/helpers/parseMarkdown.ts
+@@ -765,6 +765,15 @@ describe("markdown — composition", () => {
+ // A message can run to `draft/multiline`'s 16 KB, and anyone can send one
+ // built to be slow: each of these took 200–360ms before the scan went linear.
+ describe("markdown — cost of a hostile 16 KB message", () => {
++	// Mutation testing instruments the code under test, which makes it slower by
++	// a margin these budgets cannot absorb; a mutant that undoes the linear scan
++	// shows up there as a timeout instead.
++	before(function () {
++		if (process.env.STRYKER_MUTATOR_WORKER) {
++			this.skip();
++		}
++	});
++
+ 	const shapes: [string, string][] = [
+ 		["code spans", "`a".repeat(8000)],
+ 		["emphasis markers", "*_".repeat(8000)],
