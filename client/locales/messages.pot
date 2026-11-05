@@ -11801,12 +11801,6 @@ msgctxt "search.window.allChannels"
 msgid "all my channels"
 msgstr ""
 
-#. Search window banner: a search of every channel came back empty, loaded messages are shown instead
-#: client/components/Windows/SearchResults.vue
-msgctxt "search.window.allChannelsEmpty"
-msgid "The server found nothing across your channels."
-msgstr ""
-
 #. Search window (searching the chat history of the server, or of what is loaded on this device): the server found matches, but the filters set in the sheet hide them all. {count} is a number.
 #: client/components/Windows/SearchResults.vue
 msgctxt "search.window.allHidden"
@@ -11977,6 +11971,12 @@ msgid_plural "Searching the {count} messages loaded on this device instead. Filt
 msgstr[0] ""
 msgstr[1] ""
 
+#. Beside a search result that comes from messages loaded on this device, not from the server.
+#: client/components/Windows/SearchResults.vue
+msgctxt "search.window.loadedRow"
+msgid "on this device"
+msgstr ""
+
 #. Search window (searching the chat history of the server, or of what is loaded on this device): in the status line under the results: how many matches are shown. {count} is a number. Lower case.
 #: client/components/Windows/SearchResults.vue
 msgctxt "search.window.matchCount"
@@ -12037,6 +12037,12 @@ msgstr ""
 #: client/components/Windows/SearchResults.vue
 msgctxt "search.window.retry"
 msgid "Try again"
+msgstr ""
+
+#. Banner above loaded messages when a search came back empty. {scope} is a conversation's name, or the label for all channels.
+#: client/components/Windows/SearchResults.vue
+msgctxt "search.window.scopeEmpty"
+msgid "The server found nothing in {scope}."
 msgstr ""
 
 #. Search window (searching the chat history of the server, or of what is loaded on this device): the 'Search older' button's label while older matches are being asked for.

@@ -2082,7 +2082,6 @@
   "search.placeholder": "Search messages…",
   "search.results.aria": "Search results",
   "search.window.allChannels": "all my channels",
-  "search.window.allChannelsEmpty": "The server found nothing across your channels.",
   "search.window.allHidden": {
     "one": "{count} match, all hidden by your filters",
     "other": "{count} matches, all hidden by your filters"
@@ -2119,6 +2118,7 @@
     "one": "Searching the {count} message loaded on this device instead. Filters still work.",
     "other": "Searching the {count} messages loaded on this device instead. Filters still work."
   },
+  "search.window.loadedRow": "on this device",
   "search.window.matchCount": {
     "one": "{count} match",
     "other": "{count} matches"
@@ -2132,6 +2132,7 @@
   "search.window.placeholder": "Search {scope}",
   "search.window.removeFilter": "Remove {filter} filter",
   "search.window.retry": "Try again",
+  "search.window.scopeEmpty": "The server found nothing in {scope}.",
   "search.window.searching": "Searching…",
   "search.window.stale": "These are the results of the previous search. Press Search to update them.",
   "search.window.start": "Type something to search for, or use these in the field above:",

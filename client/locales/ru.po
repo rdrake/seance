@@ -11867,12 +11867,6 @@ msgctxt "search.window.allChannels"
 msgid "all my channels"
 msgstr "все мои каналы"
 
-#. Search window banner: a search of every channel came back empty, loaded messages are shown instead
-#: client/components/Windows/SearchResults.vue
-msgctxt "search.window.allChannelsEmpty"
-msgid "The server found nothing across your channels."
-msgstr ""
-
 #. Search window (searching the chat history of the server, or of what is loaded on this device): the server found matches, but the filters set in the sheet hide them all. {count} is a number.
 #: client/components/Windows/SearchResults.vue
 msgctxt "search.window.allHidden"
@@ -12046,6 +12040,12 @@ msgstr[0] "Вместо этого поиск идёт по {count} сообще
 msgstr[1] "Вместо этого поиск идёт по {count} сообщениям, загруженным на этом устройстве. Фильтры по-прежнему работают."
 msgstr[2] "Вместо этого поиск идёт по {count} сообщениям, загруженным на этом устройстве. Фильтры по-прежнему работают."
 
+#. Beside a search result that comes from messages loaded on this device, not from the server.
+#: client/components/Windows/SearchResults.vue
+msgctxt "search.window.loadedRow"
+msgid "on this device"
+msgstr ""
+
 #. Search window (searching the chat history of the server, or of what is loaded on this device): in the status line under the results: how many matches are shown. {count} is a number. Lower case.
 #: client/components/Windows/SearchResults.vue
 msgctxt "search.window.matchCount"
@@ -12108,6 +12108,12 @@ msgstr "Убрать фильтр «{filter}»"
 msgctxt "search.window.retry"
 msgid "Try again"
 msgstr "Повторить"
+
+#. Banner above loaded messages when a search came back empty. {scope} is a conversation's name, or the label for all channels.
+#: client/components/Windows/SearchResults.vue
+msgctxt "search.window.scopeEmpty"
+msgid "The server found nothing in {scope}."
+msgstr ""
 
 #. Search window (searching the chat history of the server, or of what is loaded on this device): the 'Search older' button's label while older matches are being asked for.
 #: client/components/Windows/SearchResults.vue
