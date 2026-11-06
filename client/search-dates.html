@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+	<meta charset="utf-8" />
+	<title>Search result dates · Seance mockup</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<style>
+		/* Layout: a control bar, then the search pane at desktop and phone width side by side, drawn in Seance's coffee theme. */
+		:root {
+			color-scheme: dark;
+			--page: #22143a;
+			--bg: #1a1022;
+			--fg: #f6ecf4;
+			--muted: #9f90bf;
+			--faint: #8677a8;
+			--rule: #2c1d3a;
+			--panel: #241530;
+			--edge: #3d2a5e;
+			--accent: #e9b6a6;
+			--accent-fg: #2a1030;
+			--pink: #ff7bc8;
+			--hl: #5c3f45;
+			--nick-a: oklch(0.8 0.13 300);
+			--nick-b: oklch(0.8 0.13 350);
+			--nick-c: oklch(0.8 0.13 80);
+			--nick-d: oklch(0.8 0.13 20);
+			--sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+		}
+		body {
+			background: var(--page);
+			color: var(--fg);
+			font-family: var(--sans);
+			font-size: 15px;
+			margin: 0;
+			padding-block: 24px 48px;
+			padding-left: max(16px, env(safe-area-inset-left, 0px));
+			padding-right: max(16px, env(safe-area-inset-right, 0px));
+		}
+		.wrap {
+			max-width: 72rem;
+			margin: 0 auto;
+			display: grid;
+			gap: 1.25rem;
+		}
+		h1 {
+			margin: 0;
+			font-size: 1.375rem;
+			font-weight: 700;
+			text-wrap: balance;
+		}
+		.lede {
+			margin: 0.25rem 0 0;
+			color: var(--muted);
+			max-width: 44rem;
+			line-height: 1.5;
+		}
+
+		.controls {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.75rem 1.25rem;
+			align-items: center;
+		}
+		.seg {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.375rem;
+		}
+		.seg button {
+			font: inherit;
+			font-size: 0.875rem;
+			color: var(--fg);
+			background: var(--panel);
+			border: 1px solid var(--rule);
+			border-radius: 999px;
+			padding: 0.375rem 0.875rem;
+			cursor: pointer;
+		}
+		.seg button[aria-pressed="true"] {
+			background: var(--accent);
+			color: var(--accent-fg);
+			border-color: var(--accent);
+			font-weight: 600;
+		}
+		.seg button:focus-visible {
+			outline: 2px solid var(--accent);
+			outline-offset: 2px;
+		}
+		.seg.small button {
+			font-size: 0.8125rem;
+			padding: 0.25rem 0.75rem;
+		}
+		.ctl-label {
+			color: var(--muted);
+			font-size: 0.8125rem;
+			margin-inline-end: 0.25rem;
+		}
+		.ctl {
+			display: flex;
+			align-items: center;
+			gap: 0.25rem;
+			flex-wrap: wrap;
+		}
+
+		.desc {
+			border: 1px solid var(--rule);
+			border-radius: 0.5rem;
+			background: var(--bg);
+			padding: 0.875rem 1rem;
+			line-height: 1.5;
+			max-width: 52rem;
+		}
+		.desc b {
+			color: var(--accent);
+		}
+		.desc p {
+			margin: 0.25rem 0 0;
+			color: var(--muted);
+		}
+
+		.frames {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 1.5rem;
+			align-items: flex-start;
+		}
+		.frame {
+			display: grid;
+			gap: 0.5rem;
+			min-width: 0;
+		}
+		.frame-label {
+			color: var(--faint);
+			font-size: 0.75rem;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			font-weight: 600;
+		}
+		.pane {
+			background: var(--bg);
+			border: 1px solid var(--rule);
+			border-radius: 0.5rem;
+			overflow: hidden;
+			min-width: 0;
+		}
+		.pane.desktop {
+			width: 30rem;
+			max-width: 100%;
+		}
+		.pane.phone {
+			width: 24.375rem;
+			max-width: 100%;
+			border-radius: 1.25rem;
+		}
+
+		.bar {
+			padding: 0.875rem 0.875rem 0.75rem;
+			border-bottom: 1px solid var(--rule);
+			display: grid;
+			gap: 0.625rem;
+		}
+		.field {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			border: 2px solid var(--accent);
+			border-radius: 0.625rem;
+			padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+		}
+		.field .q {
+			flex: 1;
+			min-width: 0;
+		}
+		.field .btn {
+			border: 1px solid var(--edge);
+			border-radius: 0.375rem;
+			padding: 0.25rem 0.75rem;
+			font-size: 0.875rem;
+			background: var(--panel);
+		}
+		.chips {
+			display: flex;
+			gap: 0.5rem;
+			flex-wrap: wrap;
+		}
+		.chip {
+			border: 1px solid var(--edge);
+			border-radius: 999px;
+			padding: 0.25rem 0.75rem;
+			font-size: 0.8125rem;
+			color: var(--muted);
+		}
+		.chip b {
+			color: var(--fg);
+			font-weight: 600;
+		}
+
+		.list {
+			padding-bottom: 0.25rem;
+		}
+		.day {
+			padding: 0.875rem 0.75rem 0.25rem;
+			color: var(--muted);
+			font-size: 0.75rem;
+			font-weight: 600;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+		}
+		.hit {
+			padding: 0.5rem 0.75rem;
+		}
+		.hit:hover {
+			background: var(--panel);
+		}
+		.meta {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: baseline;
+			gap: 0 0.5rem;
+			min-width: 0;
+		}
+		.nick {
+			font-weight: 500;
+		}
+		.chan,
+		.dim {
+			color: var(--muted);
+			font-size: 0.8125rem;
+		}
+		.time {
+			color: var(--muted);
+			font-size: 0.8125rem;
+			font-variant-numeric: tabular-nums;
+			white-space: nowrap;
+		}
+		.time .d {
+			color: var(--fg);
+			opacity: 0.82;
+		}
+		.time.mono {
+			font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+			font-size: 0.78rem;
+		}
+		.time.end {
+			margin-inline-start: auto;
+		}
+		.text {
+			line-height: 1.45;
+			overflow-wrap: anywhere;
+		}
+		mark {
+			background: var(--hl);
+			color: inherit;
+			border-radius: 2px;
+		}
+		.status {
+			border-top: 1px solid var(--rule);
+			margin-top: 0.5rem;
+			padding: 0.75rem;
+			font-size: 0.8125rem;
+		}
+		.status .dim {
+			margin-inline-start: 0.25rem;
+		}
+
+		.foot {
+			color: var(--faint);
+			font-size: 0.8125rem;
+			line-height: 1.5;
+			max-width: 52rem;
+		}
+	</style>
+
+	<div class="wrap">
+		<header>
+			<h1>Search result dates</h1>
+			<p class="lede">
+				Four ways to put the date next to each search hit's time, so a row says when it was
+				sent without looking up at the day header. Sample results for "mirror"; pretend it's
+				Friday, Nov 6, 2026, mid-afternoon. Drawn in the keeki theme. Pick an option and say
+				which reads best.
+			</p>
+		</header>
+
+		<div class="controls">
+			<div class="seg" id="opts" role="group" aria-label="Option"></div>
+			<div class="ctl">
+				<span class="ctl-label">Clock</span>
+				<div class="seg small" id="clock" role="group" aria-label="Clock">
+					<button type="button" data-v="12" aria-pressed="true">12-hour</button>
+					<button type="button" data-v="24" aria-pressed="false">24-hour</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="desc" id="desc"></div>
+
+		<div class="frames">
+			<div class="frame">
+				<span class="frame-label">Desktop side pane</span>
+				<div class="pane desktop" id="desk"></div>
+			</div>
+			<div class="frame">
+				<span class="frame-label">Phone</span>
+				<div class="pane phone" id="phone"></div>
+			</div>
+		</div>
+
+		<p class="foot">
+			In the current build a row shows only the time, and the date lives in the day header
+			above it. Every option keeps the clock setting (12/24-hour, seconds) the user already
+			chose, and every date follows the interface language.
+		</p>
+	</div>
+
+	<script>
+		const NOW = new Date(2026, 10, 6, 15, 50);
+		const H = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi);
+		const HITS = [
+			{
+				nick: "moria",
+				c: "a",
+				chan: "moria",
+				t: H(2026, 11, 6, 14, 47),
+				text: "the <mark>mirror</mark> in the query",
+			},
+			{
+				nick: "moria",
+				c: "a",
+				chan: "#seance",
+				t: H(2026, 11, 6, 2, 23),
+				text: "the new channel theme renders <mark>mirror</mark>ed under the pseudo locale",
+			},
+			{
+				nick: "ps",
+				c: "b",
+				chan: "#afternet",
+				t: H(2026, 11, 5, 22, 8),
+				text: "is the irc.afternet.org <mark>mirror</mark> still behind?",
+			},
+			{
+				nick: "Gwen",
+				c: "c",
+				chan: "#seance",
+				t: H(2026, 11, 3, 9, 41),
+				text: "<mark>mirror</mark> the topic into the window title, maybe",
+			},
+			{
+				nick: "rdrake",
+				c: "d",
+				chan: "#afternet-ops",
+				t: H(2026, 10, 19, 18, 2),
+				text: "debian <mark>mirror</mark> swap is done on the hub",
+			},
+			{
+				nick: "ps",
+				c: "b",
+				chan: "#afternet",
+				t: H(2025, 12, 30, 21, 14),
+				text: "anyone got a <mark>mirror</mark> of the old services docs?",
+			},
+		];
+
+		let clock12 = true;
+		const tf = () =>
+			new Intl.DateTimeFormat("en-US", {
+				hour: "numeric",
+				minute: "2-digit",
+				hour12: clock12,
+				...(clock12 ? {} : {hourCycle: "h23"}),
+			});
+		const time = (d) => tf().format(d);
+		const sameYear = (d) => d.getFullYear() === NOW.getFullYear();
+		const short = (d) =>
+			new Intl.DateTimeFormat("en-US", {
+				month: "short",
+				day: "numeric",
+				...(sameYear(d) ? {} : {year: "numeric"}),
+			}).format(d);
+		const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+		const daysAgo = (d) => Math.round((startOf(NOW) - startOf(d)) / 86400000);
+		const weekday = (d) => new Intl.DateTimeFormat("en-US", {weekday: "short"}).format(d);
+		const pad = (n) => String(n).padStart(2, "0");
+		const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+		const hhmm = (d) => (clock12 ? time(d) : `${pad(d.getHours())}:${pad(d.getMinutes())}`);
+
+		function dayHeader(d) {
+			const n = daysAgo(d);
+			return n === 0 ? "Today" : n === 1 ? "Yesterday" : short(d);
+		}
+
+		const OPTIONS = {
+			A: {
+				name: "A · Date, then time",
+				what: "Every row reads <b>Nov 6, 2:47 PM</b>. The year shows only when it isn't this year. Day headers stay.",
+				why: "The plainest fix: the same text whatever day it is, so a screenshot or a copied row still makes sense later.",
+				headers: true,
+				stamp: (d) => `<span class="d">${short(d)}</span>, ${time(d)}`,
+			},
+			B: {
+				name: "B · Today / Yesterday / date",
+				what: "Rows read <b>Today 2:47 PM</b>, <b>Yesterday 10:08 PM</b>, <b>Tue 9:41 AM</b> within the week, then <b>Oct 19, 6:02 PM</b>. Day headers stay.",
+				why: "Friendlier for recent hits, and matches how the inbox already words its times. Weekday names only for the last six days.",
+				headers: true,
+				stamp: (d) => {
+					const n = daysAgo(d);
+					const day =
+						n === 0
+							? "Today"
+							: n === 1
+							? "Yesterday"
+							: n < 7
+							? weekday(d)
+							: short(d) + ",";
+					return `<span class="d">${day}</span> ${time(d)}`;
+				},
+			},
+			C: {
+				name: "C · Date at the row's end, no headers",
+				what: "Day headers go away. Each row carries <b>Nov 6, 2:47 PM</b> at its far edge, like a mail inbox.",
+				why: "One place to look for when, and the list gets a little denser. On a phone, a long nick and channel push the stamp onto its own line.",
+				headers: false,
+				end: true,
+				stamp: (d) => `<span class="d">${short(d)}</span>, ${time(d)}`,
+			},
+			D: {
+				name: "D · Log style",
+				what: "Rows read <b>2026-11-06 14:47</b> in a fixed-width face, the way IRC log files stamp lines. Day headers stay.",
+				why: "Unambiguous and easy to grep or paste into a bug report. Follows the 12/24-hour setting but always shows the full date.",
+				headers: true,
+				mono: true,
+				stamp: (d) => `<span class="d">${iso(d)}</span> ${hhmm(d)}`,
+			},
+		};
+
+		let current = "A";
+
+		function pane(o, phone) {
+			const sorted = [...HITS].sort((a, b) => b.t - a.t);
+			let rows = "";
+			let last = null;
+			for (const h of sorted) {
+				const label = dayHeader(h.t);
+				if (o.headers && label !== last) {
+					rows += `<div class="day">${label}</div>`;
+					last = label;
+				}
+				const cls = ["time", o.mono ? "mono" : "", o.end ? "end" : ""].join(" ");
+				rows += `<div class="hit"><div class="meta"><span class="nick" style="color:var(--nick-${
+					h.c
+				})">${h.nick}</span><span class="chan">${
+					h.chan
+				}</span><span class="${cls}">${o.stamp(h.t)}</span></div><div class="text">${
+					h.text
+				}</div></div>`;
+			}
+			const oldest = sorted[sorted.length - 1].t;
+			return `<div class="bar">
+		<div class="field"><span aria-hidden="true">⌕</span><span class="q">mirror</span><span class="btn">Search</span>${
+			phone ? "" : ""
+		}</div>
+		<div class="chips"><span class="chip"># In <b>all my channels</b></span><span class="chip">Filters</span></div>
+	</div>
+	<div class="list">${rows}
+		<div class="status">${sorted.length} matches<span class="dim">· back to ${short(oldest)}, ${time(
+				oldest
+			)}</span></div>
+	</div>`;
+		}
+
+		function render() {
+			const o = OPTIONS[current];
+			document.getElementById("desc").innerHTML = `<div>${o.what}</div><p>${o.why}</p>`;
+			document.getElementById("desk").innerHTML = pane(o, false);
+			document.getElementById("phone").innerHTML = pane(o, true);
+			for (const b of document.querySelectorAll("#opts button"))
+				b.setAttribute("aria-pressed", String(b.dataset.v === current));
+			for (const b of document.querySelectorAll("#clock button"))
+				b.setAttribute("aria-pressed", String((b.dataset.v === "12") === clock12));
+		}
+
+		const opts = document.getElementById("opts");
+		for (const [k, o] of Object.entries(OPTIONS)) {
+			const b = document.createElement("button");
+			b.type = "button";
+			b.dataset.v = k;
+			b.textContent = o.name;
+			b.addEventListener("click", () => {
+				current = k;
+				try {
+					location.hash = k;
+				} catch {}
+				render();
+			});
+			opts.append(b);
+		}
+		for (const b of document.querySelectorAll("#clock button"))
+			b.addEventListener("click", () => {
+				clock12 = b.dataset.v === "12";
+				render();
+			});
+
+		const fromHash = () => {
+			const h = location.hash.slice(1);
+			if (OPTIONS[h]) current = h;
+		};
+		fromHash();
+		window.addEventListener("hashchange", () => {
+			fromHash();
+			render();
+		});
+		render();
+	</script>
+</html>
