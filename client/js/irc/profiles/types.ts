@@ -95,10 +95,20 @@ export interface StatsEntry {
 	description: string;
 }
 
+/** What a channel ban that is not a plain address means, in the reader's words. */
+export interface BanMeaning {
+	/** The Bans window's filter it falls under. */
+	kind: "account" | "other";
+	/** A short tag on its row. */
+	label: string;
+}
+
 export interface ServerProfile {
 	id: string;
 	/** Display name (`nefarious2`). */
 	name: string;
+	/** The server's extended ban syntax read back; undefined for a plain mask. */
+	describeBan?: (mask: string) => BanMeaning | undefined;
 	snomask?: SnomaskModel;
 	/** Every notice kind the classifier can produce, with its default route. */
 	noticeKinds: NoticeKind[];
