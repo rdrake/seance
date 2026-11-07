@@ -15315,6 +15315,12 @@ msgctxt "translate.sheet.choose"
 msgid "Choose…"
 msgstr ""
 
+#. Tooltip and aria-label of the ✕ button that closes the composer's language sheet without changing anything.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.close"
+msgid "Close"
+msgstr ""
+
 #. Status beside the language the user writes in, in the language sheet's 'They read' list: picking it corrects spelling and grammar rather than translating. Short.
 #: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.sheet.corrects"
@@ -15351,10 +15357,11 @@ msgctxt "translate.sheet.noMatch"
 msgid "No language matches “{query}”."
 msgstr ""
 
-#. Shortcut button in the language sheet: stop translating the user's messages in this channel.
+#. Button in the language sheet's header, shown while the user's messages in this channel are being translated: stop translating them.
 #: client/components/ComposerLanguageSheet.vue
+#, fuzzy
 msgctxt "translate.sheet.off"
-msgid "Off"
+msgid "Turn off"
 msgstr ""
 
 #. Heading over shortcut buttons in the language sheet: the languages people wrote in most in this channel recently. {channel} is the channel's name, e.g. #linux.
@@ -15387,10 +15394,16 @@ msgctxt "translate.sheet.thisMessageOnly"
 msgid "This message only"
 msgstr ""
 
-#. Status beside a language in the language sheet that nothing on this device can translate into from the language the user writes. Short.
+#. Heading of the language sheet the composer's translate button opens: the language the user's messages are translated into before they are sent.
 #: client/components/ComposerLanguageSheet.vue
-msgctxt "translate.sheet.unavailable"
-msgid "Not available here"
+msgctxt "translate.sheet.title"
+msgid "Send my messages in"
+msgstr ""
+
+#. Heading over the languages at the end of the language sheet's list that nothing on this device can translate into from the language the user writes. Tapping one shows why.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.unavailableHeading"
+msgid "Not available on this device"
 msgstr ""
 
 #. Text of the second row of the composer's translation strip when translating the translation back into the user's own language failed.

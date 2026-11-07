@@ -12,6 +12,21 @@
 			:aria-label="t('translate.sheet.dialog')"
 			@keydown.esc.stop.prevent="close"
 		>
+			<div class="language-sheet-head">
+				<span class="language-sheet-title">{{ t("translate.sheet.title") }}</span>
+				<button v-if="target" type="button" class="language-sheet-off" @click="turnOff">
+					{{ t("translate.sheet.off") }}
+				</button>
+				<button
+					type="button"
+					class="language-sheet-close"
+					:aria-label="t('translate.sheet.close')"
+					:title="t('translate.sheet.close')"
+					@click="close"
+				>
+					✕
+				</button>
+			</div>
 			<!-- The pair: which side the list below fills in. -->
 			<div class="language-sheet-pair">
 				<button
@@ -55,8 +70,8 @@
 					}}</span>
 				</button>
 			</div>
-			<div v-if="recent.length || (side === 'to' && target)" class="language-sheet-recent">
-				<span v-if="recent.length" class="language-sheet-recent-label">{{
+			<div v-if="recent.length" class="language-sheet-recent">
+				<span class="language-sheet-recent-label">{{
 					t("translate.sheet.recent", {channel: channel.name})
 				}}</span>
 				<div class="language-sheet-chips">
@@ -69,14 +84,6 @@
 						@click="choose(code)"
 					>
 						{{ name(code) }}
-					</button>
-					<button
-						v-if="side === 'to' && target"
-						type="button"
-						class="language-sheet-chip language-sheet-off"
-						@click="turnOff"
-					>
-						{{ t("translate.sheet.off") }}
 					</button>
 				</div>
 			</div>
@@ -110,7 +117,34 @@
 						>
 					</button>
 				</li>
-				<li v-for="row in rows" :key="row.code">
+				<li v-for="row in usable" :key="row.code">
+					<button
+						type="button"
+						class="language-sheet-row"
+						:class="{blocked: row.blocked, pending: row.pending}"
+						:aria-current="row.selected ? 'true' : undefined"
+						:data-code="row.code"
+						:title="row.why || undefined"
+						@click="choose(row.code)"
+					>
+						<span class="language-sheet-name">{{ row.name }}</span>
+						<span v-if="row.endonym" class="language-sheet-endonym" :lang="row.code">{{
+							row.endonym
+						}}</span>
+						<span v-if="row.status" class="language-sheet-status">{{
+							row.status
+						}}</span>
+						<span v-if="row.selected" class="language-sheet-check" aria-hidden="true"
+							>✓</span
+						>
+					</button>
+				</li>
+				<!-- What cannot run here goes last, under one heading rather than
+				     a "not available" on every row; a tap still says why. -->
+				<li v-if="unusable.length" class="language-sheet-section">
+					{{ t("translate.sheet.unavailableHeading") }}
+				</li>
+				<li v-for="row in unusable" :key="row.code">
 					<button
 						type="button"
 						class="language-sheet-row"
@@ -290,7 +324,7 @@ export default defineComponent({
 
 					if (!verdict?.route) {
 						row.blocked = true;
-						row.status = t("translate.sheet.unavailable");
+						row.status = "";
 						row.why = verdict ? translateWhyText(verdict.why, liveLlmName()) : "";
 						return row;
 					}
@@ -306,6 +340,9 @@ export default defineComponent({
 					return row;
 				});
 		});
+
+		const usable = computed(() => rows.value.filter((row) => !row.blocked));
+		const unusable = computed(() => rows.value.filter((row) => row.blocked));
 
 		// The tapped "They read" language that cannot run: the reason, as
 		// the retranslate dialog gives it.
@@ -539,6 +576,8 @@ export default defineComponent({
 			sideLabel,
 			recent,
 			rows,
+			usable,
+			unusable,
 			blockedLead,
 			blockedWhy,
 			phone,
