@@ -54,7 +54,7 @@ export function tagPrefix(tags: ClientTags | undefined): string {
  * text needs it; for free-text parameters (realname, reasons, message
  * bodies) the explicit form is what every other client sends and what
  * humans reading a transcript expect. `tags` (client tags such as
- * `+draft/reply`) are escaped and prepended as `@a=b;c=d `.
+ * `+reply`) are escaped and prepended as `@a=b;c=d `.
  */
 export function trailingLine(command: string, params: string[], tags?: ClientTags): string {
 	if (params.length === 0) {

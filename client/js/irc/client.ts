@@ -1744,7 +1744,7 @@ export class IrcClient {
 	sendMessage(target: string, text: string, opts: SendMessageOptions = {}) {
 		if (!this.caps.hasCapability("message-tags") && (opts.tags || opts.firstTags)) {
 			// Client tags (a reply, an edit) need `message-tags`: a server
-			// without it would read `@+draft/reply=…` as the command and the
+			// without it would read `@+reply=…` as the command and the
 			// message would be lost. It goes out plain instead.
 			opts = {...opts, tags: undefined, firstTags: undefined};
 		}
@@ -1960,7 +1960,8 @@ export class IrcClient {
 
 	/**
 	 * React to (or, with `remove`, take a reaction off) the message `msgid`
-	 * in `chan`: `@+draft/react=<text>;+draft/reply=<msgid> TAGMSG` (bus-contract §1.4).
+	 * in `chan`: `@+draft/react=<text>;+reply=<msgid>;+draft/reply=<msgid> TAGMSG`
+	 * (bus-contract §1.4).
 	 */
 	react(chan: Channel, msgid: string, text: string, remove = false): boolean {
 		if (!this.caps.hasCapability("message-tags")) {
