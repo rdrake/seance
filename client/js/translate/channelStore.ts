@@ -39,6 +39,11 @@ export interface ChannelTranslation {
 	read: boolean;
 	/** Outgoing target (plan 3) or null. */
 	write: string | null;
+	/**
+	 * The language the user said they write in when they set the target
+	 * (the composer dialog's "Translate from"); null: detect each draft.
+	 */
+	writeFrom: string | null;
 	formality: Formality;
 	/** Free text for the prompt, e.g. "Brazilian Portuguese". */
 	variant: string;
@@ -85,6 +90,7 @@ export function defaultChannelTranslation(): ChannelTranslation {
 	return {
 		read: false,
 		write: null,
+		writeFrom: null,
 		formality: "auto",
 		variant: "",
 		languages: [],
@@ -172,6 +178,8 @@ function sanitize(value: unknown): ChannelTranslation | null {
 	out.read = Boolean(raw.read);
 	out.write = typeof raw.write === "string" && isSupported(raw.write) ? raw.write : null;
 	out.once = typeof raw.once === "string" && isSupported(raw.once) ? raw.once : null;
+	out.writeFrom =
+		typeof raw.writeFrom === "string" && isSupported(raw.writeFrom) ? raw.writeFrom : null;
 	out.formality = isFormality(raw.formality) ? raw.formality : "auto";
 	out.variant = typeof raw.variant === "string" ? raw.variant : "";
 	out.languages = languagesOf(raw.languages);

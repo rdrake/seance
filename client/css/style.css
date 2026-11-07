@@ -6864,6 +6864,28 @@ html[data-shell="native"] :is(.screen-overlay, .network-form-embedded, .window:h
 	color: var(--chat-accent, var(--link-color));
 }
 
+/* With a send target the button names it ("EN → PT") in place of the
+ * glyph: the direction is always in view, and the placeholder no longer
+ * has to carry it. */
+#form #translate-once.on {
+	width: auto;
+	min-width: 2.25rem;
+	padding: 0 0.5rem;
+	border: 1px solid var(--chat-accent-rule, var(--link-color));
+	border-radius: 1.125rem;
+}
+
+#form #translate-once.on::before {
+	content: none;
+}
+
+#form .translate-once-target {
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+}
+
 .header-popover-container,
 #context-menu-container {
 	position: absolute;
@@ -8230,17 +8252,20 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	font-size: 0.95em;
 }
 
+/* "from Portuguese": a quiet line under the translation rather than a
+ * boxed label in front of it; still the button for the line's options. */
 #chat .msg-translation-chip {
-	flex: none;
-	padding: 0 0.3em;
-	border: 1px solid var(--chat-accent-rule, var(--link-color));
+	flex: 0 0 100%;
+	order: 1;
+	padding: 0;
+	border: 0;
 	border-radius: 0.2rem;
 	background: transparent;
-	color: var(--chat-accent, var(--link-color));
+	color: var(--body-color-muted);
 	font: inherit;
-	font-size: 0.7em;
+	font-size: 0.75em;
 	line-height: 1.5;
-	letter-spacing: 0.05em;
+	text-align: start;
 	cursor: pointer;
 }
 
@@ -9357,8 +9382,7 @@ html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
 	line-height: 1.5;
 }
 
-/* Narrow panes: the chip and the text share the first line and the three
- * buttons drop to a line of their own, rather than each wrapping alone. */
+/* The label on a line of its own, then the text with Copy beside it. */
 #form .translate-bar-row {
 	display: flex;
 	flex-wrap: wrap;
@@ -9374,23 +9398,35 @@ html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
 	margin-inline-start: auto;
 }
 
+/* "Will send": a label over the line, in the accent, not a boxed chip. */
 #form .translate-bar-chip {
-	flex: none;
-	padding: 0 0.3em;
-	border: 1px solid var(--chat-accent-rule, var(--link-color));
-	border-radius: 0.2rem;
+	flex: 0 0 100%;
 	color: var(--chat-accent, var(--link-color));
-	font-size: 0.7em;
-	line-height: 1.5;
-	letter-spacing: 0.05em;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	line-height: 1.4;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	white-space: nowrap;
+}
+
+/* The previous preview while the draft changes under it. */
+#form .translate-bar-stale {
+	opacity: 0.55;
+}
+
+#form .translate-bar-queued {
+	margin: 0;
+	color: var(--body-color-muted);
+	font-size: 0.75rem;
+	font-style: italic;
 }
 
 /* Both rows of the strip: the translation about to be sent, and the
    read-back under it. `body` is `user-select: none`, so without this the
    line the user is being asked to approve cannot be selected or copied. */
 #form .translate-bar-text {
-	flex: 1 1 12rem;
+	flex: 1 1 0;
 	min-width: 0;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -9436,7 +9472,7 @@ html[data-reduce-motion] #form .translate-bar-caret {
 	width: 2rem;
 	height: 2rem;
 	padding: 0;
-	border: 1px solid var(--chat-accent-rule, var(--link-color));
+	border: 0;
 	border-radius: 0.1875rem;
 	background: transparent;
 	color: var(--chat-accent, var(--link-color));
@@ -9453,31 +9489,12 @@ html[data-reduce-motion] #form .translate-bar-caret {
 #form .translate-bar-copy::before { content: "\f0c5"; /* https://fontawesome.com/icons/copy?style=solid */ }
 #form .translate-bar-copy-done::before { content: "\f00c"; /* https://fontawesome.com/icons/check?style=solid */ }
 
-#form .translate-bar-send::before { content: "\f1d8"; /* https://fontawesome.com/icons/paper-plane?style=solid */ }
-#form .translate-bar-edit::before { content: "\f303"; /* https://fontawesome.com/icons/pencil-alt?style=solid */ }
-
 #form .translate-bar-button:hover,
 #form .translate-bar-button:focus-visible {
 	background: var(--accent-tint-20, rgb(128 128 128 / 15%));
 	outline: 0;
 }
 
-#form .translate-bar-send {
-	border-color: var(--chat-accent, var(--link-color));
-	background: var(--chat-accent, var(--link-color));
-	color: var(--chat-accent-fg, #fff);
-}
-
-#form .translate-bar-send:hover,
-#form .translate-bar-send:focus-visible {
-	background: var(--chat-accent, var(--link-color));
-	opacity: 0.85;
-}
-
-#form .translate-bar-button[disabled] {
-	opacity: 0.5;
-	cursor: default;
-}
 
 #form .translate-bar-check {
 	color: var(--body-color-muted);
@@ -9486,7 +9503,10 @@ html[data-reduce-motion] #form .translate-bar-caret {
 
 #form .translate-bar-check-label {
 	flex: 0 0 auto;
-	font-style: italic;
+}
+
+#form .translate-bar-check-label::after {
+	content: ":";
 }
 
 /* The upload in flight: a row of its own above the input, like .compose-bar */
