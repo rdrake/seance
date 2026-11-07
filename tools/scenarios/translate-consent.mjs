@@ -11,9 +11,10 @@
 // fails with "Needs <model>, a <size> download: get it in Settings →
 // Translation." without a question (the page's connection reports Save-Data,
 // and the question says so); its Retry asks again, Download is
-// remembered, and the line is translated on the GPU model. Under --mobile
-// reading is switched on in the full-screen sheet, and the question has to
-// come up over it (ConfirmDialog's overlay outranks the sheet). A real
+// remembered, and the line is translated on the GPU model. Reading is
+// switched on in the channel menu's translation panel, and the question has
+// to come up over it (ConfirmDialog's overlay outranks the panel; under
+// --mobile the panel is the whole chat). A real
 // browser's dialog, a scripted engine: translate-capability.mjs asks the
 // same of the real worker, which has nothing on the device to fall back to.
 //
@@ -26,7 +27,12 @@
 // unset for the build: a production build compiles the fake out.
 
 import {readFileSync} from "node:fs";
-import {TRANSLATION_ON} from "./lib/translation.mjs";
+import {
+	TRANSLATION_ON,
+	TRANSLATION_OFFERED,
+	closeTranslationPanel,
+	openTranslationPanel,
+} from "./lib/translation.mjs";
 
 const RUN = Date.now().toString(36);
 const NICK = `cn${RUN}`;
@@ -35,8 +41,6 @@ const CHANNEL = "#seance-consent";
 const IRCD = process.env.SEANCE_IRC_WS || "ws://127.0.0.1:8067/";
 const BASE = process.env.SEANCE_HTTP ?? "http://localhost:8021/";
 const EN = JSON.parse(readFileSync("client/locales/en.json", "utf8"));
-const MOBILE = process.argv.includes("--mobile");
-const GLOBE = "#chat button.translate";
 const OPUS_IT = "Xenova/opus-mt-it-en";
 const REQUESTS = `((window.__seanceTranslateFake && window.__seanceTranslateFake.requests) || [])`;
 const OPEN = `!!document.querySelector("#confirm-dialog-overlay.opened")`;
@@ -93,9 +97,9 @@ export default async function run(page) {
 		timeout: 20000,
 		label: "chat input up",
 	});
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(GLOBE)})`, {
+	await page.waitFor(TRANSLATION_OFFERED, {
 		timeout: 10000,
-		label: "the translate button, once the probe answered",
+		label: "translation offered, once the probe answered",
 	});
 	// Every question the dialog is opened with, from now on: the overlay
 	// stays in the page and takes "opened" while one is up.
@@ -162,16 +166,10 @@ export default async function run(page) {
 		}
 	);
 
-	await page.click(GLOBE);
-
-	if (MOBILE) {
-		await page.waitFor(`!!document.querySelector(".translation-panel")`, {
-			label: "the tap opened the panel",
-		});
-		await page.evaluate(
-			`(() => { for (const s of document.querySelectorAll('.translation-panel-segmented .translation-panel-segment')) { if (s.textContent.trim() === "On") { s.click(); return; } } throw new Error("no reading segment"); })()`
-		);
-	}
+	await openTranslationPanel(page);
+	await page.evaluate(
+		`(() => { for (const s of document.querySelectorAll('.translation-panel-segmented .translation-panel-segment')) { if (s.textContent.trim() === "On") { s.click(); return; } } throw new Error("no reading segment"); })()`
+	);
 
 	await page.waitFor(OPEN, {label: "the download question", timeout: 20000});
 	await page.sleep(1500);
@@ -203,13 +201,8 @@ export default async function run(page) {
 	});
 	await page.click("#confirm-dialog .btn-cancel");
 
-	// The question came over the sheet the switch was thrown in; put it away.
-	if (MOBILE) {
-		await page.evaluate(`document.querySelector(".translation-panel-close").click()`);
-		await page.waitFor(`!document.querySelector(".translation-panel")`, {
-			label: "the sheet put away",
-		});
-	}
+	// The question came over the panel the switch was thrown in; put it away.
+	await closeTranslationPanel(page);
 
 	// Not now: the downloaded pair takes every line.
 	await page.waitFor(
