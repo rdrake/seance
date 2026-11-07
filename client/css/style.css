@@ -9670,17 +9670,14 @@ html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
 	 * viewport helpers/viewport.ts publishes (px, touch devices only). */
 	max-height: calc(var(--viewport-height, 100vh) * 0.4);
 	overflow: auto;
-	margin: 0 0.25rem 0.125rem;
-	padding: 0.125rem 0.375rem;
-	border-inline-start: 2px solid var(--chat-accent, var(--link-color));
-	background: var(--accent-tint-20, rgb(128 128 128 / 15%));
+	margin: 0 0.25rem 0.25rem;
+	padding: 0 0.5rem;
 
-	/* Square against its own accent rule, rounded away from it. */
-	border-start-end-radius: 0.1875rem;
-	border-end-end-radius: 0.1875rem;
+	/* Subtle: a thin rule and the text, no filled box over the composer. */
+	border-inline-start: 2px solid rgb(128 128 128 / 40%);
 	color: var(--body-color);
-	font-size: 0.875rem;
-	line-height: 1.5;
+	font-size: 0.8125rem;
+	line-height: 1.45;
 }
 
 /* The label on a line of its own, then the text with Copy beside it. */
@@ -9702,9 +9699,9 @@ html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
 /* "Will send in German": a label over the line, in the accent, not a boxed chip. */
 #form .translate-bar-chip {
 	flex: 0 0 100%;
-	color: var(--chat-accent, var(--link-color));
+	color: var(--body-color-muted);
 	font-size: 0.6875rem;
-	font-weight: 600;
+	font-weight: normal;
 	line-height: 1.4;
 	letter-spacing: 0.02em;
 	white-space: nowrap;
@@ -9821,8 +9818,8 @@ html[data-reduce-motion] #form .translate-bar-caret {
 	border: 0;
 	border-radius: 0.1875rem;
 	background: transparent;
-	color: var(--chat-accent, var(--link-color));
-	font-size: 0.9375rem;
+	color: var(--body-color-muted);
+	font-size: 0.8125rem;
 	cursor: pointer;
 }
 
@@ -9844,7 +9841,8 @@ html[data-reduce-motion] #form .translate-bar-caret {
 
 #form .translate-bar-check {
 	color: var(--body-color-muted);
-	font-size: 0.8125rem;
+	font-size: 0.75rem;
+	opacity: 0.85;
 }
 
 #form .translate-bar-check-label {
