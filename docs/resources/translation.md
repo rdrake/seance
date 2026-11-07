@@ -915,7 +915,7 @@ did complete and the next line may well be one it can do. The line keeps
 its chip and its Retry.
 
 **The detector is shown prose and nothing else.** Every detection site --
-the reader's, the toolbar's Translate, the chip's "Translate anyway" and
+the reader's, the toolbar's Translate, the chip's Retranslate and
 "Retry", and the composer's draft -- passes the line through
 `eligibility.ts` `plainTextOf` first, which is also what the word count
 behind eligibility measures. Gone before the detector sees it: the IRC
@@ -1033,30 +1033,20 @@ prompt. Without it a weak line would be unroutable on a CPU-only device --
 which would mean no translation where there used to be a wrong one. The
 composer has the same split (`outgoing.ts` `sourceHintFor`).
 
-**A failure is worded in the reader's language, and `unchanged` barely
-speaks at all.** The failed row's frame and its known reasons are catalog
+**A failure is worded in the reader's language, and `unchanged` does not
+speak at all.** The failed row's frame and its known reasons are catalog
 keys now -- "Couldn't translate" (`translate.failed`), and the reason
 constants (`ANSWERED`, `NARRATION`, `DEGENERATE`) each have a key of their
 own (`translate.reason.*`); an unknown engine error keeps its verbatim text
 in the title (server and technical text is never translated). The
 `unchanged` verdict -- the model handed the line back, which as often as
-not means there was nothing to translate -- drops the prose row for a
-compact chip: the `fa-equals` glyph carrying the translated "Not
-translated" as its tooltip and accessible name, wearing the same accent
-style as every other translation chip and opening the failed row's menu
-minus Copy (Retranslate, the per-candidate "Retranslate from
-`<Language>`", "Retranslate from...", Show original only -- there is no
-translation to copy). Production builds render the icon alone; a
-development build appends the reason ("the line came back unchanged") after
-it (`devtoolsAvailable`). The line itself is the one to read, since there is
-no translation row to be the bright line, so its original takes the
-translation's ink (`Message.vue` `unchanged`, `#chat .msg.unchanged .content`).
-**Not on the user's own line**: there an unchanged verdict shows nothing
-and the line keeps the own-line dimming (`TranslationLine.vue` `ownEcho`)
--- they wrote it, and a "=" under "Yeah?" with "sent in Polish" beside it
-was noise. A detection skip is not this either; its original keeps
-whatever ink it had. Browser check: `tools/scenarios/translation-chips.mjs`,
-which puts the verdict on someone else's line and on the page's own.
+not means there was nothing to translate -- renders nothing under the
+message, on anyone's line or the user's own (`TranslationLine.vue`'s
+`v-if`): the line is the one to read, and a "=" chip under every "Lol"
+the detector misplaced was noise (it was shown until 2026-11). The entry
+stays in the store as `failed`, so the toolbar's Translate still offers the
+line. Browser check: `tools/scenarios/translation-chips.mjs`, which puts the
+verdict on someone else's line and on the page's own.
 
 **A line the detector cannot place still translates, unless it could be
 the reading language.** `detect.ts` `detectionSkip` decides: a line placed
@@ -1095,27 +1085,21 @@ stands); a switch-off or a fresh read (`requeueReading`) drops the entry
 `tools/scenarios/translate-reading.mjs` (the speaker sets a German topic
 before the switch-on and another after).
 
-**A line it could not place is marked; one in the reading language is
-not.** Every line detection skips gets a store entry of its own --
-`status: "skipped"`, `reason` `same` (with `from` the reading language) or
-`unsure` (with the candidates kept). `TranslationLine.vue` renders an
-`unsure` one as a small "?" chip after the message
-(`.msg-translation-skipped-tag`, the same accent style as the `lang → lang`
-chip); no text row, no caret, and the original keeps its ink. A `same`
-line shows nothing at all: in a channel that writes the reading language
-an "English" mark on every line was noise (it was shown until 2026-11),
-and the toolbar's Translate still translates it. The tag's menu offers
-**Translate anyway** (the forced `retranslate`; the toolbar's Translate is
-offered on such a line too), a **Retranslate from `<Language>`** per
-candidate (neither the line's own source nor the reading language) and
-**Retranslate from...** with the picker. Lines eligibility turns away
-(pending copies, types other than chat, a line with no words left after
-the stripping -- there is no word floor) stay unmarked. A
-mark is never a translation: `buildContext` quotes only `done` text, the
-menu has no Copy, a language change requeues the line like any other (the
-one entry the requeue keeps is an own line's `done` read-back), a rebuilt
-retry does not take a mark's `from` as its source, and `takesReadBack` does
-not count a mark as the line's translation.
+**A line detection skips is not marked.** Every line detection skips gets
+a store entry of its own -- `status: "skipped"`, `reason` `same` (with
+`from` the reading language) or `unsure` (with the candidates kept) -- and
+`TranslationLine.vue` renders neither: no chip, no text row, and the
+original keeps its ink. An "English" mark on every line of a channel that
+writes the reading language, and a "?" on every line too short to place,
+were noise (both were shown until 2026-11). The toolbar's Translate still
+translates either, and its menu names the line's language first if wanted.
+Lines eligibility turns away (pending copies, types other than chat, a line
+with no words left after the stripping -- there is no word floor) get no
+entry. A skip is never a translation: `buildContext` quotes only `done`
+text, a language change requeues the line like any other (the one entry
+the requeue keeps is an own line's `done` read-back), a rebuilt retry does
+not take a skip's `from` as its source, and `takesReadBack` does not count
+a skip as the line's translation.
 
 **The channel's own languages weight detection.** The panel's _Languages
 spoken here_ records what people write in a channel (`channelStore.ts`
@@ -1192,7 +1176,7 @@ user's own lines are
 read too, so a line written before the switch-on, before a rejoin or a
 reload, or sent without a read-back gets its translation like anyone's
 (an own line already in the reading language is detected as such,
-skipped and marked). The one own line the pipeline leaves alone is a posted
+skipped). The one own line the pipeline leaves alone is a posted
 translation that keeps the composer's read-back (§ Writing in a channel). History is bounded per _load_, each
 load queueing at most `HISTORY_QUEUE_CAP` (40) of its lines, newest first
 (`eligibility.ts` `historyQueueOrder`, through `reader.ts` `queueHistory`,

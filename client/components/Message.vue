@@ -11,7 +11,6 @@
 				'has-actions': canAct,
 				'actions-open': actionsOpen,
 				translated,
-				unchanged,
 				'select-armed': actionsOpen && selectArmed,
 			},
 		]"
@@ -228,7 +227,6 @@ import StatusmsgMarker from "./StatusmsgMarker.vue";
 import MessageActions from "./MessageActions.vue";
 import MessageReactions from "./MessageReactions.vue";
 import TranslationLine from "./TranslationLine.vue";
-import {UNCHANGED} from "../js/translate/outgoing";
 import QuotePreview from "./QuotePreview.vue";
 import {replyQuote} from "../js/helpers/messageUpdates";
 import socket from "../js/socket";
@@ -534,23 +532,6 @@ export default defineComponent({
 			return !!entry && entry.status === "done" && !entry.hidden;
 		});
 
-		// A line the engine handed back as it was (the `unchanged` verdict,
-		// shown as the "=" chip) has no translation row to be the bright
-		// line, so the original is it: it takes the translated ink. Not an
-		// own line: TranslationLine.vue shows nothing for that one, and it
-		// stays dimmed by `.self` like every other own line.
-		const unchanged = computed(() => {
-			const entry = store.state.translations[props.message.id];
-
-			return (
-				!props.message.self &&
-				!!entry &&
-				entry.status === "failed" &&
-				entry.error === UNCHANGED &&
-				!entry.hidden
-			);
-		});
-
 		const isAction = () => {
 			if (!props.message.type) {
 				return false;
@@ -701,7 +682,6 @@ export default defineComponent({
 			hideRevealed,
 			canAct,
 			translated,
-			unchanged,
 			hasTranslationEntry,
 		};
 	},
