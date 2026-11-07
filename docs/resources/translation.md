@@ -1048,22 +1048,26 @@ stays in the store as `failed`, so the toolbar's Translate still offers the
 line. Browser check: `tools/scenarios/translation-chips.mjs`, which puts the
 verdict on someone else's line and on the page's own.
 
-**A line the detector cannot place still translates, unless it could be
-the reading language.** `detect.ts` `detectionSkip` decides: a line placed
-in the reading language is skipped (`same`); a line it could not place is
-skipped (`unsure`) only when the reading language is among its
-`candidates`, or when there are none (a line too short to look at), and is
-otherwise queued with `from: null` and no `sourceHint` (`sourceFor`, above)
--- neither the weak guess, which would send the line to a seq2seq model
-with the wrong source, nor the channel's prior, which announced an unsure
-Spanish line as "probably German" in a German channel. Measured on a real channel's
-history (71 lines, read in English), skipping every unsure line left 21
-untranslated -- 13 of one user's 15 Spanish lines, which franc ranks
-within a hundredth of Galician and Portuguese -- where the rule translates
-63 and the 8 it still skips are all English. On a device whose router has
-no engine for an unnamed source (CPU only) such a line cannot be routed,
-and the queue's "no translation engine" failure is written as the `unsure`
-mark instead (`reader.ts` `applyUpdate`).
+**A line the detector cannot place, or only guesses at, is left alone.**
+`detect.ts` `detectionSkip` decides, given what the channel is known to
+write (`reader.ts` `knownLanguages`: its declared languages and its prior):
+a line placed in the reading language is skipped (`same`); a line it could
+not place at all is skipped (`unsure`); and so is a line placed only on a
+hint (`weak`) or on thin evidence (`thin`: the short-line word lookup, or
+franc on fewer than `THIN_WORDS` (5) words) in a language the channel is
+not known to write. Everything else is queued. Until 2026-11 an unplaced
+line was translated with its source left to the engine, which measured
+well on one Spanish-heavy channel's history but on an English channel
+handed every "lol", "brb" and "mmm tweaking" to the model, which came back
+"from Polish" or "from Tagalog" as often as not; and a channel declaring
+English and Polish, read in English, placed every line under ten
+characters as Polish by declaration alone (that shortcut now needs exactly
+one declared language, not the reading language). A thin verdict is never
+noted into the prior, so a few misplaced short lines cannot talk the
+channel into a language. The toolbar's Translate translates any skipped
+line on request. A queued line's source still follows `sourceFor`
+(above): a weak verdict in a known language is queued with `from: null`
+and the prior as a routing hint only.
 
 **The topic is read too.** A channel's topic is the line everyone in it
 is looking at, so a reading channel reads it like its lines: `reader.ts`
