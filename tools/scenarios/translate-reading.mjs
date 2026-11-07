@@ -689,59 +689,58 @@ async function scenario(page) {
 		(await page.evaluate(LINES)) === base + 1
 	);
 
-	// A line the detector places in the reading language is not left bare:
-	// it carries a small muted mark naming the language it was taken for,
-	// and the mark's menu translates it anyway.
+	// A line the detector places in the reading language shows nothing: in
+	// a channel that writes it, a mark on every line would be noise. The
+	// toolbar's Translate still translates it.
 	const englishRow = newestRow("needs no line at all");
-
-	await page.waitFor(`!!(${englishRow})?.querySelector(".msg-translation-skipped-tag")`, {
-		timeout: 15000,
-		label: "the English line carries the skipped mark",
-	});
-
 	const englishRowId = String(await page.evaluate(`(${englishRow}).id`));
-	const ENGLISH_TAG = `#${englishRowId} .msg-translation-skipped-tag`;
+	const englishEntry = `document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translations[${JSON.stringify(
+		englishRowId.replace(/^msg-/, "")
+	)}]`;
 
+	await page.waitFor(`(${englishEntry})?.status === "skipped"`, {
+		timeout: 15000,
+		label: "the pipeline left the English line alone",
+	});
 	await page.check(
-		"the mark names the language in the reader's language",
-		(await page.evaluate(
-			`document.querySelector(${JSON.stringify(ENGLISH_TAG)}).textContent.trim()`
-		)) === "English"
-	);
-	await page.check(
-		"the mark has no text row, no caret, and leaves the original its ink",
+		"the English line carries no mark, no text row and keeps its ink",
 		await page.evaluate(
 			`!document.querySelector(${JSON.stringify(
-				`#${englishRowId} .msg-translation`
+				`#${englishRowId} .msg-translation-skipped`
 			)}) && !document.querySelector(${JSON.stringify(
-				`#${englishRowId} .msg-translation-caret`
+				`#${englishRowId} .msg-translation`
 			)}) && !document.getElementById(${JSON.stringify(
 				englishRowId
 			)}).classList.contains("translated")`
 		)
 	);
-	await page.screenshot("skipped-mark");
-	await openChipMenu(page, ENGLISH_TAG, "the mark's menu opened");
-	await page.check(
-		"the mark's menu offers Translate anyway, and nothing to copy or hide",
-		await page.evaluate(
-			`!!document.querySelector(".context-menu-translate-anyway") && !document.querySelector(".context-menu-translate-copy") && !document.querySelector(".context-menu-translate-hide")`
-		)
+	await page.screenshot("skipped-unmarked");
+
+	if (MOBILE) {
+		await page.evaluate(`document.getElementById(${JSON.stringify(englishRowId)}).click()`);
+	} else {
+		await page.hover(`#${englishRowId}`);
+	}
+
+	await page.evaluate(
+		`document.getElementById(${JSON.stringify(
+			englishRowId
+		)}).querySelector(".msg-action-translate").click()`
 	);
-	await page.screenshot("skipped-mark-menu");
-	await page.click(".context-menu-translate-anyway");
+	await page.waitFor(`!!document.querySelector(".context-menu-translate-now")`, {
+		label: "the toolbar's Translate opened its menu",
+	});
+	await page.click(".context-menu-translate-now");
 	await page.waitFor(
 		`!!document.querySelector(${JSON.stringify(
 			`#${englishRowId} .msg-translation[data-status="done"]`
 		)})`,
-		{timeout: 20000, label: "Translate anyway produced a translation"}
+		{timeout: 20000, label: "the toolbar's Translate produced a translation"}
 	);
 	await page.check(
-		"the translation replaced the mark",
+		"the translation is there",
 		await page.evaluate(
-			`!document.querySelector(${JSON.stringify(
-				ENGLISH_TAG
-			)}) && document.querySelector(${JSON.stringify(
+			`document.querySelector(${JSON.stringify(
 				`#${englishRowId} .msg-translation-text`
 			)}).textContent.includes("[English] this one is already")`
 		)
@@ -1091,8 +1090,7 @@ async function scenario(page) {
 			shortRequests.every((r) => r.from === null)
 	);
 
-	// The toolbar's Translate on a line the pipeline leaves alone: an English
-	// line carries the skipped mark, and the toolbar is its other way in.
+	// The toolbar's Translate on a line the pipeline leaves alone, once more.
 	const toolbarAsk = `one more line in english for the toolbar ${RUN}`;
 
 	other.say(toolbarAsk);
@@ -1103,7 +1101,7 @@ async function scenario(page) {
 	)})`;
 
 	await page.waitFor(
-		`!!(${shortAskRow}) && !!(${shortAskRow}).querySelector(".msg-translation-skipped-tag")`,
+		`document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translations[(${shortAskRow}).id.replace(/^msg-/, "")]?.status === "skipped"`,
 		{timeout: 15000, label: "the pipeline left the English line alone"}
 	);
 
@@ -1114,7 +1112,7 @@ async function scenario(page) {
 	}
 
 	// The action opens a menu: translate now, or name the line's language
-	// first. The mark's own menu still carries "Translate anyway".
+	// first.
 	await page.evaluate(`${shortAskRow}.querySelector(".msg-action-translate").click()`);
 	await page.waitFor(`!!document.querySelector(".context-menu-translate-now")`, {
 		label: "the toolbar's Translate opened its menu",
