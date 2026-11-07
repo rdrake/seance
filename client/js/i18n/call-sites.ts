@@ -2354,6 +2354,8 @@ export const STATIC_CALL_SITES = new Set<string>([
 	"translate.composer.sendCorrectedOn",
 	"translate.composer.sendOff",
 	"translate.composer.sendOn",
+	"translate.composer.targetCorrected",
+	"translate.composer.targetPair",
 	"translate.consent.metered",
 	"translate.consent.notNow",
 	"translate.consent.text",

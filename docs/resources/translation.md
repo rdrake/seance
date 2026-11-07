@@ -1312,8 +1312,9 @@ phone.
 ### The live preview and one-step send
 
 With a write target set, the draft is translated while it is typed: a
-pause of `PREVIEW_PAUSE_MS` (700 ms, `ChatInput.vue`) after the last change
-calls `translateOutgoing` for it, so the strip already shows the line Return
+pause of `PREVIEW_PAUSE_MS` (700 ms, `ChatInput.vue`) after the last
+keystroke (real typing only: a channel switch restoring a saved draft, or
+ArrowUp through the history, previews nothing) calls `translateOutgoing` for it, so the strip already shows the line Return
 will send ("Will send in German") and its read-back ("Reads back as: …")
 before the user reaches for Return. Typing on dims the last preview in place
 (`.translate-bar-is-stale`) until the new one starts to stream, so the
@@ -1324,17 +1325,23 @@ translation at once (the read-back is for looking at, not a gate). A Return
 while it is still translating, or before the pause came, starts or waits for
 it and sends it the moment it is done, saying so under the strip ("Sends
 when the translation is ready"); a failure stops there, and the strip offers
-the draft as written to the next Return. Changing the draft, Escape, a
-channel switch or turning the target off cancels a waiting send. There is
+the draft as written to the next Return; a run that ends with no strip at
+all (the draft turned out to need none, or the target moved) answers the
+waiting Return once by the path a Return with no strip takes, which sends a
+draft that needs no translation as typed. Changing the draft (even only
+adding or removing a `/me `), Escape, a channel switch or turning the target
+off cancels a waiting send, and a send that went out late leaves the focus
+where the user has gone meanwhile. There is
 no Send or Edit button on the strip any more -- the composer's own send
 button does what Return does -- only Copy.
 
 **The language the user writes in is theirs to say.** The dialog the
 translate button opens has a "Translate from" as well as a "Translate into";
 picked as the channel's target (not "This message only"), both are kept
-(`channelStore.ts` `writeFrom` beside `write`), and every draft is then
-taken as that language with no detection run, exactly as a one-off's named
-source is. Before, the mode kept only the target and guessed each draft's
+(`channelStore.ts` `writeFrom` beside `write`; turning the target off, or
+setting it from the panel, clears it), and every draft is then taken as that
+language. Detection still runs, but only to catch a draft typed straight in
+the target, which is sent as typed as before. Before, the mode kept only the target and guessed each draft's
 language, and a short English line ("Heck yeah it is") scored as Afrikaans,
 for which the phone had no model. Where no source was named and the guess
 has no route at all on this device, the reading language is tried before

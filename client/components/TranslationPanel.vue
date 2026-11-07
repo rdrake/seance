@@ -433,7 +433,12 @@ export default defineComponent({
 			// A strip already up was translated for the old target: it must not
 			// survive the change, finished or not.
 			cancelOutgoing(props.channel);
-			setChannelOptions(props.network, props.channel, {write: valueOf(event) || null});
+			// Set here, the target names no source: each draft is detected
+			// (the composer's dialog is where a source is named, `writeFrom`).
+			setChannelOptions(props.network, props.channel, {
+				write: valueOf(event) || null,
+				writeFrom: null,
+			});
 		};
 
 		const setFormality = (formality: Formality) =>

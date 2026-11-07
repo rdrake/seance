@@ -594,6 +594,11 @@ export default defineComponent({
 			emojiPick.value = null;
 		};
 
+		// Set by real typing (the input event), so only typing previews: a
+		// channel switch restoring a saved draft, or ArrowUp through the
+		// history, costs no translation run nobody asked for.
+		let typedChange = false;
+
 		const setPendingMessage = (e: Event) => {
 			const el = e.target as HTMLTextAreaElement;
 
@@ -610,6 +615,7 @@ export default defineComponent({
 
 			enterNewlineDeadline = 0;
 
+			typedChange = true;
 			props.channel.pendingMessage = el.value;
 			props.channel.inputHistoryPosition = 0;
 			props.channel.editDismissed = false; // typing re-arms ArrowUp-to-edit
@@ -810,7 +816,14 @@ export default defineComponent({
 			return !entry || (entry.status === "pending" && entry.text === "") ? kept : null;
 		});
 		// A Return that came before its preview was done: sent once it is.
-		const sendQueued = ref<{chanId: number; draft: string} | null>(null);
+		// `draft` is what the strip translates (a `/me`'s text), `raw` the
+		// whole draft: "/me waves" and "waves" share a `draft`, not a send.
+		const sendQueued = ref<{
+			chanId: number;
+			draft: string;
+			raw: string;
+			retried?: boolean;
+		} | null>(null);
 		const sendQueuedHere = computed(() => sendQueued.value?.chanId === props.channel.id);
 
 		const clearPreviewTimer = () => {
@@ -975,7 +988,8 @@ export default defineComponent({
 				: t("translate.strip.sendTranslation")
 		);
 
-		// Send waits for the translation, and for the automatic check.
+		// A translation or its check still running: the one-off dialog's
+		// "This message only" waits for it.
 		const outgoingBusy = computed(() => {
 			const entry = outgoing.value;
 
@@ -1103,7 +1117,7 @@ export default defineComponent({
 			props.channel.editing = null;
 		};
 
-		const onSubmit = (fromEnterKey = false) => {
+		const onSubmit = (fromEnterKey = false, queued = false) => {
 			if (!input.value) {
 				return;
 			}
@@ -1115,8 +1129,12 @@ export default defineComponent({
 
 			// Triggering click event opens the virtual keyboard on mobile
 			// This can only be called from another interactive event (e.g. button click)
-			input.value.click();
-			input.value.focus();
+			// -- which a send waiting for its preview is not: it leaves the
+			// focus wherever the user has gone meanwhile.
+			if (!queued) {
+				input.value.click();
+				input.value.focus();
+			}
 
 			// No global gate: `/connect` and friends must work from a
 			// disconnected network. Plain text in a conversation on a
@@ -1173,7 +1191,7 @@ export default defineComponent({
 				// it the moment it is done (the watch on `sendQueued`). The
 				// read-back is for looking at, not a gate.
 				if (entry.status === "pending") {
-					sendQueued.value = {chanId: props.channel.id, draft: gate.text};
+					sendQueued.value = {chanId: props.channel.id, draft: gate.text, raw: text};
 					return false;
 				}
 
@@ -1236,7 +1254,12 @@ export default defineComponent({
 				const startedFor = props.channel.id;
 
 				clearPreviewTimer();
-				sendQueued.value = {chanId: startedFor, draft: gate.text};
+				sendQueued.value = {
+					chanId: startedFor,
+					draft: gate.text,
+					raw: text,
+					retried: queued,
+				};
 
 				void translateOutgoing(props.network, props.channel, gate.text).then((verdict) => {
 					if (
@@ -1447,8 +1470,11 @@ export default defineComponent({
 
 			// The user's own language: lines go corrected, not translated.
 			return to === readingLanguage()
-				? `${codeOf(to)} ✓`
-				: `${codeOf(readingLanguage())} → ${codeOf(to)}`;
+				? t("translate.composer.targetCorrected", {language: codeOf(to)})
+				: t("translate.composer.targetPair", {
+						from: codeOf(readingLanguage()),
+						to: codeOf(to),
+				  });
 		});
 		const translateOnceLabel = computed(() => {
 			const to = sendTarget.value;
@@ -1477,7 +1503,7 @@ export default defineComponent({
 			// On: the click turns the send target off; a strip in flight for
 			// it goes too. Off: the dialog.
 			if (sendTarget.value) {
-				setChannelOptions(props.network, props.channel, {write: null});
+				setChannelOptions(props.network, props.channel, {write: null, writeFrom: null});
 				cancelOutgoing(props.channel);
 				forgetPreview();
 				focusForTyping();
@@ -1584,8 +1610,21 @@ export default defineComponent({
 			() => [outgoing.value?.status, outgoing.value?.text] as const,
 			() => {
 				const entry = outgoing.value;
+				const queued = sendQueued.value;
 
 				if (!entry) {
+					// The run ended with no strip: the draft needs none (a
+					// "plain" verdict), or the target moved under it. A Return
+					// waiting on it is answered once, by the path a Return with
+					// no strip takes -- which sends a "plain" draft as typed.
+					if (queued && queued.chanId === props.channel.id) {
+						sendQueued.value = null;
+
+						if (!queued.retried && queued.raw === props.channel.pendingMessage) {
+							void nextTick(() => onSubmit(false, true));
+						}
+					}
+
 					return;
 				}
 
@@ -1600,9 +1639,12 @@ export default defineComponent({
 					stalePreview.value = null;
 				}
 
-				const queued = sendQueued.value;
-
-				if (!queued || queued.chanId !== props.channel.id || queued.draft !== entry.draft) {
+				if (
+					!queued ||
+					queued.chanId !== props.channel.id ||
+					queued.draft !== entry.draft ||
+					queued.raw !== props.channel.pendingMessage
+				) {
 					return;
 				}
 
@@ -1610,7 +1652,7 @@ export default defineComponent({
 				// sends the draft as written, which the user chooses.
 				if (entry.status === "done") {
 					sendQueued.value = null;
-					void nextTick(() => onSubmit());
+					void nextTick(() => onSubmit(false, true));
 				} else if (entry.status === "failed") {
 					sendQueued.value = null;
 				}
@@ -1669,14 +1711,20 @@ export default defineComponent({
 				}
 
 				const queued = sendQueued.value;
+				const raw =
+					hasVirtualKeyboard() && value.endsWith("\n") ? value.slice(0, -1) : value;
 
-				if (queued && queued.draft !== typed) {
+				if (queued && queued.raw !== raw) {
 					sendQueued.value = null;
 				}
 
+				const fromTyping = typedChange;
+
+				typedChange = false;
+
 				if (typed.trim() === "") {
 					forgetPreview();
-				} else if (!entry || typed !== entry.draft) {
+				} else if (fromTyping && (!entry || typed !== entry.draft)) {
 					schedulePreview();
 				}
 			}
