@@ -192,6 +192,7 @@
 					class="translate-bar-text"
 					dir="auto"
 					:lang="outgoing.check.to ?? undefined"
+					:title="outgoing.check.text"
 					>{{ outgoing.check.text
 					}}<span
 						v-if="outgoing.check.status === 'pending'"

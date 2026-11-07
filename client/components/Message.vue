@@ -536,13 +536,18 @@ export default defineComponent({
 
 		// A line the engine handed back as it was (the `unchanged` verdict,
 		// shown as the "=" chip) has no translation row to be the bright
-		// line, so the original is it: it takes the translated ink, which
-		// matters for an own line, dimmed by `.self` like every other.
+		// line, so the original is it: it takes the translated ink. Not an
+		// own line: TranslationLine.vue shows nothing for that one, and it
+		// stays dimmed by `.self` like every other own line.
 		const unchanged = computed(() => {
 			const entry = store.state.translations[props.message.id];
 
 			return (
-				!!entry && entry.status === "failed" && entry.error === UNCHANGED && !entry.hidden
+				!props.message.self &&
+				!!entry &&
+				entry.status === "failed" &&
+				entry.error === UNCHANGED &&
+				!entry.hidden
 			);
 		});
 

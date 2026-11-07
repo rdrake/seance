@@ -1,4 +1,6 @@
 <template>
+	<!-- An own line handed back as it was (UNCHANGED) shows nothing either:
+	     the user wrote it, so a "not translated" chip under it is noise. -->
 	<!-- A line already in the reading language shows nothing: in a channel
 	     that writes it, a mark on every line is noise. The toolbar's
 	     Translate still translates it. Only an unplaced line ("?") is marked. -->
@@ -29,7 +31,11 @@
 	</span>
 	<div
 		v-else-if="
-			entry && !entry.hidden && entry.status !== 'dropped' && entry.status !== 'skipped'
+			entry &&
+			!entry.hidden &&
+			entry.status !== 'dropped' &&
+			entry.status !== 'skipped' &&
+			!ownEcho
 		"
 		class="msg-translation"
 		:data-status="entry.status"
@@ -142,6 +148,13 @@ export default defineComponent({
 		const store = useStore();
 		const {t} = useI18n();
 		const entry = computed(() => store.state.translations[props.message.id]);
+		// The user's own line, handed back unchanged: nothing to show.
+		const ownEcho = computed(
+			() =>
+				!!props.message.self &&
+				entry.value?.status === "failed" &&
+				entry.value.error === UNCHANGED
+		);
 		const notTranslatedLabel = computed(() => t("translate.notTranslated"));
 		const retryLabel = computed(() => t("translate.retry"));
 		// The failure reason after "Couldn't translate": the classifier's
@@ -384,6 +397,7 @@ export default defineComponent({
 			shortReason,
 			t,
 			UNCHANGED,
+			ownEcho,
 			devtoolsAvailable,
 			notTranslatedLabel,
 			retryLabel,

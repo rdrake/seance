@@ -8542,22 +8542,21 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 
 /* The translated line under a message (client/components/TranslationLine.vue,
  * docs/resources/translation.md): muted like the timestamps so the original
- * reads first, the language chip in the accent, a caret while it streams. */
+ * reads first, the language chip in the accent, a caret while it streams.
+ * Inline flow, not a flex row: the chip floats at the line's end and the
+ * text wraps around it, so a translation costs its own lines and nothing
+ * more -- no row of its own for "from Portuguese". */
 #chat .msg-translation {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 0.25rem 0.4rem;
-	margin-top: 0.15rem;
+	display: flow-root;
 	color: var(--body-color-muted);
 	font-size: 0.95em;
 }
 
-/* "from Portuguese": a quiet line under the translation rather than a
- * boxed label in front of it; still the button for the line's options. */
+/* "from Portuguese": quiet, at the end of the translation's first line;
+ * still the button for the line's options. */
 #chat .msg-translation-chip {
-	flex: 0 0 100%;
-	order: 1;
+	float: inline-end;
+	margin-inline-start: 0.5rem;
 	padding: 0;
 	border: 0;
 	border-radius: 0.2rem;
@@ -8580,8 +8579,6 @@ html[data-shell="native"] #image-viewer .next-image-btn {
    translated copy of a line says so for itself: it is text to read, quote
    and copy exactly like the original above it. */
 #chat .msg-translation-text {
-	flex: 1 1 auto;
-	min-width: 0;
 	user-select: text;
 }
 
@@ -8697,7 +8694,7 @@ html[data-reduce-motion] #chat .msg-translation-caret {
 /* An icon button, the word kept as the tooltip/accessible name. */
 #chat .msg-translation-retry {
 	display: inline-flex;
-	flex: none;
+	vertical-align: middle;
 	align-items: center;
 	justify-content: center;
 	width: 1.5rem;
@@ -9698,13 +9695,26 @@ html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
 
 /* "Will send in German": a label over the line, in the accent, not a boxed chip. */
 #form .translate-bar-chip {
-	flex: 0 0 100%;
+	flex: 0 0 auto;
 	color: var(--body-color-muted);
 	font-size: 0.6875rem;
 	font-weight: normal;
 	line-height: 1.4;
 	letter-spacing: 0.02em;
 	white-space: nowrap;
+}
+
+/* The preview's own row is inline flow: "Will send in German" and Copy
+   float at its end and the translation wraps around them, so the strip is
+   as tall as its text and no taller. */
+#form .translate-bar > .translate-bar-row:first-child {
+	display: flow-root;
+}
+
+#form .translate-bar > .translate-bar-row:first-child .translate-bar-chip,
+#form .translate-bar > .translate-bar-row:first-child .translate-bar-actions {
+	float: inline-end;
+	margin-inline-start: 0.5rem;
 }
 
 /* The previous preview while the draft changes under it. */
@@ -9812,8 +9822,8 @@ html[data-reduce-motion] #form .translate-bar-caret {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 2rem;
-	height: 2rem;
+	width: 1.75rem;
+	height: 1.25rem;
 	padding: 0;
 	border: 0;
 	border-radius: 0.1875rem;
@@ -9840,9 +9850,18 @@ html[data-reduce-motion] #form .translate-bar-caret {
 
 
 #form .translate-bar-check {
+	flex-wrap: nowrap;
 	color: var(--body-color-muted);
 	font-size: 0.75rem;
 	opacity: 0.85;
+}
+
+/* The read-back is a check, not a second copy to read in full: one line,
+   the whole of it in the title. */
+#form .translate-bar-check .translate-bar-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 #form .translate-bar-check-label {
