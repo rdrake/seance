@@ -658,17 +658,25 @@ export default async function run(page) {
 			"en"
 	);
 	await page.screenshot("translate-once", {selector: "#form"});
-	// The sidebar opening (a swipe, the menu button) puts the dialog away
-	// rather than leave it over the channel list.
-	await page.evaluate(
-		`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", true)`
-	);
-	await page.waitFor(`!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-		label: "opening the sidebar closed the dialog",
-	});
-	await page.evaluate(
-		`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", false)`
-	);
+	// On a phone the sidebar opening (a swipe, the menu button) puts the
+	// dialog away rather than leave it over the channel list; on a desktop
+	// the sidebar is open beside it all along, so Cancel does.
+	if (MOBILE) {
+		await page.evaluate(
+			`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", true)`
+		);
+		await page.waitFor(`!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
+			label: "opening the sidebar closed the dialog",
+		});
+		await page.evaluate(
+			`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", false)`
+		);
+	} else {
+		await page.click(".source-language-picker-cancel");
+		await page.waitFor(`!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
+			label: "the dialog closed",
+		});
+	}
 	await page.fill(INPUT, "");
 
 	// 1. The write target.
@@ -804,7 +812,7 @@ export default async function run(page) {
 		"the read-back row is labelled Reads back as",
 		(await page.evaluate(
 			`(document.querySelector(".translate-bar-check-label") || {textContent: ""}).textContent.trim()`
-		)) === "Reads back as"
+		)) === "Reads back as:"
 	);
 	await page.check(
 		"the read-back row is marked as the reading language",

@@ -15179,6 +15179,18 @@ msgctxt "translate.composer.sendOn"
 msgid "Sending in {language} · click to stop"
 msgstr ""
 
+#. The composer's translate button while the channel's send target is the user's own language: lines are corrected, not translated. {language} is the short code, e.g. EN.
+#: client/components/ChatInput.vue
+msgctxt "translate.composer.targetCorrected"
+msgid "{language} ✓"
+msgstr ""
+
+#. The composer's translate button while the channel has a send target: the language the user writes in, an arrow, the language messages are sent in, as short codes ({from} and {to} are e.g. EN and PT). Turn the arrow round for a right-to-left language.
+#: client/components/ChatInput.vue
+msgctxt "translate.composer.targetPair"
+msgid "{from} → {to}"
+msgstr ""
+
 #. Extra line in the dialog asking before a translation model is downloaded, shown only when the browser reports a cellular connection or Data Saver: a warning that the download may cost data.
 #: client/js/translate/index.ts
 msgctxt "translate.consent.metered"
@@ -15983,10 +15995,10 @@ msgctxt "translate.strip.polishChip"
 msgid "{language}, corrected"
 msgstr ""
 
-#. Label before the composer preview's round trip: the translation translated back into the user's language, so they can check it. A colon follows it, added by the stylesheet.
+#. Label before the composer preview's round trip: the translation translated back into the user's language, so they can check it. The text follows it.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.readsBack"
-msgid "Reads back as"
+msgid "Reads back as:"
 msgstr ""
 
 #. Tooltip of the composer translation strip's direction chip, naming the route a translation took. {from} and {to} are language names (or the word from translate.strip.sourceAuto), {model} is the model's technical id. This one ran on the main processor.
@@ -16049,7 +16061,7 @@ msgctxt "translate.strip.sourceAuto"
 msgid "auto"
 msgstr ""
 
-#. Label over the composer's live translation preview: the line Return will send, and the language it is in. Shown in capitals by the stylesheet.
+#. Label over the composer's live translation preview: the line Return will send, and the language it is in.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.willSendIn"
 msgid "Will send in {language}"

@@ -314,11 +314,13 @@ export async function translateOutgoing(
 		});
 		// No channel prior and no declared languages: both describe what
 		// others write here, and this is the user's own line.
-		// A source the user named is the verdict, no detection run: the
-		// one-off dialog's, or the one picked with the channel's target.
+		// A source the one-off dialog named is the verdict, no detection run.
+		// The one picked with the channel's target (`writeFrom`) is the
+		// source too, but detection still runs, so a reply typed straight in
+		// the target language is sent as typed.
 		const namedFrom = once ? once.from : channelTranslation(network, channel).writeFrom;
-		const detection: Detection = namedFrom
-			? {lang: namedFrom, confidence: 1, candidates: []}
+		const detection: Detection = once?.from
+			? {lang: once.from, confidence: 1, candidates: []}
 			: await detectLanguage(plainTextOf(draft, nicks), null, []);
 
 		if (!current(channel, draft, controller)) {
@@ -345,8 +347,7 @@ export async function translateOutgoing(
 		// typed when a foreign write target finds the draft already in it:
 		// that target asked for nothing.
 		const ownLanguage = to === readingLanguage();
-		const inTarget =
-			!namedFrom && detection.lang === to && detection.confidence >= WRITE_DETECT_MIN_GAP;
+		const inTarget = detection.lang === to && detection.confidence >= WRITE_DETECT_MIN_GAP;
 
 		if (inTarget && !once && !ownLanguage) {
 			cancelOutgoing(channel);

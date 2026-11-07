@@ -9398,15 +9398,14 @@ html[data-reduce-motion] #chat .msg.actions-open .msg-actions {
 	margin-inline-start: auto;
 }
 
-/* "Will send": a label over the line, in the accent, not a boxed chip. */
+/* "Will send in German": a label over the line, in the accent, not a boxed chip. */
 #form .translate-bar-chip {
 	flex: 0 0 100%;
 	color: var(--chat-accent, var(--link-color));
 	font-size: 0.6875rem;
 	font-weight: 600;
 	line-height: 1.4;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	letter-spacing: 0.02em;
 	white-space: nowrap;
 }
 
@@ -9503,10 +9502,6 @@ html[data-reduce-motion] #form .translate-bar-caret {
 
 #form .translate-bar-check-label {
 	flex: 0 0 auto;
-}
-
-#form .translate-bar-check-label::after {
-	content: ":";
 }
 
 /* The upload in flight: a row of its own above the input, like .compose-bar */

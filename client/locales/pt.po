@@ -1751,12 +1751,6 @@ msgctxt "connect.saslToggle"
 msgid "I have a services account (SASL)"
 msgstr "Tenho uma conta nos serviços (SASL)"
 
-#. Follow-up to a failed SASL login that has worked on this network before: the login is kept and the next connect tries it again.
-#: client/js/irc/client.ts
-msgctxt "connect.saslTrustedGaveUpHint"
-msgid "This login has worked here before, so it is kept: connecting again tries it once more. If the password has changed, update it in this network's settings."
-msgstr ""
-
 #. The IRC server section of the connect form: heading above the server fields, and the label of the server host field.
 #: client/components/Windows/Connect.vue:124
 #: client/components/Windows/Connect.vue:132
@@ -4665,18 +4659,6 @@ msgstr "Nick inválido."
 msgctxt "msg.noSuchNick"
 msgid "No such nick: {nick}"
 msgstr "Nick inexistente: {nick}"
-
-#. Line in a conversation when someone deletes (redacts) a message that this device never loaded, so there is nothing to hide. {nick} is the user who deleted it, verbatim.
-#: client/js/irc/handlers/redact.ts
-msgctxt "msg.redactedUnloaded"
-msgid "{nick} deleted a message"
-msgstr ""
-
-#. Line in a conversation when someone deletes (redacts) a message that this device never loaded, with the reason they gave. {nick} is the user who deleted it and {reason} their reason, both verbatim — never translate their content.
-#: client/js/irc/handlers/redact.ts
-msgctxt "msg.redactedUnloadedReason"
-msgid "{nick} deleted a message ({reason})"
-msgstr ""
 
 #. Line in the server window after the server reports the IRC operator's server notice mask (snomask): {value} is the number, {hex} the same in hexadecimal. 'snomask' jargon.
 #: client/js/irc/handlers/numerics.ts
@@ -15150,6 +15132,12 @@ msgctxt "translate.chip.options"
 msgid "{languages}. Translation options"
 msgstr "{languages}. Opções de tradução"
 
+#. Quiet label under the user's own translated line in the message list (its read-back), and the button for its translation options. {language} is the language the line went out in. Starts lowercase in English: it reads as a caption.
+#: client/components/TranslationLine.vue
+msgctxt "translate.chip.sentIn"
+msgid "sent in {language}"
+msgstr ""
+
 #. Tooltip and aria-label of a translation line's chip, skipped because the detector could not tell the language apart.
 #: client/components/TranslationLine.vue
 msgctxt "translate.chip.unsure"
@@ -15173,6 +15161,18 @@ msgstr "Traduzir o que eu envio…"
 msgctxt "translate.composer.sendOn"
 msgid "Sending in {language} · click to stop"
 msgstr "Enviando em {language} · clique para parar"
+
+#. The composer's translate button while the channel's send target is the user's own language: lines are corrected, not translated. {language} is the short code, e.g. EN.
+#: client/components/ChatInput.vue
+msgctxt "translate.composer.targetCorrected"
+msgid "{language} ✓"
+msgstr ""
+
+#. The composer's translate button while the channel has a send target: the language the user writes in, an arrow, the language messages are sent in, as short codes ({from} and {to} are e.g. EN and PT). Turn the arrow round for a right-to-left language.
+#: client/components/ChatInput.vue
+msgctxt "translate.composer.targetPair"
+msgid "{from} → {to}"
+msgstr ""
 
 #. Extra line in the dialog asking before a translation model is downloaded, shown only when the browser reports a cellular connection or Data Saver: a warning that the download may cost data.
 #: client/js/translate/index.ts
@@ -15483,13 +15483,6 @@ msgstr "{name} (todos os idiomas)"
 msgctxt "translate.model.loadingPercent"
 msgid "Loading… {percent}%"
 msgstr "Carregando… {percent}%"
-
-#. The name of a translation model in Settings → Translation: a language-pair model the network supplies in place of an OPUS-MT pair. {name} is the network's own name for the model, never translated; {from} and {to} are language names.
-#: client/js/helpers/modelLabel.ts
-#: client/js/helpers/translateWhy.ts
-msgctxt "translate.model.namedPair"
-msgid "{name} {from} → {to}"
-msgstr ""
 
 #. Reason a GPU translation model cannot load here: {needed} is the model's largest piece, {limit} what this device's graphics processor can bind in one buffer; both are sizes such as "186 MiB" (binary units, kept as they are). Shown under the model's row in Settings → Translation (its Download button greyed out) and, after a lead sentence such as 'Correcting a message needs the language model.', wherever an action needing that model is unavailable.
 #: client/components/Settings/Translation.vue
@@ -15979,10 +15972,11 @@ msgctxt "translate.strip.polishChip"
 msgid "{language}, corrected"
 msgstr "{language}, corrigido"
 
-#. Label before the composer preview's round trip: the translation translated back into the user's language, so they can check it. A colon follows it, added by the stylesheet.
+#. Label before the composer preview's round trip: the translation translated back into the user's language, so they can check it. The text follows it.
 #: client/components/ChatInput.vue
+#, fuzzy
 msgctxt "translate.strip.readsBack"
-msgid "Reads back as"
+msgid "Reads back as:"
 msgstr ""
 
 #. Tooltip of the composer translation strip's direction chip, naming the route a translation took. {from} and {to} are language names (or the word from translate.strip.sourceAuto), {model} is the model's technical id. This one ran on the main processor.
@@ -16045,10 +16039,10 @@ msgctxt "translate.strip.sourceAuto"
 msgid "auto"
 msgstr "automático"
 
-#. Label over the composer's live translation preview: the line Return will send. Shown in capitals by the stylesheet.
+#. Label over the composer's live translation preview: the line Return will send, and the language it is in.
 #: client/components/ChatInput.vue
-msgctxt "translate.strip.willSend"
-msgid "Will send"
+msgctxt "translate.strip.willSendIn"
+msgid "Will send in {language}"
 msgstr ""
 
 #. Status line in the settings → Translation, the section for the device's own translator (Apple's Translation framework, iPhone and iPad app only). "Apple Translation" is the feature's name; keep it recognisable. {from} and {to} are language names. Shown while the system's download sheet is open.
