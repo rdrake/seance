@@ -2313,6 +2313,11 @@ describe("service worker notification click", function () {
 	});
 });
 
+/** A PushSubscription as browsers give it: the keys only through toJSON(). */
+function pushSubscription(endpoint: string) {
+	return {endpoint, toJSON: () => ({endpoint, keys: {p256dh: "P", auth: "A"}})};
+}
+
 describe("service worker subscription renewal", function () {
 	// Renewal is the push-only worker's job; the root registration holds no
 	// subscription in the per-network design.
@@ -2323,7 +2328,7 @@ describe("service worker subscription renewal", function () {
 		const promises: Promise<unknown>[] = [];
 		const ev = {
 			oldSubscription: null,
-			newSubscription: {endpoint: "https://push.example/e1", keys: {p256dh: "P", auth: "A"}},
+			newSubscription: pushSubscription("https://push.example/e1"),
 			waitUntil: (p: Promise<unknown>) => promises.push(p),
 		};
 
@@ -2339,6 +2344,7 @@ describe("service worker subscription renewal", function () {
 			l.startsWith("WEBPUSH REGISTER https://push.example/e1")
 		);
 		expect(register, "REGISTER sent").to.be.greaterThan(-1);
+		expect(sent[register]).to.equal("WEBPUSH REGISTER https://push.example/e1 p256dh=P;auth=A");
 		expect(register, "after CAP END, not before").to.be.greaterThan(capEnd);
 	});
 
@@ -2347,7 +2353,7 @@ describe("service worker subscription renewal", function () {
 		const promises: Promise<unknown>[] = [];
 		const ev = {
 			oldSubscription: {endpoint: "https://push.example/OLD"},
-			newSubscription: {endpoint: "https://push.example/NEW", keys: {p256dh: "P", auth: "A"}},
+			newSubscription: pushSubscription("https://push.example/NEW"),
 			waitUntil: (p: Promise<unknown>) => promises.push(p),
 		};
 
@@ -2371,7 +2377,7 @@ describe("service worker subscription renewal", function () {
 		const promises: Promise<unknown>[] = [];
 		const ev = {
 			oldSubscription: {endpoint: "https://push.example/OLD"},
-			newSubscription: {endpoint: "https://push.example/NEW", keys: {p256dh: "P", auth: "A"}},
+			newSubscription: pushSubscription("https://push.example/NEW"),
 			waitUntil: (p: Promise<unknown>) => promises.push(p),
 		};
 
