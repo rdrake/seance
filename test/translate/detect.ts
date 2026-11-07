@@ -566,12 +566,12 @@ describe("translate/detect", () => {
 			).to.equal(null);
 		});
 
-		// franc's measured Spanish/Portuguese/Galician near tie: nothing names
-		// English, so the line is translated with its source left to the engine.
-		it("translates an unplaced line whose candidates leave the reading language out", () => {
+		// franc's measured Spanish/Portuguese/Galician near tie: unplaced is
+		// unplaced, and the toolbar's Translate is there for it.
+		it("skips an unplaced line whose candidates leave the reading language out", () => {
 			expect(
 				detectionSkip({lang: null, confidence: 0.007, candidates: ["es", "pt", "gl"]}, "en")
-			).to.equal(null);
+			).to.equal("unsure");
 		});
 
 		it("skips an unplaced line that could be the reading language as unsure", () => {
@@ -586,13 +586,29 @@ describe("translate/detect", () => {
 			);
 		});
 
-		// A one-word line ("Hallo", "lol") carries no function words and is too
-		// short for franc — no verdict is not evidence it is already readable.
-		// The engine detects the source; an echo lands on the Not-translated chip.
-		it("translates a too-short line with no verdict instead of skipping it", () => {
+		// A one-word line ("lol") carries no function words and is too short
+		// for franc: handed to the engine it came back "from Polish".
+		it("skips a too-short line with no verdict", () => {
 			expect(
 				detectionSkip({lang: null, confidence: 0, candidates: [], short: true}, "en")
-			).to.equal(null);
+			).to.equal("unsure");
+		});
+
+		it("skips a thin or weak verdict in a language the channel is not known to write", () => {
+			const thin = {lang: "sv", confidence: 0.5, candidates: ["sv"], thin: true as const};
+			const weak = {lang: "pl", confidence: 0.1, candidates: ["pl"], weak: true};
+
+			expect(detectionSkip(thin, "en")).to.equal("unsure");
+			expect(detectionSkip(thin, "en", ["en"])).to.equal("unsure");
+			expect(detectionSkip(weak, "en", ["de"])).to.equal("unsure");
+		});
+
+		it("translates a thin or weak verdict in a language the channel writes", () => {
+			const thin = {lang: "pl", confidence: 0.5, candidates: ["pl"], thin: true as const};
+			const weak = {lang: "pl", confidence: 0.1, candidates: ["pl"], weak: true};
+
+			expect(detectionSkip(thin, "en", ["pl"])).to.equal(null);
+			expect(detectionSkip(weak, "en", ["en", "pl"])).to.equal(null);
 		});
 	});
 
@@ -648,8 +664,8 @@ describe("translate/detect", () => {
 			expect(no.lang).to.equal(null);
 			expect(no.short).to.equal(true);
 			expect(no.candidates[0]).to.equal("es");
-			// Still translated: short says the line is no evidence of English.
-			expect(detectionSkip(no, "en")).to.equal(null);
+			// Unplaced: left alone until someone asks.
+			expect(detectionSkip(no, "en")).to.equal("unsure");
 			// The channel's prior settles it.
 			const prior = new LanguagePrior();
 
@@ -719,9 +735,46 @@ describe("translate/detect", () => {
 
 			// The reader's own claim about the channel outranks a frequency
 			// guess: "hola" in a channel declared German, read in English.
-			const hola = await detectLanguage("hola", null, ["de", "en"], {exclude: "en"});
+			const hola = await detectLanguage("hola", null, ["de"], {exclude: "en"});
 
 			expect(hola.lang).to.equal("de");
+		});
+
+		it("declaring the reading language too places nothing by declaration", async () => {
+			setDetector(never);
+
+			// A channel written in English and Polish, read in English: "lol"
+			// is not Polish, and "nice" is the English the lookup says it is.
+			expect(
+				(await detectLanguage("lol", null, ["en", "pl"], {exclude: "en"})).lang
+			).to.equal(null);
+			expect(
+				(await detectLanguage("nice", null, ["en", "pl"], {exclude: "en"})).lang
+			).to.equal("en");
+		});
+
+		it("marks franc's verdict on a few words thin and keeps it from the prior", async () => {
+			setDetector(() => [
+				["deu", 1],
+				["eng", 0.5],
+			]);
+			const prior = new LanguagePrior();
+			const few = await detectLanguage("zorp blat quux fnord", prior);
+
+			expect(few.lang).to.equal("de");
+			expect(few.thin).to.equal(true);
+			expect(prior.top()).to.equal(null);
+
+			const many = await detectLanguage("zorp blat quux fnord grelb", prior);
+
+			expect(many.thin).to.equal(undefined);
+			expect(prior.top()).to.equal("de");
+		});
+
+		it("marks a lookup verdict thin", async () => {
+			setDetector(never);
+
+			expect((await detectLanguage("nice", null)).thin).to.equal(true);
 		});
 	});
 });

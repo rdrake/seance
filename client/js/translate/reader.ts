@@ -34,7 +34,14 @@ import {
 	termsFor,
 } from "./channelStore";
 import {buildContext} from "./context";
-import {type Detection, LanguagePrior, detectLanguage, detectionSkip, sourceFor} from "./detect";
+import {
+	type Detection,
+	LanguagePrior,
+	declaredLanguages,
+	detectLanguage,
+	detectionSkip,
+	sourceFor,
+} from "./detect";
 import {ReplayBatches, historyQueueOrder, isChatLine, isEligible, plainTextOf} from "./eligibility";
 import {namesFor} from "./names";
 import {fromLocaleTag} from "./languages";
@@ -370,6 +377,14 @@ export function pairVerdict(from: string | null, to: string): RouteVerdict {
 	}
 
 	return explainRoute(service.routeTable, liveCatalog(), input);
+}
+
+/** What a channel is known to write: its declared languages and its prior. */
+function knownLanguages(prior: LanguagePrior, declared: readonly string[]): string[] {
+	const top = prior.top();
+	const languages = declaredLanguages(declared);
+
+	return top ? [...languages, top] : languages;
 }
 
 function priorFor(network: ClientNetwork, channel: ClientChan): LanguagePrior {
@@ -799,7 +814,7 @@ export async function readTopic(network: ClientNetwork, channel: ClientChan): Pr
 
 	const to = readingLanguage();
 
-	if (detectionSkip(detection, to)) {
+	if (detectionSkip(detection, to, knownLanguages(prior, settings.languages))) {
 		// Already readable: no entry, the header shows the topic as it is.
 		items.delete(id);
 		store.commit("translationRemoveMany", [id]);
@@ -1029,11 +1044,12 @@ export async function translateMessage(
 
 	const to = readingLanguage();
 
-	// Placed in the reading language, or not placed with the reading language
-	// among the contenders: left alone (detect.ts `detectionSkip`) and
-	// marked. A line the detector could not place is otherwise translated
-	// with its source left to the engine.
-	const skip = force ? null : detectionSkip(detection, to);
+	// Placed in the reading language, not placed at all, or placed on doubt
+	// in a language the channel is not known to write: left alone (detect.ts
+	// `detectionSkip`), and the toolbar's Translate still translates it.
+	const skip = force
+		? null
+		: detectionSkip(detection, to, knownLanguages(prior, settings.languages));
 
 	if (skip) {
 		markSkipped(message.id, skip, to, detection);

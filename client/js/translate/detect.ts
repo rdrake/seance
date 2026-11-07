@@ -34,11 +34,8 @@ export interface Detection {
 	candidates: string[];
 	/**
 	 * The line is too short to judge (`DETECT_MIN_LENGTH`): no verdict is
-	 * possible, and that is not evidence the line is already in the reading
-	 * language — `detectionSkip` leaves it to the engine, which detects the
-	 * source itself; an echo of the reading language lands on the
-	 * "Not translated" chip (queue.ts), so the cost of guessing wrong is a
-	 * chip, not a wrong translation.
+	 * possible. `detectionSkip` leaves it alone like any unplaced line; the
+	 * toolbar's Translate hands it to the engine, which places it itself.
 	 */
 	short?: true;
 	/**
@@ -53,6 +50,15 @@ export interface Detection {
 	 * own claim, not a measurement.
 	 */
 	weak?: boolean;
+	/**
+	 * Placed on thin evidence: by the short-line word lookup
+	 * (`wordlookup.ts`), or by franc on a line of fewer than `THIN_WORDS`
+	 * words, where trigrams guess (franc reads "kernel panic again lol" as
+	 * Tagalog). `detectionSkip` leaves such a line alone unless its language
+	 * is one the channel is known to write, and the prior never learns from
+	 * it.
+	 */
+	thin?: true;
 }
 
 /** `francAll`'s shape: `[iso639-3, weight]`, best first, best weight 1. */
@@ -74,6 +80,8 @@ export const DECLARED_MARGIN = 0.25;
 export const PRIOR_WINDOW = 200;
 /** How many of franc's known contenders a `Detection` carries. */
 export const DETECT_CANDIDATES = 3;
+/** Fewer words than this and a trigram verdict is `thin`. */
+export const THIN_WORDS = 5;
 
 /** Where franc's code differs from the NLLB/FLORES code's first three letters. */
 const FRANC_OVERRIDES: Record<string, string> = {zh: "cmn", ms: "zlm"};
@@ -222,26 +230,29 @@ export function detectWith(
 /**
  * Why the reading pipeline leaves a detected line alone, or null when it
  * translates it: `same` when the detector placed it in the reading language
- * `to`, `unsure` when it could not place it and `to` is one of its likeliest
- * candidates (or it named none at all: a line too short to look at). A line
- * the detector could not place whose candidates leave the reading language
- * out is translated, its source left to the engine: franc ranks Spanish,
- * Galician and Portuguese within a hundredth of each other, and measured on
- * a real channel's history (71 lines, read in English) skipping every
- * unsure line left 21 untranslated where this rule leaves 2, both English.
+ * `to`, `unsure` when it could not place it at all, or placed it only on a
+ * hint (`weak`) or on thin evidence (`thin`) in a language the channel is
+ * not known to write. `known` is that list: the channel's declared
+ * languages and its prior. Translation is opt-in for doubt: a short "lol"
+ * or "brb" handed to the engine came back "from Polish" more often than
+ * not, so an unplaced line waits for the toolbar's Translate instead.
  */
 export type DetectionSkip = "same" | "unsure" | null;
 
-export function detectionSkip(detection: Detection, to: string): DetectionSkip {
+export function detectionSkip(
+	detection: Detection,
+	to: string,
+	known: readonly string[] = []
+): DetectionSkip {
 	if (detection.lang === to) {
 		return "same";
 	}
 
-	if (
-		detection.lang === null &&
-		!detection.short &&
-		(detection.candidates.length === 0 || detection.candidates.includes(to))
-	) {
+	if (detection.lang === null) {
+		return "unsure";
+	}
+
+	if ((detection.weak || detection.thin) && !known.includes(detection.lang)) {
 		return "unsure";
 	}
 
@@ -367,8 +378,8 @@ export function loadDetector(): Promise<Detector> {
 /**
  * `declared` is the channel's own languages (channelStore.ts `languages`);
  * `options.exclude` is the language the reader already reads, so a channel
- * that declares exactly one language besides it can place a line too short
- * for franc. The writer passes neither: a draft is the user's own language,
+ * that declares exactly one language, not that one, can place a line too
+ * short for franc. The writer passes neither: a draft is the user's own language,
  * not a channel matter.
  */
 export async function detectLanguage(
@@ -422,14 +433,16 @@ export async function detectLanguage(
 	const short = text.length < DETECT_MIN_LENGTH;
 
 	if (short) {
-		// Too short for trigrams — but a channel where German and English are
-		// written, read in English, leaves one answer. Confidence 0 says
+		// Too short for trigrams — but a channel that declares one language
+		// only, and not the one read, leaves one answer. One that declares
+		// the reading language too leaves none: "lol" in a channel written
+		// in English and Polish is not Polish. Confidence 0 says
 		// where it came from, and nothing is noted into the prior: a line the
 		// detector never saw is no evidence about the channel. The reader's
 		// own claim about the channel outranks the word list below.
-		const only = declaredLanguages(declared).filter((code) => code !== options.exclude);
+		const only = declaredLanguages(declared);
 
-		if (only.length === 1) {
+		if (only.length === 1 && only[0] !== options.exclude) {
 			return {lang: only[0], confidence: 0, candidates: only};
 		}
 	}
@@ -451,21 +464,24 @@ export async function detectLanguage(
 		const looked = await lookupShortLine(words, prior, options.exclude).catch(() => null);
 
 		if (looked && (looked.lang !== null || short)) {
-			return looked;
+			return looked.lang === null ? looked : {...looked, thin: true};
 		}
 	}
 
 	if (short) {
-		// No verdict is not evidence of the reading language: `short` tells
-		// `detectionSkip` to let the line through (the engine detects the
-		// source; "Hallo" translates, an English echo lands on the
-		// Not-translated chip). The classifier named nothing -- a verdict of
-		// its own returned above -- so there is nothing else to say.
+		// No verdict: `detectionSkip` leaves it alone, and the toolbar's
+		// Translate lets the engine place it. The classifier named nothing --
+		// a verdict of its own returned above -- so there is nothing else to
+		// say.
 		return {lang: null, confidence: 0, candidates: [], short: true};
 	}
 
 	const detect = await loadDetector();
 	const result = detectWith(detect(text, {only: ONLY}), prior?.top() ?? null, declared);
+
+	if (result.lang && words.length < THIN_WORDS) {
+		return {...result, thin: true};
+	}
 
 	if (result.lang && prior && isSupported(result.lang)) {
 		prior.note(result.lang);
