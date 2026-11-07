@@ -1050,12 +1050,13 @@ translation to copy). Production builds render the icon alone; a
 development build appends the reason ("the line came back unchanged") after
 it (`devtoolsAvailable`). The line itself is the one to read, since there is
 no translation row to be the bright line, so its original takes the
-translation's ink (`Message.vue` `unchanged`, `#chat .msg.unchanged .content`) -- over the own-line dimming too: an own line that translated
-shows a bright row, and an own line that came back as it was should read
-the same rather than stay dim with only the chip to show for it. A
-detection skip is not this; its original keeps whatever ink it had. Browser
-check: `tools/scenarios/translation-chips.mjs`, which puts the verdict on
-the page's own line.
+translation's ink (`Message.vue` `unchanged`, `#chat .msg.unchanged .content`).
+**Not on the user's own line**: there an unchanged verdict shows nothing
+and the line keeps the own-line dimming (`TranslationLine.vue` `ownEcho`)
+-- they wrote it, and a "=" under "Yeah?" with "sent in Polish" beside it
+was noise. A detection skip is not this either; its original keeps
+whatever ink it had. Browser check: `tools/scenarios/translation-chips.mjs`,
+which puts the verdict on someone else's line and on the page's own.
 
 **A line the detector cannot place still translates, unless it could be
 the reading language.** `detect.ts` `detectionSkip` decides: a line placed

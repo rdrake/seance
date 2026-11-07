@@ -32,11 +32,12 @@ import {TRANSLATION_ON} from "./lib/translation.mjs";
 export const url = `${process.env.SEANCE_BASE || "https://127.0.0.1:8000/"}`;
 
 // The fabricated channel's message ids (fake-network.mjs defaults, baseId
-// 0): two of the three rendered rows in #seance. The unchanged one is the
-// page's own line ("short one"), dimmed by `.self` until the verdict lands,
-// so the ink claim below is about the one row where it shows.
+// 0): the three rendered rows in #seance. The unchanged chip is on
+// someone else's line; the page's own line ("short one") is handed back
+// unchanged too, and shows nothing -- the user wrote it.
 const SKIPPED_MSG = 21;
-const UNCHANGED_MSG = 22;
+const OWN_UNCHANGED_MSG = 22;
+const UNCHANGED_MSG = 23;
 
 const INJECT = `(() => {
 	const root = document.getElementById("app");
@@ -61,6 +62,19 @@ const INJECT = `(() => {
 			error: null,
 			hidden: false,
 			reason: "unsure",
+		},
+	});
+	store.commit("translationEntry", {
+		id: ${OWN_UNCHANGED_MSG},
+		entry: {
+			status: "failed",
+			text: "",
+			from: "pl",
+			to: "en",
+			candidates: [],
+			engine: null,
+			error: "came back unchanged",
+			hidden: false,
 		},
 	});
 	store.commit("translationEntry", {
@@ -137,6 +151,9 @@ const STYLES = `(() => {
 		muted,
 		ink,
 		unchangedRowIsOwn: !!unchangedRow && unchangedRow.classList.contains("self"),
+		ownRowEmpty: !document.querySelector("#msg-${OWN_UNCHANGED_MSG} .msg-translation, #msg-${OWN_UNCHANGED_MSG} .msg-translation-skipped"),
+		ownRowClass: document.getElementById("msg-${OWN_UNCHANGED_MSG}").classList.contains("unchanged"),
+		ownOriginal: getComputedStyle(document.querySelector("#msg-${OWN_UNCHANGED_MSG} .content")).color,
 		unchangedRowClass: !!unchangedRow && unchangedRow.classList.contains("unchanged"),
 		unchangedOriginal: unchangedRow
 			? getComputedStyle(unchangedRow.querySelector(".content")).color
@@ -213,7 +230,7 @@ export default async function run(page) {
 
 	// Before any verdict, the own line reads dimmed like every own line.
 	const ownBefore = await page.evaluate(
-		`getComputedStyle(document.querySelector("#msg-${UNCHANGED_MSG} .content")).color`
+		`getComputedStyle(document.querySelector("#msg-${OWN_UNCHANGED_MSG} .content")).color`
 	);
 
 	page.check("the translation entries injected", (await page.evaluate(INJECT)) === true);
@@ -245,12 +262,16 @@ export default async function run(page) {
 		s.skippedOpacity === "1" && s.unchangedOpacity === "1"
 	);
 	page.check("the unchanged chip is the equals icon", s.hasEquals === true);
-	page.check("the unchanged line is the page's own", s.unchangedRowIsOwn === true);
-	page.check("an own line is dimmed before the verdict", ownBefore === s.muted);
+	page.check("the unchanged chip is on someone else's line", s.unchangedRowIsOwn === false);
 	page.check("the unchanged line's row carries the class", s.unchangedRowClass === true);
 	page.check(
-		"the unchanged line's original wears the translation's ink, not the own-line dim",
-		s.unchangedOriginal === s.ink && s.unchangedOriginal !== s.muted
+		"the unchanged line's original wears the translation's ink",
+		s.unchangedOriginal === s.ink
+	);
+	page.check("an own line is dimmed before the verdict", ownBefore === s.muted);
+	page.check(
+		"an own line handed back unchanged shows nothing and stays dimmed",
+		s.ownRowEmpty && !s.ownRowClass && s.ownOriginal === s.muted
 	);
 	page.check("a detection skip is not marked unchanged", s.skippedRowClass === false);
 	page.check(
