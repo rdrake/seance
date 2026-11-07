@@ -1,8 +1,7 @@
 // Translation switched off, its default (client/js/settings.ts
 // `translationEnabled`, translate/switch.ts): absent, not just disabled. No
-// translate button in the channel header, the composer or the message
-// toolbar, no "Translation…" in the channel menu, no TranslationLine, no
-// strip; Settings → Translation is the interface language and the switch
+// translate button in the composer or the message toolbar, no
+// "Translation…" in the channel menu, no TranslationLine, no strip; Settings → Translation is the interface language and the switch
 // alone, under a tab named "Language"; and nothing of the machinery runs --
 // no worker script fetched, no Worker constructed, no GPU adapter asked
 // for -- not on a cold load, not when the interface language changes with a
@@ -22,7 +21,7 @@
 //    downloaded, so the script is fetched and a Worker made; off, it is
 //    terminated.
 // 2. With ?fakeTranslate (the in-page fake, which never makes a Worker), the
-//    surfaces: header button, composer button, toolbar Translate, a German
+//    surfaces: composer button, toolbar Translate, the channel menu, a German
 //    line read into English, the composer's strip for the kept write
 //    target -- on, then off again.
 //
@@ -117,7 +116,6 @@ const KEPT = `JSON.parse(localStorage.getItem("thelounge.translate") || "{}")[${
 
 /** Every translation surface the chat view can show, present or not. */
 const SURFACES = `(() => ({
-	header: !!document.querySelector("#chat button.translate"),
 	composer: !!document.querySelector("#translate-once"),
 	strip: !!document.querySelector(".translate-bar"),
 	panel: !!document.querySelector(".translation-panel"),
@@ -267,7 +265,6 @@ async function checkOff(page, phone, where) {
 	const s = await page.evaluate(SURFACES);
 
 	console.log(`surfaces (${where})`, JSON.stringify(s));
-	page.check(`${where}: no translate button in the header`, s.header === false);
 	page.check(`${where}: no translate button in the composer`, s.composer === false);
 	page.check(
 		`${where}: no strip, no panel, no translation under a message`,
@@ -451,8 +448,8 @@ export default async function run(page) {
 	await openTab(page);
 	await flipSwitch(page, true);
 	await closeSettings(page);
-	await page.waitFor(`!!document.querySelector("#chat button.translate")`, {
-		label: "the header's translate button appears",
+	await page.waitFor(`!!document.querySelector("#translate-once")`, {
+		label: "the composer's translate button appears",
 	});
 	await page.evaluate(STAMP_MSGIDS);
 
@@ -474,7 +471,6 @@ export default async function run(page) {
 	const onSurfaces = await page.evaluate(SURFACES);
 
 	console.log("surfaces (fake, on)", JSON.stringify(onSurfaces));
-	page.check("on: the header's translate button is there", onSurfaces.header);
 	page.check("on: the composer's translate button is there", onSurfaces.composer);
 	page.check(
 		"on: the kept write target names German in the placeholder",

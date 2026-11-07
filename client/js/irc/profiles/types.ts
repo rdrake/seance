@@ -10,7 +10,6 @@
  */
 
 import type {OperReport, Route} from "../../../../shared/types/oper";
-import type {SearchAttrs} from "../../../../shared/types/search";
 import type {IrcMessage} from "../message";
 
 /** One bit of a numeric server notice mask (ircu family). */
@@ -100,8 +99,6 @@ export interface ServerProfile {
 	id: string;
 	/** Display name (`nefarious2`). */
 	name: string;
-	/** `SEARCH`'s parameters where they differ from the spec's single one. */
-	searchParams?: (attrs: SearchAttrs) => string[];
 	snomask?: SnomaskModel;
 	/** Every notice kind the classifier can produce, with its default route. */
 	noticeKinds: NoticeKind[];
@@ -129,4 +126,10 @@ export interface ServerProfile {
 	 * `CONNEXIT_NOTICES`), so the UI can say a category is silent.
 	 */
 	operFeatures: string[];
+	/**
+	 * `METADATA * SET <key> private :<value>` writes the key visible only to
+	 * the account's own sessions (nefarious2's extension; draft/metadata-2
+	 * leaves visibility to the server and has no such parameter).
+	 */
+	privateMetadata?: boolean;
 }

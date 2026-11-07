@@ -140,6 +140,7 @@ import {
 	clearExpired,
 	getPolicy,
 	parseStsValue,
+	policyHost,
 	refreshPolicy,
 	StsUpgrade,
 	upgradeOptions,
@@ -234,6 +235,11 @@ export const EDIT_TIMEOUT_MS = 5000;
 
 /** Trailing throttle on writing the catch-up cursor to localStorage. */
 export const CURSOR_SAVE_INTERVAL_MS = 1000;
+
+/** `METADATA * SET <key> private :` (nefarious2's private write), the value follows. */
+function metadataSetPrefix(key: string): string {
+	return `METADATA * SET ${key} private :`;
+}
 
 export interface IrcClientOptions extends ConnectOptions {
 	/** Stable network id; derived from host/port/nick when omitted. */
@@ -482,6 +488,14 @@ export class IrcClient {
 	private readonly ids: IdAllocator;
 	private url: string;
 	private unsubscribeTransport: () => void = () => undefined;
+	/**
+	 * {@link disconnect} closed a live socket and its close event, which the
+	 * transport delivers later, has not come yet. A connect or a transport
+	 * swap before then would lose that event (a redial makes the transport
+	 * ignore the old socket; a swap unsubscribes from it), and the teardown
+	 * in {@link onClose} with it: see {@link settleClose}.
+	 */
+	private closeUnreported = false;
 	/** One insecure → secure reconnect per connection; reset when the transport closes. */
 	private stsUpgradeTried = false;
 	/** Settings edited while connected (`network:edit`); applied on the next connect. */
@@ -640,6 +654,30 @@ export class IrcClient {
 		return detectProfile(this.serverVersion, this.isupport);
 	}
 
+	/**
+	 * The line that writes one of our own metadata keys (`value` empty
+	 * deletes it), or undefined when it must not be written. Every key we
+	 * keep (closed queries, presence, the push mute and payload tier) is
+	 * for the account's own sessions only, and only nefarious2 lets a
+	 * client say so ({@link ServerProfile.privateMetadata}): draft/metadata-2
+	 * leaves visibility to the server, and a public key is listed in
+	 * everyone's WHOIS of us. So on any other server they are not written.
+	 * Until this connection's 004 has named the server family (a write right
+	 * behind 001), the write is private: on a server without the parameter
+	 * that stores a junk value, which leaks nothing.
+	 */
+	metadataSetLine(key: string, value: string): string | undefined {
+		if (!value) {
+			return `METADATA * SET ${key}`;
+		}
+
+		if (this.serverVersion !== undefined && !this.profile.privateMetadata) {
+			return undefined;
+		}
+
+		return `${metadataSetPrefix(key)}${value}`;
+	}
+
 	/** True between our own QUIT/disconnect and the transport closing. */
 	get isQuitting(): boolean {
 		return this.quitting;
@@ -762,6 +800,7 @@ export class IrcClient {
 			return;
 		}
 
+		this.settleClose(); // before quitting is reset: it was our QUIT
 		this.applyPendingOptions();
 		this.applyStsPolicy();
 		this.quitting = false;
@@ -793,6 +832,10 @@ export class IrcClient {
 			const text = (reason ?? "Seance").replace(/[\r\n\0]+/g, " ");
 			const [fits = ""] = splitMessage(utf8ByteLength("QUIT :"), text);
 			this.send(trailingLine("QUIT", [fits]));
+		}
+
+		if (state === "open" || state === "connecting") {
+			this.closeUnreported = true; // a second call must not clear it: the event is still due
 		}
 
 		this.transport.close();
@@ -901,6 +944,7 @@ export class IrcClient {
 
 	/** Switch to `next` (port/tls) with a fresh transport; the old one is left to close. */
 	private reconfigure(next: IrcClientOptions): void {
+		this.settleClose(); // the old transport's close event will not reach us
 		this.unsubscribeTransport();
 		this.options = {...next};
 		this.url = buildUrl(next.host, next.port, next.tls);
@@ -923,17 +967,27 @@ export class IrcClient {
 	}
 
 	/**
-	 * After the final `CAP LS`: over `ws://` an `sts` with `port=` means drop
-	 * the connection and come back over `wss://` on that port (once); over
-	 * `wss://` a `duration=` caches / refreshes / removes the host's policy.
+	 * After the final `CAP LS`, or a `CAP NEW` that names `sts` (the spec has
+	 * the client store or update a policy it learns that way too): over
+	 * `ws://` an `sts` with `port=` means drop the connection and come back
+	 * over `wss://` on that port (once); over `wss://` a `duration=` caches /
+	 * refreshes / removes the host's policy.
 	 */
 	private checkSts(msg: IrcMessage): void {
-		if (msg.command !== "CAP" || (msg.params[1] ?? "").toUpperCase() !== "LS") {
+		if (msg.command !== "CAP") {
 			return;
 		}
 
-		if (msg.params[2] === "*" && msg.params.length > 3) {
-			return; // more LS lines follow
+		const subcommand = (msg.params[1] ?? "").toUpperCase();
+
+		if (subcommand === "NEW") {
+			const names = (msg.params[msg.params.length - 1] ?? "").split(" ");
+
+			if (!names.some((token) => token === "sts" || token.startsWith("sts="))) {
+				return;
+			}
+		} else if (subcommand !== "LS" || (msg.params[2] === "*" && msg.params.length > 3)) {
+			return; // not LS, or more LS lines follow
 		}
 
 		const raw = this.caps.value("sts");
@@ -955,8 +1009,22 @@ export class IrcClient {
 
 		this.stsUpgradeTried = true;
 		this.pushMessage(this.lobby, {text: t("connect.stsReconnect", {port: value.port})}, true);
+		const secure = {tls: true, port: value.port};
+
+		// Settings edited during this connection for this host keep the
+		// secure endpoint; an edit to another host is left alone.
+		const pending = this.pendingOptions;
+
+		if (pending && policyHost(pending.host) === policyHost(this.options.host)) {
+			this.pendingOptions = {...pending, ...secure};
+		}
+
+		this.closeExplained = true; // the line above says why
 		this.disconnect("STS upgrade");
-		this.reconfigure({...this.options, tls: true, port: value.port});
+		// Not the user's quit: channels joined so far (a `CAP NEW` after
+		// registration) are rejoined quietly, as after a lost connection.
+		this.quitting = false;
+		this.reconfigure({...this.options, ...secure}); // tears the old session down
 		this.connect();
 	}
 
@@ -1045,6 +1113,7 @@ export class IrcClient {
 		this.offlineNoted = false;
 		this.connected = false;
 		this.welcomed = false;
+		this.serverVersion = undefined; // this connection's 004 says again
 		this.fakeLag.stop();
 		this.retryAt = undefined;
 		this.retryReason = undefined;
@@ -1197,12 +1266,6 @@ export class IrcClient {
 		const accept = (name: string, value: string): boolean => {
 			if (name === MULTILINE_CAP) {
 				return parseMultilineValue(value) !== undefined;
-			}
-
-			if (name === WEBPUSH_CAP) {
-				// Without a VAPID key the server could never send a push, so
-				// subscribing would be pointless (webpush.ts).
-				return webpushVapidOf(value) !== undefined;
 			}
 
 			if (name === "sasl") {
@@ -1358,7 +1421,19 @@ export class IrcClient {
 		this.sasl = null;
 	}
 
+	/**
+	 * Run the teardown of a socket {@link disconnect} closed now, instead of
+	 * when its close event comes: the caller is about to redial or swap the
+	 * transport, after which that event never arrives.
+	 */
+	private settleClose(): void {
+		if (this.closeUnreported) {
+			this.onClose(1000, "", false);
+		}
+	}
+
 	private onClose(code: number, reason: string, willReconnect: boolean, delayMs?: number): void {
+		this.closeUnreported = false;
 		const phase = this._state;
 		const wasUp = phase !== "disconnected";
 		this._state = "disconnected";
@@ -1458,11 +1533,11 @@ export class IrcClient {
 		const quiet = this.offlineNoted && isOffline();
 
 		if (wasUp && !quiet) {
-			if (this.quitting) {
-				this.pushMessage(this.lobby, {text: t("connect.disconnected")}, true);
-			} else if (this.closeExplained) {
+			if (this.closeExplained) {
 				// We dropped the socket ourselves and said why just before.
 				this.closeExplained = false;
+			} else if (this.quitting) {
+				this.pushMessage(this.lobby, {text: t("connect.disconnected")}, true);
 			} else {
 				const report = describeClose({
 					url: this.url,
@@ -1638,16 +1713,22 @@ export class IrcClient {
 
 	/**
 	 * The VAPID public key this server advertises for Web Push, when the
-	 * `draft/webpush` capability is enabled: the cap 302 value is the primary
-	 * source, the `VAPID` ISUPPORT token the fallback. Undefined when the
-	 * network cannot push (cap missing or no key).
+	 * `draft/webpush` capability is enabled: the `VAPID` ISUPPORT token the
+	 * spec has the server send once the cap is on, or nefarious2's cap 302
+	 * value (`vapid=<key>`). The cap is requested bare too, as the spec has
+	 * it offered; undefined when the network cannot push (cap missing or no
+	 * key), and nothing subscribes then.
 	 */
 	webpushVapid(): string | undefined {
 		if (!this.caps.hasCapability(WEBPUSH_CAP)) {
 			return undefined;
 		}
 
-		return webpushVapidOf(this.caps.value(WEBPUSH_CAP) ?? "") ?? this.isupport.vapid;
+		return (
+			webpushVapidOf(this.caps.value(WEBPUSH_CAP) ?? "") ??
+			// The same checks and normal form for the 005 token.
+			webpushVapidOf(`vapid=${this.isupport.vapid ?? ""}`)
+		);
 	}
 
 	/**
@@ -2205,7 +2286,8 @@ export class IrcClient {
 
 	/** Whether the server lets us send REDACT. */
 	get canRedact(): boolean {
-		return this.caps.hasCapability(REDACTION_CAP);
+		// The draft has redaction depend on `message-tags` (a msgid is a tag).
+		return this.caps.hasCapability(REDACTION_CAP) && this.caps.hasCapability("message-tags");
 	}
 
 	/**
@@ -2991,14 +3073,18 @@ export class IrcClient {
 
 		// What the server keeps, and what fits one line after the command
 		// (MAX_LINE_BYTES): a server allowing more must not get an unsendable line.
-		const prefix = `METADATA * SET ${CLOSED_KEY} private :`;
+		const prefix = metadataSetPrefix(CLOSED_KEY);
 		const room = MAX_LINE_BYTES - new TextEncoder().encode(prefix).length;
 		const value = encodeClosed(
 			this.closed.entries(),
 			Math.min(this.metadataMaxValueBytes(), room),
 			Date.now()
 		);
-		this.send(value ? `${prefix}${value}` : `METADATA * SET ${CLOSED_KEY}`);
+		const line = this.metadataSetLine(CLOSED_KEY, value);
+
+		if (line) {
+			this.send(line);
+		}
 	}
 
 	/**

@@ -14763,7 +14763,6 @@ msgid "Couldn't translate"
 msgstr "Impossible de traduire"
 
 #. Choice for how formally a translation addresses people: keep whatever the original message did.
-#: client/components/TranslationPanel.vue
 #: client/components/Settings/Translation.vue
 msgctxt "translate.formality.auto"
 msgid "As the original does"
@@ -14831,60 +14830,6 @@ msgstr "{model} ne fonctionne plus sur le GPU de cet appareil. L'exécuter sur l
 msgctxt "translate.gpuFallback.title"
 msgid "The GPU stopped"
 msgstr "Le GPU s'est arrêté"
-
-#. Tooltip of the translate button in a chat window's header while translation is off; clicking it turns reading on. {reading} is a language name.
-#: client/components/Chat.vue
-msgctxt "translate.header.off"
-msgid "Translate messages into {reading}"
-msgstr "Traduire les messages en {reading}"
-
-#. Tooltip of the translate button in a chat window's header when translation is off and the engine has paused. {reading} is a language name; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.offPaused"
-msgid "Translate messages into {reading}, paused: {reason}"
-msgstr "Traduire les messages en {reading}, en pause : {reason}"
-
-#. Tooltip of the translate button in a chat window's header while incoming messages are not translated but outgoing ones are. {reading} and {writing} are language names.
-#: client/components/Chat.vue
-msgctxt "translate.header.offWrite"
-msgid "Translate messages into {reading}, sending in {writing}"
-msgstr "Traduire les messages en {reading}, envoi en {writing}"
-
-#. Tooltip of the translate button in a chat window's header when only outgoing messages are translated and the engine has paused. {reading} and {writing} are language names; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.offWritePaused"
-msgid "Translate messages into {reading}, sending in {writing}, paused: {reason}"
-msgstr "Traduire les messages en {reading}, envoi en {writing}, en pause : {reason}"
-
-#. Tooltip of the translate button in a chat window's header while incoming messages are being translated. {reading} is a language name.
-#: client/components/Chat.vue
-msgctxt "translate.header.read"
-msgid "Translating into {reading}"
-msgstr "Traduction en {reading}"
-
-#. Tooltip of the translate button in a chat window's header when translation is on but the engine has paused. {reading} is a language name; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.readPaused"
-msgid "Translating into {reading}, paused: {reason}"
-msgstr "Traduction en {reading}, en pause : {reason}"
-
-#. Tooltip of the translate button in a chat window's header while incoming messages are translated and outgoing ones are too. {reading} and {writing} are language names.
-#: client/components/Chat.vue
-msgctxt "translate.header.readWrite"
-msgid "Translating into {reading}, sending in {writing}"
-msgstr "Traduction en {reading}, envoi en {writing}"
-
-#. Tooltip of the translate button in a chat window's header when reading and writing are both translated but the engine has paused. {reading} and {writing} are language names; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.readWritePaused"
-msgid "Translating into {reading}, sending in {writing}, paused: {reason}"
-msgstr "Traduction en {reading}, envoi en {writing}, en pause : {reason}"
-
-#. Tooltip and aria-label of the translate button in a chat window's header on a touch device, where tapping it opens the translation panel.
-#: client/components/Chat.vue
-msgctxt "translate.header.settings"
-msgid "Translation settings"
-msgstr "Paramètres de traduction"
 
 #. Warning shown under a language choice, in the translation panel and in Settings, when the available models translate that language poorly.
 #: client/components/TranslationPanel.vue
@@ -15110,6 +15055,12 @@ msgstr "Activé"
 msgctxt "translate.panel.ownLanguageNeedsGpu"
 msgid "{language} is greyed out: correcting a message needs the language model."
 msgstr "{language} est grisé : corriger un message nécessite le modèle de langage."
+
+#. Status line at the top of the per-channel translation panel while the engine has paused itself after repeated failures; it resumes by itself within a minute. {reason} is the engine's own untranslated message.
+#: client/components/TranslationPanel.vue
+msgctxt "translate.panel.paused"
+msgid "Translation is paused for now: {reason}"
+msgstr ""
 
 #. Explanatory note under the reading switch in the translation panel.
 #: client/components/TranslationPanel.vue
@@ -15384,8 +15335,9 @@ msgstr "Langue de l'interface"
 
 #. Introductory paragraph of the Translation tab in Settings, explaining that translation runs locally.
 #: client/components/Settings/Translation.vue
+#, fuzzy
 msgctxt "translate.settings.intro"
-msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from the translate button in the channel header."
+msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from Translation… in the channel's menu."
 msgstr "Les messages sont traduits sur cet appareil par un modèle qu'il télécharge une seule fois ; rien n'est envoyé à un service de traduction. Activez-la canal par canal avec le bouton de traduction dans l'en-tête du canal."
 
 #. Explanatory note under the language picker in Settings → Translation.
@@ -15648,9 +15600,8 @@ msgctxt "translate.topic.showTranslation"
 msgid "Show the translated topic"
 msgstr "Afficher le sujet traduit"
 
-#. Lead sentence of the per-channel translation panel's notice, and the channel header translate button's label, when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
+#. Lead sentence of the per-channel translation panel's notice when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
 #: client/components/TranslationPanel.vue
-#: client/components/Chat.vue
 msgctxt "translate.unavailable.lead"
 msgid "Translation can't run here right now."
 msgstr "La traduction ne peut pas fonctionner ici pour le moment."

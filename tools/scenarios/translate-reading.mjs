@@ -3,7 +3,7 @@
 // German in #seance-translate (its own channel, not #seance, so these lines
 // never land in a tester's own context) through a raw WebSocket to the dev
 // ircd. Steps, in
-// order: nothing is translated while the globe is off, and the two German
+// order: nothing is translated while reading is off, and the two German
 // lines said before it is switched on -- and the page's own German line
 // said then too -- are translated once it is (reading
 // covers what the channel shows, not only what arrives after the switch;
@@ -25,7 +25,7 @@
 // five singles, and every burst line's echo is rendered); the chip's menu
 // can hide a translation; the toolbar's Translate opens a menu that
 // translates one message on request or names its language first; the page's own German line is translated like anyone's; the
-// translation panel opens on the globe's context menu as one column of
+// translation panel opens from the channel menu as one column of
 // controls of equal width, each language named in the interface's
 // language (never a code) and a link to Settings, and closes on Escape; a line the fake hands back
 // unchanged (its `[echo]` token) fails with "the line came back unchanged"
@@ -51,7 +51,7 @@
 // one in the new language, what arrives after the move is read into it and
 // the rejoin's history too (the chip names it); and leaving the channel
 // with /part and joining it again keeps the
-// globe on and translates the history the rejoin loads, the page's own
+// reading on and translates the history the rejoin loads, the page's own
 // line from before the part included; and, with the channel switched off
 // again at the end, the toolbar's Translate still translates one line ad
 // hoc from a language picked in its menu's dialog.
@@ -73,15 +73,18 @@
 // server feature through an oper, so a rig whose oper is not the Docker
 // default wants `SEANCE_OPER=seanceop SEANCE_OPER_PASSWORD=seance` (the
 // native rig's, tools/nefarious-dev/local.conf) in the environment. NODE_ENV must be
-// unset for the build: a production build compiles the fake out. Under
-// `--mobile` the globe's tap opens the panel rather than switching reading
-// (there is no right-click on a phone), so the switch is thrown through the
-// panel's own control there; with a pointer the switch-on click opens the
-// panel too (and the run puts it away with Escape before going on), while
-// the switch-off click must leave it closed.
+// unset for the build: a production build compiles the fake out. The
+// reading switch is thrown in the channel menu's translation panel, whose
+// close button puts it away again.
 
 import {rigFeature} from "./lib/rig-feature.mjs";
-import {TRANSLATION_ON} from "./lib/translation.mjs";
+import {
+	READING_ON,
+	TRANSLATION_ON,
+	TRANSLATION_OFFERED,
+	closeTranslationPanel,
+	openTranslationPanel,
+} from "./lib/translation.mjs";
 
 const RUN = Date.now().toString(36);
 const NICK = `tr${RUN}`;
@@ -92,8 +95,8 @@ const BASE = process.env.SEANCE_HTTP ?? "http://localhost:8021/";
 
 export const url = `${BASE}?host=127.0.0.1&port=8067&tls=false&nick=${NICK}&join=%23seance-translate&fakeTranslate`;
 
+const PAUSED = `!!document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translation.paused`;
 const LINES = `document.querySelectorAll('.msg-translation[data-status="done"]').length`;
-const GLOBE = "#chat button.translate";
 const MOBILE = process.argv.includes("--mobile");
 const REQUESTS = `(window.__seanceTranslateFake && window.__seanceTranslateFake.requests) || []`;
 const REDACTION_FEATURE = "CAP_draft_message_redaction";
@@ -132,70 +135,17 @@ async function settledLines(page, label) {
 }
 
 /**
- * Reading on or off. The globe's click is the switch where there is a
- * pointer; on touch the tap opens the panel instead (there is no
- * right-click to reach it with), so the switch is the panel's first
- * control and the close button puts it away.
+ * Reading on or off: the channel menu's panel, its first control, and the
+ * close button puts it away.
  */
 async function setReading(page, code) {
-	await page.click(GLOBE);
-
-	if (!MOBILE) {
-		// Switching a channel on opens its panel with it, so the reader can
-		// see and adjust the languages at once; switching off is only that.
-		// The panel is put away again before the run goes on.
-		await page.sleep(300);
-
-		const panel = await page.evaluate(`!!document.querySelector(".translation-panel")`);
-
-		if (code) {
-			await page.check("the switch-on click opened the panel", panel);
-
-			if (panel) {
-				await page.evaluate(
-					`document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}))`
-				);
-				await page.waitFor(`!document.querySelector(".translation-panel")`, {
-					label: "the panel closed again before the next step",
-				});
-			}
-		} else {
-			await page.check("the switch-off click left the panel closed", !panel);
-		}
-
-		return;
-	}
-
-	await page.waitFor(`!!document.querySelector(".translation-panel")`, {
-		label: "the tap opened the panel",
-	});
+	await openPanel(page);
 	await setPanelRead(page, Boolean(code));
-	await page.evaluate(`document.querySelector(".translation-panel-close").click()`);
-	await page.waitFor(`!document.querySelector(".translation-panel")`, {
-		label: "the close button put the panel away",
-	});
+	await closeTranslationPanel(page);
 }
 
-/**
- * The panel without touching the switch: a right-click where there is a
- * pointer, and on touch the tap itself, which is how the panel opens there.
- */
-async function openPanel(page) {
-	if (MOBILE) {
-		await page.click(GLOBE);
-	} else {
-		await page.evaluate(
-			`document.querySelector(${JSON.stringify(
-				GLOBE
-			)}).dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true}))`
-		);
-	}
-
-	await page.waitFor(`!!document.querySelector(".translation-panel")`, {
-		timeout: 10000,
-		label: "the panel opened",
-	});
-}
+/** The panel, from the channel menu's "Translation…". */
+const openPanel = openTranslationPanel;
 
 /** Set one of the panel's selects and let Vue hear it. */
 function setPanelSelect(page, name, value) {
@@ -213,10 +163,12 @@ function setPanelSelect(page, name, value) {
  * it is the interface's, with the Settings override as the exception.
  */
 function setPanelRead(page, on) {
+	// By place, not by label: the interface may be in French by then. The
+	// reading switch is the panel's first radiogroup, Off then On.
 	return page.evaluate(
-		`(() => { for (const s of document.querySelectorAll('.translation-panel-segmented .translation-panel-segment')) { if (s.textContent.trim() === (${JSON.stringify(
-			on
-		)} ? "On" : "Off")) { s.click(); return; } } throw new Error("no reading segment"); })()`
+		`document.querySelector(".translation-panel [role=radiogroup]").querySelectorAll("[role=radio]")[${
+			on ? 1 : 0
+		}].click()`
 	);
 }
 
@@ -385,16 +337,11 @@ async function scenario(page) {
 		timeout: 20000,
 		label: "chat input up",
 	});
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(GLOBE)})`, {
+	await page.waitFor(TRANSLATION_OFFERED, {
 		timeout: 10000,
-		label: "globe shown once the probe answered",
+		label: "translation offered once the probe answered",
 	});
-	await page.check(
-		"globe starts off",
-		!(await page.evaluate(
-			`document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`
-		))
-	);
+	await page.check("reading starts off", !(await page.evaluate(READING_ON)));
 
 	// A German topic before the switch: the header shows it as set while
 	// reading is off, and the switch-on reads it like the lines (reader.ts
@@ -443,10 +390,7 @@ async function scenario(page) {
 	await page.check("nothing translated while reading is off", (await page.evaluate(LINES)) === 0);
 
 	await setReading(page, "en");
-	await page.waitFor(
-		`document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`,
-		{label: "globe on"}
-	);
+	await page.waitFor(READING_ON, {label: "reading on"});
 	await page.waitFor(
 		preSwitch
 			.map(
@@ -531,20 +475,6 @@ async function scenario(page) {
 	// Moved on where a step adds a done line the later counts must not see
 	// as theirs (Translate anyway on the English line, the Spanish line).
 	let base = await settledLines(page, "the switch-on's requeue");
-
-	const globeLabel = String(
-		await page.evaluate(
-			`document.querySelector(${JSON.stringify(GLOBE)}).getAttribute("aria-label")`
-		)
-	);
-
-	// On touch the button is the way into the panel, and says so.
-	await page.check(
-		MOBILE
-			? `the globe offers the settings (${globeLabel})`
-			: `the tooltip names the language (${globeLabel})`,
-		globeLabel.startsWith(MOBILE ? "Translation settings" : "Translating into")
-	);
 
 	other.say("Ich schicke dir gleich das Log, einen Moment bitte.");
 	await page.waitFor(`${LINES} === ${base + 1}`, {timeout: 15000, label: "one translated line"});
@@ -1195,17 +1125,9 @@ async function scenario(page) {
 		)) === "German → English"
 	);
 
-	// The panel: opened from the globe's context menu, full language names,
-	// closes on Escape.
-	await page.evaluate(
-		`document.querySelector(${JSON.stringify(
-			GLOBE
-		)}).dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true}))`
-	);
-	await page.waitFor(`!!document.querySelector(".translation-panel")`, {
-		timeout: 10000,
-		label: "panel opens",
-	});
+	// The panel: opened from the channel menu, full language names, closes
+	// on Escape.
+	await openPanel(page);
 
 	const panelRect = await page.rect(".translation-panel");
 	const viewport = await page.evaluate(`({w: innerWidth, h: innerHeight})`);
@@ -1233,29 +1155,29 @@ async function scenario(page) {
 	);
 
 	if (MOBILE) {
-		// The phone's layout is the sheet, asserted in full by
-		// tools/scenarios/translate-composer.mjs --mobile.
+		// The phone's layout fills the chat under the header, asserted in
+		// full by tools/scenarios/translate-composer.mjs --mobile.
 		await page.check(
-			"the panel came up as the phone's sheet",
-			await page.evaluate(`!!document.querySelector(".translation-panel--sheet")`)
+			"the panel came up across the phone's width",
+			!!panelRect && Math.round(panelRect.width) === viewport.w
 		);
 	} else {
 		// One column: every setting is a label with its control under it, so
-		// The four selects and the variant input come out the same width
-		// (the reading switch is a segmented control, not a control row).
+		// the two selects and the variant input come out the same width
+		// (reading and formality are segmented controls, not control rows).
 		const controlWidths = await page.evaluate(
 			`[...document.querySelectorAll(".translation-panel .translation-panel-control")].map((c) => Math.round(c.getBoundingClientRect().width))`
 		);
 
 		await page.check(
-			`the four controls share one width (${controlWidths.join(", ")})`,
-			controlWidths.length === 4 && new Set(controlWidths).size === 1
+			`the three controls share one width (${controlWidths.join(", ")})`,
+			controlWidths.length === 3 && new Set(controlWidths).size === 1
 		);
 		await page.check(
-			"the hints stay out of the desktop panel",
+			"the hints are shown in the desktop panel too",
 			(await page.evaluate(
 				`getComputedStyle(document.querySelector(".translation-panel-hint")).display`
-			)) === "none"
+			)) !== "none"
 		);
 	}
 
@@ -1279,9 +1201,18 @@ async function scenario(page) {
 			!/^[a-z]{2}$/i.test(readLabel.replace("Read messages in ", ""))
 	);
 
-	await page.evaluate(
-		`document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}))`
-	);
+	// A real key press: Escape reaches the panel through the app's own
+	// binding (App.vue, helpers/escapeLayer.ts), not a listener of its own.
+	for (const type of ["keyDown", "keyUp"]) {
+		await page.send("Input.dispatchKeyEvent", {
+			type,
+			key: "Escape",
+			code: "Escape",
+			windowsVirtualKeyCode: 27,
+			nativeVirtualKeyCode: 27,
+		});
+	}
+
 	await page.waitFor(`!document.querySelector(".translation-panel")`, {
 		timeout: 5000,
 		label: "panel closes on Escape",
@@ -1528,10 +1459,7 @@ async function scenario(page) {
 
 	// Off again: a new German line gets nothing.
 	await setReading(page, "");
-	await page.waitFor(
-		`!document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`,
-		{label: "globe off"}
-	);
+	await page.waitFor(`!(${READING_ON})`, {label: "reading off"});
 	other.say("Nach dem Ausschalten passiert hier nichts mehr.");
 	await page.waitFor(`document.body.innerText.includes("passiert hier nichts mehr")`, {
 		label: "post-switch line arrived",
@@ -1618,14 +1546,8 @@ async function scenario(page) {
 	await page.screenshot("panel-languages");
 
 	await setPanelRead(page, true);
-	await page.evaluate(`document.querySelector(".translation-panel-close").click()`);
-	await page.waitFor(`!document.querySelector(".translation-panel")`, {
-		label: "the panel closed after declaring German",
-	});
-	await page.waitFor(
-		`document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`,
-		{label: "reading is on again"}
-	);
+	await closeTranslationPanel(page);
+	await page.waitFor(READING_ON, {label: "reading is on again"});
 
 	// Switching on again queues what the channel shows once more.
 	const reBase = await settledLines(page, "the second switch-on's requeue");
@@ -1808,28 +1730,7 @@ async function scenario(page) {
 		`the echo cost the engine nothing (${doneBeforeNext} then ${doneAfterNext} done lines)`,
 		doneAfterNext === doneBeforeNext + 1
 	);
-	// The globe's label is where a pause shows (Chat.vue `translateLabel`, its aria-label).
-	await page.check(
-		"no engine was paused",
-		!String(
-			await page.evaluate(
-				`document.querySelector(${JSON.stringify(GLOBE)}).getAttribute("aria-label")`
-			)
-		).includes("paused:")
-	);
-	// The tooltip names the reading language itself, never the channel's
-	// on/off flag: `translateLabel`'s `reading` var once took the boolean
-	// and rendered "Translating into true".
-	const globeTitle = String(
-		await page.evaluate(
-			`document.querySelector(${JSON.stringify(GLOBE)}).getAttribute("aria-label")`
-		)
-	);
-
-	await page.check(
-		`the globe names the reading language (${globeTitle})`,
-		globeTitle.startsWith("Translating into English") && !/\btrue\b/.test(globeTitle)
-	);
+	await page.check("no engine was paused", !(await page.evaluate(PAUSED)));
 
 	// A question answered rather than translated is no translation either:
 	// the fake's `[answer]` token replies without a question mark, and the
@@ -1855,14 +1756,7 @@ async function scenario(page) {
 			)
 		).trim() === "answered the question instead of translating it"
 	);
-	await page.check(
-		"no engine was paused by the answer",
-		!String(
-			await page.evaluate(
-				`document.querySelector(${JSON.stringify(GLOBE)}).getAttribute("aria-label")`
-			)
-		).includes("paused:")
-	);
+	await page.check("no engine was paused by the answer", !(await page.evaluate(PAUSED)));
 	await page.evaluate(`(${questionRow}).scrollIntoView({block: "center"})`);
 	await page.screenshot("answered-question");
 
@@ -1958,7 +1852,7 @@ async function scenario(page) {
 		label: "the own line before the part is translated into French",
 	});
 
-	// Leave and come back: the channel keeps its setting, so the globe is on
+	// Leave and come back: the channel keeps its setting, so reading is on
 	// after the rejoin and the history the join loads is translated.
 	await page.fill("#input", `/part ${CHANNEL}`);
 	await page.evaluate(`document.querySelector("#form").requestSubmit()`);
@@ -1971,17 +1865,12 @@ async function scenario(page) {
 	await page.fill("#input", `/join ${CHANNEL}`);
 	await page.evaluate(`document.querySelector("#form").requestSubmit()`);
 	await page.waitFor(
-		`!!document.querySelector(${JSON.stringify(
-			GLOBE
-		)}) && document.body.innerText.includes(${JSON.stringify(afterEchoMarker)})`,
+		`${TRANSLATION_OFFERED} && document.body.innerText.includes(${JSON.stringify(
+			afterEchoMarker
+		)})`,
 		{timeout: 30000, label: "the rejoin opened the channel with its history"}
 	);
-	await page.check(
-		"the globe is still on after the rejoin",
-		await page.evaluate(
-			`document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`
-		)
-	);
+	await page.check("reading is still on after the rejoin", await page.evaluate(READING_ON));
 	await page.waitFor(`(${afterEchoText}).includes("[French]")`, {
 		timeout: 90000,
 		label: "the history the rejoin loaded is translated",
@@ -1995,10 +1884,7 @@ async function scenario(page) {
 	// Off before the speaker goes: a switch-off drops what the load left
 	// waiting, so nothing is mid-translation as the sockets close.
 	await setReading(page, "");
-	await page.waitFor(
-		`!document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`,
-		{label: "reading off again at the end"}
-	);
+	await page.waitFor(`!(${READING_ON})`, {label: "reading off again at the end"});
 
 	// Ad hoc, on a channel that is switched off: the toolbar's Translate is
 	// still there, its menu names the line's language, and the pick is the
