@@ -2671,6 +2671,51 @@ html[data-shell="native"] .language-sheet--phone {
 	padding-left: calc(1rem + var(--inset-left));
 }
 
+/* The title, Turn off and ✕ on one line. */
+.language-sheet-head {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 0.5rem;
+	margin-block: -0.25rem -0.125rem;
+}
+
+.language-sheet-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-weight: 600;
+}
+
+.language-sheet-off {
+	flex: 0 0 auto;
+	padding: 0.25rem 0.5rem;
+	border: 0;
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--chat-accent, var(--link-color));
+	font: inherit;
+	font-size: 0.875em;
+	cursor: pointer;
+}
+
+.language-sheet-close {
+	flex: 0 0 auto;
+	width: 2rem;
+	height: 2rem;
+	margin-inline-end: -0.375rem;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--body-color-muted);
+	font-size: 1rem;
+	cursor: pointer;
+}
+
+.language-sheet-close:hover {
+	color: var(--body-color);
+}
+
 /* I write ⇄ They read: two halves, the one the list fills in lit. */
 .language-sheet-pair {
 	display: flex;
@@ -2683,21 +2728,23 @@ html[data-shell="native"] .language-sheet--phone {
 	display: flex;
 	flex: 1 1 0;
 	flex-direction: column;
-	gap: 0.125rem;
+	gap: 0;
 	min-width: 0;
-	padding: 0.4rem 0.625rem;
-	border: 1px solid var(--window-border, rgb(128 128 128 / 30%));
+	padding: 0.3rem 0.625rem;
+	border: 1px solid transparent;
 	border-radius: 0.375rem;
+	background: rgb(128 128 128 / 10%);
 	background: transparent;
 	color: inherit;
 	font: inherit;
+	font-size: 0.9375em;
 	text-align: start;
 	cursor: pointer;
 }
 
 .language-sheet-side.active {
 	border-color: var(--chat-accent, var(--link-color));
-	background: var(--accent-tint-20, rgb(128 128 128 / 15%));
+	background: transparent;
 }
 
 .language-sheet-side-label {
@@ -2766,10 +2813,6 @@ html[data-shell="native"] .language-sheet--phone {
 	color: var(--chat-accent, var(--link-color));
 }
 
-.language-sheet-off {
-	color: var(--body-color-muted);
-}
-
 .language-sheet-search {
 	flex: 0 0 auto;
 	width: 100%;
@@ -2782,7 +2825,7 @@ html[data-shell="native"] .language-sheet--phone {
 }
 
 .language-sheet--phone .language-sheet-search {
-	height: 2.75rem;
+	height: 2.5rem;
 }
 
 /* The list takes what height is left and scrolls. */
@@ -2812,7 +2855,18 @@ html[data-shell="native"] .language-sheet--phone {
 }
 
 .language-sheet--phone .language-sheet-row {
-	padding-block: 0.7rem;
+	padding-block: 0.6rem;
+}
+
+/* "Not available on this device": the rows that cannot run, after the rest. */
+.language-sheet-section {
+	margin-block-start: 0.5rem;
+	padding: 0.5rem 0.5rem 0.25rem;
+	border-block-start: 1px solid var(--window-border, rgb(128 128 128 / 30%));
+	color: var(--body-color-muted);
+	font-size: 0.75em;
+	font-weight: 600;
+	letter-spacing: 0.02em;
 }
 
 .language-sheet-row:hover,

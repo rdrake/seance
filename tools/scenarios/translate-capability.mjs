@@ -390,6 +390,11 @@ export default async function run(page) {
 			return {
 				disabled: row.classList.contains("blocked"),
 				status: (row.querySelector(".language-sheet-status") || {}).textContent?.trim() || "",
+				underHeading: (() => {
+					const items = [...document.querySelectorAll("${PICKER} .language-sheet-list > li")];
+					const heading = items.findIndex((li) => li.classList.contains("language-sheet-section"));
+					return heading >= 0 && items.indexOf(row.closest("li")) > heading;
+				})(),
 			};
 		})()`);
 
@@ -748,7 +753,7 @@ export default async function run(page) {
 			page.check(
 				`${name}: the cleanup pass is disabled with its reason (${same.lead} / ${same.why})`,
 				same.disabled &&
-					same.status === EN["translate.sheet.unavailable"] &&
+					same.underHeading &&
 					same.lead === EN["translate.picker.sameLanguageNeedsGpu"] &&
 					same.why === device.why(SMALL)
 			);

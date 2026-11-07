@@ -1545,7 +1545,7 @@ language mark beside the paperclip and the plane (`ChatInput.vue`
 target -- `channelStore.ts` `write`, the very setting the panel's "Send my
 messages in" shows, so the two controls never disagree -- lit on the
 button, and named in its label ("Sending in German · change or turn off"),
-while it is set, until the sheet's **Off** chip (or the panel's Off). The
+while it is set, until **Turn off** in the sheet's header (or the panel's Off). The
 same pair picked again changes nothing; a new one replaces the strip. The
 sheet closes on a channel switch. A draft already typed gets its strip at
 once. The list is plain buttons (the current one `aria-current`, a row
@@ -1563,9 +1563,12 @@ language's own, accents folded), and the whole list, each row the name in
 the interface's language with the endonym beside it. A row under "They
 read" says what picking it costs: **Corrects spelling** for the language
 the user writes, the model's download size where its copy is not on this
-device yet (`service.ts` `downloadBytes`, the route's own copy), and
-**Not available here** -- the row dimmed, its tap leaving the sheet up
-with the reason under the list -- where `pairVerdict` has no route.
+device yet (`service.ts` `downloadBytes`, the route's own copy). A
+language `pairVerdict` has no route for goes to the end of the list,
+under one **Not available on this device** heading rather than a label on
+every row (on a phone most of the list can be that), dimmed, its tap
+leaving the sheet up with the reason under the list. The header holds
+the title, Turn off and a ✕.
 Picking under "They read" applies and closes; picking under "I write"
 names the source (or "Detect automatically") and moves on to "They read".
 The sheet's **"This message only"** (offered when there is
@@ -1598,7 +1601,7 @@ request to the LLM alone (`router.ts`; no GPU model, no route, and the
 sheet says so), and an echo read as "nothing to correct" rather than a
 failure. The sheet says what it will do rather than what it is: the
 language the user writes reads **Corrects spelling** under "They read" --
-and **Not available here** where the cleanup cannot run at all (no GPU
+and sits under **Not available on this device** where the cleanup cannot run at all (no GPU
 model, the reason under the list on a tap). **A polish carries none of the channel**: its prompt is the
 copy editor's system message and `Correct: <line>`, nothing above it, and
 `writer.ts` gives the request an empty context but for the register.
