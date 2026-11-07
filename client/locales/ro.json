@@ -2606,7 +2606,6 @@
   "translate.settings.headingLanguage": "Limbă",
   "translate.settings.inUse": "În uz",
   "translate.settings.interfaceLanguageLabel": "Limba interfeței",
-  "translate.settings.intro": "Mesajele sunt traduse pe acest dispozitiv de un model pe care îl descarcă o singură dată; nimic nu este trimis unui serviciu de traducere. Activeaz-o pentru fiecare canal din butonul de traducere din antetul canalului.",
   "translate.settings.languageHint": "Limba în care e scrisă interfața și în care sunt traduse mesajele — un singur control. Automat urmează limba browserului.",
   "translate.settings.languageLabel": "Limba interfeței și de citire",
   "translate.settings.modelOption": "{name} · {size}",

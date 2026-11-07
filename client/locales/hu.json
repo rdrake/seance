@@ -2587,7 +2587,6 @@
   "translate.settings.headingLanguage": "Nyelv",
   "translate.settings.inUse": "Használatban",
   "translate.settings.interfaceLanguageLabel": "A felület nyelve",
-  "translate.settings.intro": "Az üzeneteket ezen az eszközön fordítja le egy modell, amelyet az eszköz egyszer tölt le; semmi sem kerül fordítószolgáltatáshoz. Csatornánként kapcsold be a csatorna fejlécében lévő fordítás gombbal.",
   "translate.settings.languageHint": "A felület nyelve és az üzenetek fordításának célnyelve — egyetlen beállítás. Az Automatikus a böngésződ nyelvét követi.",
   "translate.settings.languageLabel": "A felület és az olvasás nyelve",
   "translate.settings.modelOption": "{name} · {size}",

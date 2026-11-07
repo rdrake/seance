@@ -2501,7 +2501,6 @@
   "translate.settings.headingLanguage": "Wika",
   "translate.settings.inUse": "Ginagamit",
   "translate.settings.interfaceLanguageLabel": "Wika ng interface",
-  "translate.settings.intro": "Isinasalin ang mga mensahe sa device na ito ng isang modelong isang beses lang dina-download; walang ipinapadala sa anumang serbisyo ng pagsasalin. I-on ito kada channel mula sa button na pagsasalin sa header ng channel.",
   "translate.settings.languageHint": "Ang wika ng interface at ang wikang pinagsasalinan ng mga mensahe — iisang kontrol. Sumusunod ang Awtomatiko sa wika ng browser mo.",
   "translate.settings.languageLabel": "Wika ng interface at pagbasa",
   "translate.settings.modelOption": "{name} · {size}",

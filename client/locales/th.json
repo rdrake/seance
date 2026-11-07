@@ -2525,7 +2525,6 @@
   "translate.settings.headingLanguage": "ภาษา",
   "translate.settings.inUse": "กำลังใช้งาน",
   "translate.settings.interfaceLanguageLabel": "ภาษาของอินเทอร์เฟซ",
-  "translate.settings.intro": "ข้อความจะถูกแปลบนอุปกรณ์นี้ด้วยโมเดลที่ดาวน์โหลดเพียงครั้งเดียว ไม่มีข้อมูลใดถูกส่งไปยังบริการแปล เปิดใช้ทีละช่องได้จากปุ่มแปลที่ส่วนหัวของช่อง",
   "translate.settings.languageHint": "ภาษาของอินเทอร์เฟซและภาษาที่ข้อความจะถูกแปลเป็น — ตั้งค่าเดียวกัน อัตโนมัติจะใช้ภาษาของเบราว์เซอร์",
   "translate.settings.languageLabel": "ภาษาของอินเทอร์เฟซและการอ่าน",
   "translate.settings.modelOption": "{name} · {size}",

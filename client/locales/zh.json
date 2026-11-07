@@ -2528,7 +2528,6 @@
   "translate.settings.headingLanguage": "语言",
   "translate.settings.inUse": "使用中",
   "translate.settings.interfaceLanguageLabel": "界面语言",
-  "translate.settings.intro": "消息由此设备下载一次的模型在本机翻译；不会向任何翻译服务发送内容。可通过频道标题栏中的翻译按钮按频道开启。",
   "translate.settings.languageHint": "界面所用的语言，也是消息翻译成的语言（同一个设置）。选择自动时跟随浏览器的语言。",
   "translate.settings.languageLabel": "界面和阅读语言",
   "translate.settings.modelOption": "{name} · {size}",
