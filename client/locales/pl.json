@@ -2718,7 +2718,6 @@
   "translate.settings.headingLanguage": "Język",
   "translate.settings.inUse": "W użyciu",
   "translate.settings.interfaceLanguageLabel": "Język interfejsu",
-  "translate.settings.intro": "Wiadomości są tłumaczone na tym urządzeniu przez model pobierany jednorazowo; nic nie jest wysyłane do usługi tłumaczenia. Włącz tłumaczenie dla kanału przyciskiem tłumaczenia w nagłówku kanału.",
   "translate.settings.languageHint": "Język, w którym wyświetla się interfejs i na który tłumaczone są wiadomości — jedno ustawienie. Automatycznie oznacza język przeglądarki.",
   "translate.settings.languageLabel": "Język interfejsu i czytania",
   "translate.settings.modelOption": "{name} · {size}",

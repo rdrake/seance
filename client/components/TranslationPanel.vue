@@ -14,10 +14,12 @@
 				ref="panel"
 				class="header-popover translation-panel"
 				role="dialog"
+				aria-modal="true"
 				:aria-label="panelLabel"
 				tabindex="-1"
 				:style="placement"
 				@keydown.tab="onTab"
+				@keydown.esc.stop.prevent="close"
 			>
 				<div class="header-popover-title">
 					<h2>
@@ -47,6 +49,15 @@
 						<p>{{ t("translate.unavailable.lead") }}</p>
 						<p>{{ blockedWhy }}</p>
 					</div>
+					<!-- The engine paused itself after repeated failures (queue.ts
+					     PAUSE_AFTER_FAILURES) and comes back on its own. -->
+					<p
+						v-else-if="pausedWhy"
+						class="translation-panel-blocked translation-panel-paused"
+						role="status"
+					>
+						{{ t("translate.panel.paused", {reason: pausedWhy}) }}
+					</p>
 					<section class="translation-panel-section">
 						<h3>{{ t("translate.panel.reading") }}</h3>
 						<!-- The reading language is not chosen here: it is the
@@ -372,6 +383,9 @@ export default defineComponent({
 
 		// Nothing here can translate at all: the banner's reason (router.ts
 		// `translationBlock`), and the reading switch's On is disabled.
+		// The engine's own message: a verbatim value, never translated.
+		const pausedWhy = computed(() => store.state.translation.paused?.message ?? "");
+
 		const blockedWhy = computed(() => {
 			const block = currentTranslationBlock();
 
@@ -431,7 +445,10 @@ export default defineComponent({
 		const onTab = (event: KeyboardEvent) => trapTab(event, panel.value as HTMLElement);
 
 		// Escape and Android's Back close the topmost overlay
-		// (helpers/escapeLayer.ts): this one when it is on top.
+		// (helpers/escapeLayer.ts): this one when it is on top. The app's
+		// binding ignores a key pressed in a field, so the pane also takes
+		// Escape itself while the focus is inside it (the template's
+		// @keydown.esc, as SourceLanguagePicker.vue does).
 		const onEscape = (layer: string | null) => {
 			if (layer === "translation") {
 				close();
@@ -502,6 +519,7 @@ export default defineComponent({
 		return {
 			t,
 			blockedWhy,
+			pausedWhy,
 			writeBlocked,
 			writeNote,
 			panel,

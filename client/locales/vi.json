@@ -2524,7 +2524,6 @@
   "translate.settings.headingLanguage": "Ngôn ngữ",
   "translate.settings.inUse": "Đang dùng",
   "translate.settings.interfaceLanguageLabel": "Ngôn ngữ giao diện",
-  "translate.settings.intro": "Tin nhắn được dịch ngay trên thiết bị này bằng một mô hình chỉ tải xuống một lần; không có gì được gửi đến dịch vụ dịch. Bật cho từng kênh bằng nút dịch trên thanh tiêu đề của kênh.",
   "translate.settings.languageHint": "Ngôn ngữ của giao diện và ngôn ngữ mà tin nhắn được dịch sang — chung một tùy chọn. Tự động sẽ theo ngôn ngữ của trình duyệt.",
   "translate.settings.languageLabel": "Ngôn ngữ giao diện và ngôn ngữ đọc",
   "translate.settings.modelOption": "{name} · {size}",

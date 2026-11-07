@@ -2504,7 +2504,6 @@
   "translate.settings.headingLanguage": "Sprache",
   "translate.settings.inUse": "In Verwendung",
   "translate.settings.interfaceLanguageLabel": "Sprache der Oberfläche",
-  "translate.settings.intro": "Nachrichten werden auf diesem Gerät von einem Modell übersetzt, das es einmal herunterlädt; nichts wird an einen Übersetzungsdienst gesendet. Schalten Sie sie pro Kanal über die Übersetzen-Schaltfläche in der Kanalkopfzeile ein.",
   "translate.settings.languageHint": "Die Sprache, in der die Oberfläche angezeigt wird und in die Nachrichten übersetzt werden — eine Einstellung für beides. Automatisch folgt der Sprache Ihres Browsers.",
   "translate.settings.languageLabel": "Sprache der Oberfläche und zum Lesen",
   "translate.settings.modelOption": "{name} · {size}",

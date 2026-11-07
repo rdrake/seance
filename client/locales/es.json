@@ -2504,7 +2504,6 @@
   "translate.settings.headingLanguage": "Idioma",
   "translate.settings.inUse": "En uso",
   "translate.settings.interfaceLanguageLabel": "Idioma de la interfaz",
-  "translate.settings.intro": "Los mensajes se traducen en este dispositivo mediante un modelo que descarga una vez; nada se envía a un servicio de traducción. Actívalo por canal desde el botón de traducción en el encabezado del canal.",
   "translate.settings.languageHint": "El idioma en el que está escrita la interfaz y en el que se traducen los mensajes — un control. Automático sigue el idioma del navegador.",
   "translate.settings.languageLabel": "Idioma de la interfaz y de lectura",
   "translate.settings.modelOption": "{name} · {size}",

@@ -14688,7 +14688,6 @@ msgid "Couldn't translate"
 msgstr "翻訳できませんでした"
 
 #. Choice for how formally a translation addresses people: keep whatever the original message did.
-#: client/components/TranslationPanel.vue
 #: client/components/Settings/Translation.vue
 msgctxt "translate.formality.auto"
 msgid "As the original does"
@@ -14982,6 +14981,12 @@ msgctxt "translate.panel.ownLanguageNeedsGpu"
 msgid "{language} is greyed out: correcting a message needs the language model."
 msgstr "{language} はグレー表示です: メッセージの校正には言語モデルが必要です。"
 
+#. Status line at the top of the per-channel translation panel while the engine has paused itself after repeated failures; it resumes by itself within a minute. {reason} is the engine's own untranslated message.
+#: client/components/TranslationPanel.vue
+msgctxt "translate.panel.paused"
+msgid "Translation is paused for now: {reason}"
+msgstr ""
+
 #. Explanatory note under the reading switch in the translation panel.
 #: client/components/TranslationPanel.vue
 msgctxt "translate.panel.readHint"
@@ -15255,8 +15260,9 @@ msgstr "表示言語"
 
 #. Introductory paragraph of the Translation tab in Settings, explaining that translation runs locally.
 #: client/components/Settings/Translation.vue
+#, fuzzy
 msgctxt "translate.settings.intro"
-msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from the translate button in the channel header."
+msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from Translation… in the channel's menu."
 msgstr "メッセージは、一度だけダウンロードするモデルによってこのデバイス上で翻訳されます。翻訳サービスには何も送信されません。チャンネルヘッダーの翻訳ボタンから、チャンネルごとにオンにできます。"
 
 #. Explanatory note under the language picker in Settings → Translation.
@@ -15515,9 +15521,8 @@ msgctxt "translate.topic.showTranslation"
 msgid "Show the translated topic"
 msgstr "翻訳されたトピックを表示"
 
-#. Lead sentence of the per-channel translation panel's notice, and the channel header translate button's label, when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
+#. Lead sentence of the per-channel translation panel's notice when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
 #: client/components/TranslationPanel.vue
-#: client/components/Chat.vue
 msgctxt "translate.unavailable.lead"
 msgid "Translation can't run here right now."
 msgstr "現在ここでは翻訳を実行できません。"

@@ -18,9 +18,11 @@ describe("overlays carry .screen-overlay", function () {
 		// A popover at its anchor; its phone sheet has its own inset rule
 		// (`html[data-shell="native"] .reaction-picker.sheet`).
 		"ReactionPicker.vue": "anchored popover, own sheet rule",
-		// A popover under the @ button; its phone layout takes the insets in
-		// its own native rule (Mentions.vue).
+		// Header popovers, under the @ and ⋮ buttons: their phone layout
+		// takes the insets in its own native rule
+		// (`html[data-shell="native"] .header-popover`, style.css).
 		"Mentions.vue": "anchored popover, own phone rule",
+		"TranslationPanel.vue": "anchored popover, own phone rule",
 		// A popover at its chip; its phone sheet sits on the bottom edge and
 		// has its own inset rule (`html[data-shell="native"]
 		// .source-language-picker--sheet`).

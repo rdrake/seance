@@ -49,7 +49,7 @@ syncs the switch): the switch puts the service out of reach, then its
 listeners stop their work while it still stands -- the reader cancels every
 queue (its lines dropped, never failed, so nothing counts toward a pause),
 forgets them and clears `state.translations` (Message.vue restyles an
-original from it), the paused banner and a pending panel ask; the composer
+original from it), the pause and a pending panel ask; the composer
 aborts every strip and round trip, clears `state.outgoingTranslations` and
 the waiting read-backs, the drafts staying in their inputs -- and only then
 is the service disposed: its worker terminated, every store watch and
@@ -861,9 +861,11 @@ the app is read in.
 **A pause is a minute off, not the end of reading.** Three failures in a
 row take an engine out of the rotation (`PAUSE_AFTER_FAILURES`), and
 `PAUSE_RESUME_MS` (60 s) later it resumes itself: the failure count goes
-back to zero and `QueueDeps.onResume` clears the header's paused banner.
-A user's Retry goes through the same `resume()` and disarms the waiting
-timer, so the banner is never cleared twice; a second pause waits again.
+back to zero and `QueueDeps.onResume` clears `state.translation.paused`,
+which the channel's panel shows while it lasts ("Translation is paused for
+now: <the engine's message>"). A user's Retry goes through the same
+`resume()` and disarms the waiting timer, so the pause is never cleared
+twice; a second pause waits again.
 Two errors never count toward a pause at all -- `WORKER_DISPOSED` (the
 pagehide teardown, an idle unload) and an `ABORTED` the queue did not ask
 for. Neither says anything about the engine, so the batch goes back to the
@@ -1245,7 +1247,9 @@ header on a phone. Inside, two sections (Reading, Writing) under their
 headings, each setting a label with its control beneath it and a one-line
 hint, the reading switch and formality as segmented controls
 (`role="radiogroup"`, "As written" / "Formally" / "Casually"), and a footer
-link to Settings -> Translation. Controls are 2.25rem with a pointer and
+link to Settings -> Translation. While an engine has paused itself (§ A
+pause is a minute off), a notice at the top says so with the engine's
+reason. Controls are 2.25rem with a pointer and
 2.75rem under a finger (`pointer: coarse`).
 
 It closes on the ✕, on Escape or Android's Back (its escape layer,

@@ -2650,7 +2650,6 @@
   "translate.settings.headingLanguage": "Jazyk",
   "translate.settings.inUse": "Používa sa",
   "translate.settings.interfaceLanguageLabel": "Jazyk rozhrania",
-  "translate.settings.intro": "Správy prekladá priamo toto zariadenie modelom, ktorý sa stiahne iba raz; nič sa neposiela do prekladovej služby. Zapnite preklad pre jednotlivé kanály tlačidlom prekladu v hlavičke kanála.",
   "translate.settings.languageHint": "Jazyk, v ktorom je rozhranie, a do ktorého sa prekladajú správy — jedno nastavenie. Automaticky znamená jazyk prehliadača.",
   "translate.settings.languageLabel": "Jazyk rozhrania a čítania",
   "translate.settings.modelOption": "{name} · {size}",
