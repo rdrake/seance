@@ -40,8 +40,7 @@
 // its Run on and its Downloads open (a download ahead of use) and makes the
 // cleanup pass say so; both off puts the
 // panel's notice up ("Translation can't run here right now." and both
-// switches named), disables the reading switch's On, dims the header button
-// and makes its click open the panel, disables the message toolbar's
+// switches named), disables the reading switch's On, disables the message toolbar's
 // Translate with the reason as its description, and disables German in the
 // composer's dialog. On noWebgpu, the CPU models off is the one switch named.
 //
@@ -71,7 +70,7 @@
 // the listener that posts the line the toolbar is checked on).
 
 import {readFileSync} from "node:fs";
-import {TRANSLATION_ON} from "./lib/translation.mjs";
+import {TRANSLATION_ON, closeTranslationPanel, openTranslationPanel} from "./lib/translation.mjs";
 
 const RUN = Date.now().toString(36);
 const BASE = process.env.SEANCE_HTTP || "http://localhost:8041/";
@@ -213,7 +212,6 @@ const SETTING = {
 };
 const text = (selector) =>
 	`((document.querySelector(${JSON.stringify(selector)}) || {}).textContent || "").trim()`;
-const GLOBE = "#chat button.translate";
 const PICKER = ".source-language-picker";
 const CONFIRM = `${PICKER} .source-language-picker-confirm`;
 
@@ -415,30 +413,8 @@ export default async function run(page) {
 		});
 	};
 
-	const openPanel = async () => {
-		const touch = await page.evaluate(
-			`matchMedia("(hover: none) and (pointer: coarse)").matches`
-		);
-
-		if (touch) {
-			await page.click(GLOBE);
-		} else {
-			await page.evaluate(
-				`document.querySelector(${JSON.stringify(
-					GLOBE
-				)}).dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true}))`
-			);
-		}
-
-		await page.waitFor(`!!document.querySelector(".translation-panel")`, {label: "panel open"});
-	};
-
-	const closePanel = async () => {
-		await page.click(".translation-panel-close");
-		await page.waitFor(`!document.querySelector(".translation-panel")`, {
-			label: "panel closed",
-		});
-	};
+	const openPanel = () => openTranslationPanel(page);
+	const closePanel = () => closeTranslationPanel(page);
 
 	const panelState = () =>
 		page.evaluate(`(() => {
@@ -1013,16 +989,6 @@ export default async function run(page) {
 			await setSwitch("translateCpu", false);
 			await closeSettings();
 
-			const header = await page.evaluate(`(() => {
-				const b = document.querySelector(${JSON.stringify(GLOBE)});
-				return {unavailable: b.classList.contains("unavailable"), label: b.getAttribute("aria-label")};
-			})()`);
-
-			page.check(
-				`desktop, both off: the header button is dimmed and says so (${header.label})`,
-				header.unavailable && header.label === EN["translate.unavailable.lead"]
-			);
-
 			// Under --mobile the toolbar is a finger's: a long press opens it
 			// and marks the last pointer a touch (helpers/inputModality.ts).
 			if (MOBILE) {
@@ -1083,11 +1049,8 @@ export default async function run(page) {
 				await closePanel();
 			}
 
-			// The header's click opens the panel with the reason, not a reading that fails.
-			await page.click(GLOBE);
-			await page.waitFor(`!!document.querySelector(".translation-panel")`, {
-				label: "the header's click opened the panel",
-			});
+			// The channel menu's panel gives the reason, not a reading that fails.
+			await openPanel();
 
 			const off = await panelState();
 			const onSegment = await page.evaluate(
@@ -1187,15 +1150,11 @@ export default async function run(page) {
 			}).observe(overlay, {attributes: true, attributeFilter: ["class"], childList: true, subtree: true});
 		})()`);
 
-		// Reading on: the header's click with a pointer, the panel's On under a finger.
-		// The question comes up over the sheet the switch was thrown in, so
-		// the sheet is put away only once it has been answered.
-		if (MOBILE) {
-			await openPanel();
-			await page.evaluate(`${readOnSegment}.click()`);
-		} else {
-			await page.click(GLOBE);
-		}
+		// Reading on: the panel's On. The question comes up over the panel the
+		// switch was thrown in, so the panel is put away only once it has been
+		// answered.
+		await openPanel();
+		await page.evaluate(`${readOnSegment}.click()`);
 
 		await page.waitFor(`!!document.querySelector("#confirm-dialog-overlay.opened")`, {
 			label: "the download question",
@@ -1242,11 +1201,8 @@ export default async function run(page) {
 			label: "the download question armed",
 		});
 		await page.click("#confirm-dialog .btn-cancel");
-
-		if (MOBILE) {
-			await page.sleep(300);
-			await closePanel();
-		}
+		await page.sleep(300);
+		await closePanel();
 
 		// The language model's copy is the GPU's (a reason names its device).
 		const reason = EN["translate.why.downloadGpu"]
@@ -1266,7 +1222,7 @@ export default async function run(page) {
 		const after = await page.evaluate(`(() => ({
 			count: window.__questions.length,
 			open: !!document.querySelector("#confirm-dialog-overlay.opened"),
-			label: document.querySelector(${JSON.stringify(GLOBE)}).getAttribute("aria-label"),
+			paused: !!document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translation.paused,
 			consent: localStorage.getItem("thelounge.state.translateConsent"),
 		}))()`);
 
@@ -1278,7 +1234,7 @@ export default async function run(page) {
 			`consent: still one question, none open, nothing remembered (${after.count}, ${after.consent})`,
 			after.count === 1 && !after.open && after.consent === null
 		);
-		page.check(`consent: no pause (${after.label})`, !/paused/i.test(after.label || ""));
+		page.check(`consent: no pause (${after.paused})`, !after.paused);
 		await page.screenshot("consent-not-now");
 
 		// A Retry is someone asking: one more question.

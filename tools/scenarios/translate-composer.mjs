@@ -33,7 +33,7 @@
 // German draft sent in French, the posted line keeps its read-back and the
 // reading pipeline asks for no translation of it; switching the target off
 // restores plain sending.
-// Under `--mobile` the panel is asserted to be the full-screen sheet, with
+// Under `--mobile` the panel is asserted to fill the chat under the header, with
 // formality as a segmented control and the close button putting it away,
 // and so is the newline-first keyboard: with a strip up, the Return's
 // newline reaches the draft before the keypress does, the strip survives
@@ -54,7 +54,13 @@
 // the panel opens from the channel menu's "Translation…" entry; the
 // synthetic contextmenu below is the harness's shortcut to the same panel.
 
-import {TRANSLATION_ON} from "./lib/translation.mjs";
+import {
+	READING_ON,
+	TRANSLATION_ON,
+	TRANSLATION_OFFERED,
+	closeTranslationPanel,
+	openTranslationPanel,
+} from "./lib/translation.mjs";
 
 const RUN = Date.now().toString(36);
 const NICK = `tw${RUN}`;
@@ -65,7 +71,6 @@ const BASE = process.env.SEANCE_HTTP || "http://localhost:8021/";
 
 export const url = `${BASE}?host=127.0.0.1&port=8067&tls=false&nick=${NICK}&join=%23seance-translate&fakeTranslate`;
 
-const GLOBE = "#chat button.translate";
 const MOBILE = process.argv.includes("--mobile");
 const BAR = ".translate-bar";
 const BAR_TEXT = ".translate-bar-row:first-child .translate-bar-text";
@@ -158,14 +163,7 @@ async function heard(other, text, timeout = 10000) {
 	}
 }
 
-async function openPanel(page) {
-	await page.evaluate(
-		`document.querySelector(${JSON.stringify(
-			GLOBE
-		)}).dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true}))`
-	);
-	await page.waitFor(`!!document.querySelector(".translation-panel")`, {label: "panel open"});
-}
+const openPanel = openTranslationPanel;
 
 async function setWriteTarget(page, code) {
 	await openPanel(page);
@@ -174,45 +172,29 @@ async function setWriteTarget(page, code) {
 			code
 		)}; s.dispatchEvent(new Event("change", {bubbles: true})); })()`
 	);
-	await page.evaluate(
-		`document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true}))`
-	);
-	await page.waitFor(`!document.querySelector(".translation-panel")`, {label: "panel closed"});
+	await closeTranslationPanel(page);
 }
 
 /**
- * The phone layout, under `--mobile`: the same choices as a full-screen
- * sheet, with room to press them. Whether the harness's emulation also
- * reports a touch-primary device decides how the sheet is opened here — a
- * tap on the globe where it does (there is no right-click on a phone), the
- * synthetic contextmenu where only the width query makes the layout.
+ * The phone layout, under `--mobile`: the same choices as the mentions' pane
+ * on a phone, the whole chat under the header, with room to press them.
  */
 async function panelIsASheet(page) {
-	const touch = await page.evaluate(`matchMedia("(hover: none) and (pointer: coarse)").matches`);
+	await openPanel(page);
 
-	page.check(`--mobile emulates a touch-primary device: ${touch}`, true);
-
-	if (touch) {
-		await page.click(GLOBE);
-	} else {
-		await openPanel(page);
-	}
-
-	await page.waitFor(`!!document.querySelector(".translation-panel--sheet")`, {
-		label: "the panel came up as a sheet",
-	});
-
-	const rect = await page.rect(".translation-panel--sheet");
+	const rect = await page.rect(".translation-panel");
+	const header = await page.rect("#chat .header");
 	const viewport = await page.evaluate(`({w: innerWidth, h: innerHeight})`);
 	const size = rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}` : "none";
 
 	await page.check(
-		`the sheet fills the viewport (${size} of ${viewport.w}x${viewport.h})`,
+		`the panel fills the chat under the header (${size} of ${viewport.w}x${viewport.h})`,
 		!!rect &&
+			!!header &&
 			Math.round(rect.x) === 0 &&
-			Math.round(rect.y) === 0 &&
 			Math.round(rect.width) === viewport.w &&
-			Math.round(rect.height) === viewport.h
+			Math.abs(rect.y - (header.y + header.height)) <= 2 &&
+			Math.round(rect.y + rect.height) === viewport.h
 	);
 	await page.check(
 		"formality is a segmented control, not a native picker",
@@ -238,7 +220,7 @@ async function panelIsASheet(page) {
 		)
 	);
 	await page.check(
-		"the hints the desktop panel omits are shown",
+		"the hints are shown",
 		(await page.evaluate(
 			`getComputedStyle(document.querySelector(".translation-panel-hint")).display`
 		)) !== "none"
@@ -247,16 +229,13 @@ async function panelIsASheet(page) {
 		"the close button is on screen",
 		await page.evaluate(
 			`(() => {
-				const r = document.querySelector(".translation-panel-close").getBoundingClientRect();
+				const r = document.querySelector(".translation-panel .header-popover-close").getBoundingClientRect();
 				return r.height > 0 && r.bottom <= innerHeight + 1;
 			})()`
 		)
 	);
 	await page.screenshot("translation-sheet");
-	await page.click(".translation-panel-close");
-	await page.waitFor(`!document.querySelector(".translation-panel")`, {
-		label: "the close button closed the sheet",
-	});
+	await closeTranslationPanel(page);
 }
 
 async function typeAndEnter(page, text) {
@@ -387,9 +366,9 @@ export default async function run(page) {
 		timeout: 20000,
 		label: "the channel view",
 	});
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(GLOBE)})`, {
+	await page.waitFor(TRANSLATION_OFFERED, {
 		timeout: 20000,
-		label: "the globe (the fake reports a GPU)",
+		label: "translation offered (the fake reports a GPU)",
 	});
 	await other.joined;
 
@@ -660,10 +639,7 @@ export default async function run(page) {
 			})()`
 		)
 	);
-	await page.evaluate(
-		`document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true}))`
-	);
-	await page.waitFor(`!document.querySelector(".translation-panel")`, {label: "panel closed"});
+	await closeTranslationPanel(page);
 
 	// A write target that is the page's own language: every draft in it is
 	// corrected on the first Enter, and the placeholder says so.
@@ -1388,16 +1364,10 @@ export default async function run(page) {
 	await page.evaluate(
 		`(() => { for (const s of document.querySelectorAll('.translation-panel-segmented .translation-panel-segment')) { if (s.textContent.trim() === "On") { s.click(); return; } } throw new Error("no On segment"); })()`
 	);
-	await page.evaluate(
-		`document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true}))`
-	);
-	await page.waitFor(`!document.querySelector(".translation-panel")`, {label: "panel closed"});
-	await page.waitFor(
-		`document.querySelector(${JSON.stringify(GLOBE)}).classList.contains("on")`,
-		{
-			label: "reading is on in English",
-		}
-	);
+	await closeTranslationPanel(page);
+	await page.waitFor(READING_ON, {
+		label: "reading is on in English",
+	});
 	await setWriteTarget(page, "fr");
 
 	const german = `Ich möchte die Protokolle morgen früh noch einmal gründlich prüfen ${RUN}`;
