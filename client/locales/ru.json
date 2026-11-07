@@ -2743,7 +2743,6 @@
   "translate.settings.headingLanguage": "Язык",
   "translate.settings.inUse": "Используется",
   "translate.settings.interfaceLanguageLabel": "Язык интерфейса",
-  "translate.settings.intro": "Сообщения переводятся на этом устройстве моделью, которую оно скачивает один раз; ничего не отправляется в службы перевода. Перевод включается для каждого канала кнопкой перевода в заголовке канала.",
   "translate.settings.languageHint": "Язык интерфейса и язык, на который переводятся сообщения, — это один параметр. Вариант «Автоматически» следует языку браузера.",
   "translate.settings.languageLabel": "Язык интерфейса и чтения",
   "translate.settings.modelOption": "{name} · {size}",

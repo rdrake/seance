@@ -2529,7 +2529,6 @@
   "translate.settings.headingLanguage": "Sprog",
   "translate.settings.inUse": "I brug",
   "translate.settings.interfaceLanguageLabel": "Brugerfladens sprog",
-  "translate.settings.intro": "Beskeder oversættes på denne enhed af en model, den henter én gang; intet sendes til en oversættelsestjeneste. Slå det til for hver kanal med oversæt-knappen i kanalens topbjælke.",
   "translate.settings.languageHint": "Det sprog, brugerfladen er skrevet på, og som beskeder oversættes til — én indstilling. Automatisk følger din browsers sprog.",
   "translate.settings.languageLabel": "Sprog for brugerflade og læsning",
   "translate.settings.modelOption": "{name} · {size}",

@@ -2534,7 +2534,6 @@
   "translate.settings.headingLanguage": "Språk",
   "translate.settings.inUse": "Används",
   "translate.settings.interfaceLanguageLabel": "Gränssnittets språk",
-  "translate.settings.intro": "Meddelanden översätts på den här enheten av en modell som den laddar ned en gång; inget skickas till en översättningstjänst. Slå på det per kanal med översättningsknappen i kanalens sidhuvud.",
   "translate.settings.languageHint": "Språket som gränssnittet visas på och som meddelanden översätts till — en och samma inställning. Automatiskt följer webbläsarens språk.",
   "translate.settings.languageLabel": "Språk för gränssnitt och läsning",
   "translate.settings.modelOption": "{name} · {size}",

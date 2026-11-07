@@ -163,10 +163,12 @@ function setPanelSelect(page, name, value) {
  * it is the interface's, with the Settings override as the exception.
  */
 function setPanelRead(page, on) {
+	// By place, not by label: the interface may be in French by then. The
+	// reading switch is the panel's first radiogroup, Off then On.
 	return page.evaluate(
-		`(() => { for (const s of document.querySelectorAll('.translation-panel-segmented .translation-panel-segment')) { if (s.textContent.trim() === (${JSON.stringify(
-			on
-		)} ? "On" : "Off")) { s.click(); return; } } throw new Error("no reading segment"); })()`
+		`document.querySelector(".translation-panel [role=radiogroup]").querySelectorAll("[role=radio]")[${
+			on ? 1 : 0
+		}].click()`
 	);
 }
 
@@ -1161,21 +1163,21 @@ async function scenario(page) {
 		);
 	} else {
 		// One column: every setting is a label with its control under it, so
-		// The four selects and the variant input come out the same width
-		// (the reading switch is a segmented control, not a control row).
+		// the two selects and the variant input come out the same width
+		// (reading and formality are segmented controls, not control rows).
 		const controlWidths = await page.evaluate(
 			`[...document.querySelectorAll(".translation-panel .translation-panel-control")].map((c) => Math.round(c.getBoundingClientRect().width))`
 		);
 
 		await page.check(
-			`the four controls share one width (${controlWidths.join(", ")})`,
-			controlWidths.length === 4 && new Set(controlWidths).size === 1
+			`the three controls share one width (${controlWidths.join(", ")})`,
+			controlWidths.length === 3 && new Set(controlWidths).size === 1
 		);
 		await page.check(
-			"the hints stay out of the desktop panel",
+			"the hints are shown in the desktop panel too",
 			(await page.evaluate(
 				`getComputedStyle(document.querySelector(".translation-panel-hint")).display`
-			)) === "none"
+			)) !== "none"
 		);
 	}
 

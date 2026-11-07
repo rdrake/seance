@@ -14763,7 +14763,6 @@ msgid "Couldn't translate"
 msgstr "Çevrilemedi"
 
 #. Choice for how formally a translation addresses people: keep whatever the original message did.
-#: client/components/TranslationPanel.vue
 #: client/components/Settings/Translation.vue
 msgctxt "translate.formality.auto"
 msgid "As the original does"
@@ -15057,6 +15056,12 @@ msgctxt "translate.panel.ownLanguageNeedsGpu"
 msgid "{language} is greyed out: correcting a message needs the language model."
 msgstr "{language} soluk gösteriliyor: bir mesajı düzeltmek için dil modeli gerekir."
 
+#. Status line at the top of the per-channel translation panel while the engine has paused itself after repeated failures; it resumes by itself within a minute. {reason} is the engine's own untranslated message.
+#: client/components/TranslationPanel.vue
+msgctxt "translate.panel.paused"
+msgid "Translation is paused for now: {reason}"
+msgstr ""
+
 #. Explanatory note under the reading switch in the translation panel.
 #: client/components/TranslationPanel.vue
 msgctxt "translate.panel.readHint"
@@ -15330,8 +15335,9 @@ msgstr "Arayüz dili"
 
 #. Introductory paragraph of the Translation tab in Settings, explaining that translation runs locally.
 #: client/components/Settings/Translation.vue
+#, fuzzy
 msgctxt "translate.settings.intro"
-msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from the translate button in the channel header."
+msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from Translation… in the channel's menu."
 msgstr "Mesajlar bu cihazda, cihazın bir kez indirdiği bir modelle çevrilir; hiçbir şey bir çeviri hizmetine gönderilmez. Kanal başlığındaki çeviri düğmesinden her kanal için ayrı aç."
 
 #. Explanatory note under the language picker in Settings → Translation.
@@ -15594,9 +15600,8 @@ msgctxt "translate.topic.showTranslation"
 msgid "Show the translated topic"
 msgstr "Çevrilmiş konuyu göster"
 
-#. Lead sentence of the per-channel translation panel's notice, and the channel header translate button's label, when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
+#. Lead sentence of the per-channel translation panel's notice when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
 #: client/components/TranslationPanel.vue
-#: client/components/Chat.vue
 msgctxt "translate.unavailable.lead"
 msgid "Translation can't run here right now."
 msgstr "Çeviri şu anda burada çalışamıyor."

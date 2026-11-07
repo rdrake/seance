@@ -50,9 +50,9 @@
 //   … --mobile --width=390 --height=844
 //
 // Needs the dev ircd's plain-WS port on 127.0.0.1:8067. NODE_ENV must be
-// unset for the build: a production build compiles the fake out. On touch
-// the panel opens from the channel menu's "Translation…" entry; the
-// synthetic contextmenu below is the harness's shortcut to the same panel.
+// unset for the build: a production build compiles the fake out. The
+// panel opens from the channel menu's "Translation…" in every layout
+// (lib/translation.mjs openTranslationPanel).
 
 import {
 	READING_ON,

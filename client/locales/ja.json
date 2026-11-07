@@ -2528,7 +2528,6 @@
   "translate.settings.headingLanguage": "言語",
   "translate.settings.inUse": "使用中",
   "translate.settings.interfaceLanguageLabel": "表示言語",
-  "translate.settings.intro": "メッセージは、一度だけダウンロードするモデルによってこのデバイス上で翻訳されます。翻訳サービスには何も送信されません。チャンネルヘッダーの翻訳ボタンから、チャンネルごとにオンにできます。",
   "translate.settings.languageHint": "インターフェースの表示言語であり、メッセージの翻訳先の言語でもあります（1つの設定）。自動を選ぶとブラウザの言語に従います。",
   "translate.settings.languageLabel": "表示言語と翻訳先の言語",
   "translate.settings.modelOption": "{name} · {size}",

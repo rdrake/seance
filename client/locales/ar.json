@@ -2893,7 +2893,6 @@
   "translate.settings.headingLanguage": "اللغة",
   "translate.settings.inUse": "قيد الاستخدام",
   "translate.settings.interfaceLanguageLabel": "لغة الواجهة",
-  "translate.settings.intro": "تُترجَم الرسائل على هذا الجهاز بنموذج يُنزَّل مرة واحدة؛ ولا يُرسَل أي شيء إلى خدمة ترجمة. فعّلها لكل قناة من زر الترجمة في رأس القناة.",
   "translate.settings.languageHint": "اللغة التي تُكتب بها الواجهة وتُترجَم إليها الرسائل — عنصر تحكم واحد. يتبع الخيار «تلقائي» لغة متصفحك.",
   "translate.settings.languageLabel": "لغة الواجهة والقراءة",
   "translate.settings.modelOption": "{name} · {size}",

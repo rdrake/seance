@@ -2523,7 +2523,6 @@
   "translate.settings.headingLanguage": "언어",
   "translate.settings.inUse": "사용 중",
   "translate.settings.interfaceLanguageLabel": "인터페이스 언어",
-  "translate.settings.intro": "메시지는 한 번 다운로드한 모델로 이 기기에서 번역되며, 번역 서비스로는 아무것도 보내지 않습니다. 채널 헤더의 번역 버튼으로 채널마다 켭니다.",
   "translate.settings.languageHint": "인터페이스 언어와 메시지를 번역할 언어를 함께 정하는 하나의 설정입니다. 자동은 브라우저 언어를 따릅니다.",
   "translate.settings.languageLabel": "인터페이스 및 읽기 언어",
   "translate.settings.modelOption": "{name} · {size}",
