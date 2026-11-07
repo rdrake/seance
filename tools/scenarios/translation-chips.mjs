@@ -1,24 +1,21 @@
-// The translation chips' one accent look (client/css/style.css): the
-// detection mark a reader left alone (.msg-translation-skipped-tag inside
-// .msg-translation-skipped) and the unchanged-failure chip (the same class
-// inside .msg-translation-failed, a fas fa-equals icon) both wear the same
-// accent border and ink, and neither keeps the old muted grey or the old
-// 0.75 dim; the translated line's own label (.msg-translation-chip, "from
-// …") is the quiet one, muted and unboxed. The unchanged line's original is the line
-// to read, so it wears the translation's ink (#chat .msg.unchanged .content)
-// over the own-line dimming an untranslated `.self` row keeps.
+// What the chat shows for a line translation left alone: nothing. A
+// detection skip (the line could not be placed, or is already in the
+// reading language) and a line the engine handed back as it was
+// (outgoing.ts UNCHANGED) render no row, no chip and no mark under the
+// message, on anyone's line or the page's own -- in a channel full of
+// them a tag on each was noise. The toolbar's Translate still translates
+// any of them. A translated line's own label (.msg-translation-chip,
+// "from …") is quiet: muted and unboxed.
 //
 // Alongside it, the icon split: fa-language marks the translation surfaces
 // (the message action's ::before glyph, \\f1ab) while the globe stays the
-// language setting — the sidebar's dev locale toggle still renders 🌐. The inline icons only draw because
-// style.css carries their content on top of the bundled @font-face.
+// language setting -- the sidebar's dev locale toggle still renders 🌐.
 //
 // No ircd and no engine: the page boots to the connect form, a network is
 // fabricated in-page (lib/fake-network.mjs -- the same `init` bus dispatch
-// a registration makes) and two entries are committed into
-// store.state.translations for two of its rendered messages, one
-// detection-skipped and one failed with "came back unchanged". The claims
-// are read off the real DOM as computed styles.
+// a registration makes) and entries are committed into
+// store.state.translations for its rendered messages. The claims are read
+// off the real DOM.
 //
 //   NODE_ENV=development pnpm build    (window.socket is dev-build-only)
 //   node tools/browser-drive.mjs tools/scenarios/translation-chips.mjs
@@ -32,69 +29,37 @@ import {TRANSLATION_ON} from "./lib/translation.mjs";
 export const url = `${process.env.SEANCE_BASE || "https://127.0.0.1:8000/"}`;
 
 // The fabricated channel's message ids (fake-network.mjs defaults, baseId
-// 0): the three rendered rows in #seance. The unchanged chip is on
-// someone else's line; the page's own line ("short one") is handed back
-// unchanged too, and shows nothing -- the user wrote it.
+// 0): the three rendered rows in #seance. 22 is the page's own line.
 const SKIPPED_MSG = 21;
 const OWN_UNCHANGED_MSG = 22;
 const UNCHANGED_MSG = 23;
 
-const INJECT = `(() => {
-	const root = document.getElementById("app");
-	const store = root && root.__vue_app__ && root.__vue_app__.config.globalProperties.$store;
+const STORE = `document.getElementById("app").__vue_app__.config.globalProperties.$store`;
+
+/** The shapes reader.ts commits, one entry per call. */
+const commit = (id, entry) => `(() => {
+	const store = ${STORE};
 
 	if (!store) {
 		return false;
 	}
 
-	// The shapes reader.ts commits: a detection skip (the reading language
-	// was not among the detector's candidates) and the unchanged failure
-	// (client/js/translate/outgoing.ts UNCHANGED).
 	store.commit("translationEntry", {
-		id: ${SKIPPED_MSG},
-		entry: {
-			status: "skipped",
-			text: "",
-			from: "de",
-			to: "en",
-			candidates: ["fr", "nl"],
-			engine: null,
-			error: null,
-			hidden: false,
-			reason: "unsure",
-		},
-	});
-	store.commit("translationEntry", {
-		id: ${OWN_UNCHANGED_MSG},
-		entry: {
-			status: "failed",
-			text: "",
-			from: "pl",
-			to: "en",
-			candidates: [],
-			engine: null,
-			error: "came back unchanged",
-			hidden: false,
-		},
-	});
-	store.commit("translationEntry", {
-		id: ${UNCHANGED_MSG},
-		entry: {
-			status: "failed",
-			text: "",
-			from: "de",
-			to: "en",
-			candidates: [],
-			engine: null,
-			error: "came back unchanged",
-			hidden: false,
-		},
+		id: ${id},
+		entry: Object.assign(
+			{text: "", from: "de", to: "en", candidates: [], engine: null, error: null, hidden: false},
+			${JSON.stringify(entry)}
+		),
 	});
 
-	// The hover toolbar (Message.vue canAct) only renders for lines the IRC
-	// layer could address — the fabricated messages have no msgid, so stamp
-	// one on to bring .msg-action-translate into the DOM.
-	for (const net of store.state.networks) {
+	return true;
+})()`;
+
+// The hover toolbar (Message.vue canAct) only renders for lines the IRC
+// layer could address -- the fabricated messages have no msgid, so stamp
+// one on to bring .msg-action-translate into the DOM.
+const STAMP_MSGIDS = `(() => {
+	for (const net of ${STORE}.state.networks) {
 		for (const chan of net.channels) {
 			for (const msg of chan.messages) {
 				if (!msg.msgid) {
@@ -103,75 +68,30 @@ const INJECT = `(() => {
 			}
 		}
 	}
+
 	return true;
 })()`;
 
-/**
- * The two tags and the accent chip as computed styles, or null while any of
- * them is missing. The muted grey the tag used to wear is resolved the way
- * the browser resolves it (a probe element), so the "not muted any more"
- * claim needs no hard-coded rgb string.
- */
-const STYLES = `(() => {
-	const skipped = document.querySelector(
-		"#chat .msg-translation-skipped .msg-translation-skipped-tag"
-	);
-	const unchanged = document.querySelector(
-		"#chat .msg-translation-failed .msg-translation-skipped-tag"
-	);
-	const chip = document.querySelector("#chat .msg-translation-chip");
+/** Whether a row shows anything of translation under it. */
+const bare = (id) =>
+	`!document.querySelector("#msg-${id} .msg-translation") && !document.querySelector("#msg-${id} .msg-translation-chip") && !document.getElementById("msg-${id}").classList.contains("unchanged")`;
 
-	if (!skipped || !unchanged || !chip) {
-		return null;
-	}
-
+/** The muted ink as the browser resolves it, through a probe element. */
+const MUTED = `(() => {
 	const probe = document.createElement("span");
 	probe.style.color = "var(--body-color-muted)";
 	document.body.appendChild(probe);
 	const muted = getComputedStyle(probe).color;
-	probe.style.color = "var(--body-color)";
-	const ink = getComputedStyle(probe).color;
 	probe.remove();
-
-	const unchangedRow = unchanged.closest(".msg");
-	const skippedRow = skipped.closest(".msg");
-
-	const s = getComputedStyle(skipped);
-	const u = getComputedStyle(unchanged);
-	const c = getComputedStyle(chip);
-
-	return {
-		skippedBorder: s.borderTopColor,
-		unchangedBorder: u.borderTopColor,
-		chipBorder: c.borderTopColor,
-		chipColor: c.color,
-		chipBorderWidth: c.borderTopWidth,
-		skippedOpacity: s.opacity,
-		unchangedOpacity: u.opacity,
-		muted,
-		ink,
-		unchangedRowIsOwn: !!unchangedRow && unchangedRow.classList.contains("self"),
-		ownRowEmpty: !document.querySelector("#msg-${OWN_UNCHANGED_MSG} .msg-translation, #msg-${OWN_UNCHANGED_MSG} .msg-translation-skipped"),
-		ownRowClass: document.getElementById("msg-${OWN_UNCHANGED_MSG}").classList.contains("unchanged"),
-		ownOriginal: getComputedStyle(document.querySelector("#msg-${OWN_UNCHANGED_MSG} .content")).color,
-		unchangedRowClass: !!unchangedRow && unchangedRow.classList.contains("unchanged"),
-		unchangedOriginal: unchangedRow
-			? getComputedStyle(unchangedRow.querySelector(".content")).color
-			: null,
-		skippedRowClass: !!skippedRow && skippedRow.classList.contains("unchanged"),
-		chipCount: document.querySelectorAll("#chat .msg-translation-chip").length,
-		hasEquals: !!unchanged.querySelector(".fa-equals"),
-		unchangedTitle: unchanged.getAttribute("title"),
-	};
+	return muted;
 })()`;
 
 /**
  * The icon split as the rendered page tells it. Chrome may serialize a
  * computed content either as the escape (`"\\f1ab"`) or as the literal
  * private-use character, so each claim carries the glyph's code point as a
- * number: the message action's inline
- * .fa-language, the unchanged chip's .fa-equals, and the sidebar's dev
- * locale toggle's text.
+ * number: the message action's inline .fa-language and the sidebar's
+ * dev locale toggle's text.
  */
 const ICONS = `(() => {
 	const glyphCode = (content) => {
@@ -202,12 +122,10 @@ const ICONS = `(() => {
 
 	const action = document.querySelector("#chat .msg-action-translate");
 	const locale = document.querySelector("#sidebar .locale-toggle");
-	const equals = document.querySelector("#chat .msg-translation-failed .fa-equals");
 
 	return {
 		actionPresent: !!action,
 		actionCode: action ? glyphCode(getComputedStyle(action, "::before").content) : null,
-		equalsCode: equals ? glyphCode(getComputedStyle(equals, "::before").content) : null,
 		localeText: locale ? locale.textContent.trim() : null,
 	};
 })()`;
@@ -228,55 +146,73 @@ export default async function run(page) {
 		label: "the fabricated channel's messages",
 	});
 
+	const muted = await page.evaluate(MUTED);
+	const ownInk = `getComputedStyle(document.querySelector("#msg-${OWN_UNCHANGED_MSG} .content")).color`;
+
 	// Before any verdict, the own line reads dimmed like every own line.
-	const ownBefore = await page.evaluate(
-		`getComputedStyle(document.querySelector("#msg-${OWN_UNCHANGED_MSG} .content")).color`
+	page.check("an own line is dimmed before the verdict", (await page.evaluate(ownInk)) === muted);
+
+	const injected = [
+		await page.evaluate(
+			commit(SKIPPED_MSG, {status: "skipped", candidates: ["fr", "nl"], reason: "unsure"})
+		),
+		await page.evaluate(
+			commit(OWN_UNCHANGED_MSG, {status: "failed", from: "pl", error: "came back unchanged"})
+		),
+		await page.evaluate(
+			commit(UNCHANGED_MSG, {status: "failed", error: "came back unchanged"})
+		),
+		await page.evaluate(STAMP_MSGIDS),
+	];
+	page.check(
+		"the translation entries injected",
+		injected.every((v) => v === true)
+	);
+	// Give Vue its tick: a row that would render has rendered by then.
+	await page.evaluate(
+		`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`
 	);
 
-	page.check("the translation entries injected", (await page.evaluate(INJECT)) === true);
-	await page.waitFor(`(${STYLES}) !== null`, {
-		label: "both chips and the accent chip rendered",
-	});
-
-	const s = await page.evaluate(STYLES);
-	console.log("chips", JSON.stringify(s, null, 1));
-
-	page.check("exactly one accent chip on the page", s.chipCount === 1);
-	// The two tags mark a line that was not translated, and keep the
-	// accent so it can be found; the translated line's own "from …" label
-	// is the quiet one, muted and unboxed, under the translation.
 	page.check(
-		"the detection mark and the unchanged chip share one accent border",
-		s.skippedBorder === s.unchangedBorder
+		"a line the detector could not place shows nothing",
+		await page.evaluate(bare(SKIPPED_MSG))
 	);
 	page.check(
-		"the translated line's label is quiet: muted, no box",
-		s.chipColor === s.muted && s.chipBorderWidth === "0px"
+		"someone's line handed back unchanged shows nothing",
+		await page.evaluate(bare(UNCHANGED_MSG))
 	);
-	page.check(
-		"neither tag kept the old muted grey",
-		s.skippedBorder !== s.muted && s.unchangedBorder !== s.muted
-	);
-	page.check(
-		"the old 0.75 dim is gone from both tags",
-		s.skippedOpacity === "1" && s.unchangedOpacity === "1"
-	);
-	page.check("the unchanged chip is the equals icon", s.hasEquals === true);
-	page.check("the unchanged chip is on someone else's line", s.unchangedRowIsOwn === false);
-	page.check("the unchanged line's row carries the class", s.unchangedRowClass === true);
-	page.check(
-		"the unchanged line's original wears the translation's ink",
-		s.unchangedOriginal === s.ink
-	);
-	page.check("an own line is dimmed before the verdict", ownBefore === s.muted);
 	page.check(
 		"an own line handed back unchanged shows nothing and stays dimmed",
-		s.ownRowEmpty && !s.ownRowClass && s.ownOriginal === s.muted
+		(await page.evaluate(bare(OWN_UNCHANGED_MSG))) && (await page.evaluate(ownInk)) === muted
 	);
-	page.check("a detection skip is not marked unchanged", s.skippedRowClass === false);
+
+	await page.evaluate(commit(SKIPPED_MSG, {status: "skipped", from: "en", reason: "same"}));
+	await page.evaluate(
+		`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`
+	);
 	page.check(
-		'the unchanged chip is titled "Not translated"',
-		s.unchangedTitle === "Not translated"
+		"a line already in the reading language shows nothing",
+		await page.evaluate(bare(SKIPPED_MSG))
+	);
+	await page.screenshot("translation-chips-bare");
+
+	// A translated line keeps its label, and the label is the quiet one.
+	await page.evaluate(
+		commit(UNCHANGED_MSG, {status: "done", text: "a translated line", engine: "llm"})
+	);
+	await page.waitFor(`!!document.querySelector("#msg-${UNCHANGED_MSG} .msg-translation-chip")`, {
+		label: "the translated line's label",
+	});
+
+	const chip = await page.evaluate(`(() => {
+		const c = getComputedStyle(document.querySelector("#msg-${UNCHANGED_MSG} .msg-translation-chip"));
+		return {color: c.color, borderWidth: c.borderTopWidth, count: document.querySelectorAll("#chat .msg-translation-chip").length};
+	})()`);
+	console.log("chip", JSON.stringify(chip));
+	page.check("exactly one label on the page", chip.count === 1);
+	page.check(
+		"the translated line's label is quiet: muted, no box",
+		chip.color === muted && chip.borderWidth === "0px"
 	);
 
 	const icons = await page.evaluate(ICONS);
@@ -284,10 +220,6 @@ export default async function run(page) {
 
 	page.check("the message action is on the page", icons.actionPresent === true);
 	page.check("the message action's icon draws the language glyph", icons.actionCode === 0xf1ab);
-	page.check(
-		"the unchanged chip's equals icon draws through the bundled face",
-		icons.equalsCode === 0xf52c
-	);
 	page.check("the sidebar's dev locale toggle is still the globe", icons.localeText === "🌐");
 
 	await page.screenshot("translation-chips");

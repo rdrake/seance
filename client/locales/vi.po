@@ -14528,12 +14528,6 @@ msgctxt "translate.capability.testLimit"
 msgid "Limited to {size} for testing ({key} in this browser's storage). Delete that entry and reload to use the GPU's own limit."
 msgstr "Đã giới hạn ở {size} để thử nghiệm ({key} trong bộ nhớ của trình duyệt này). Xóa mục đó và tải lại trang để dùng giới hạn riêng của GPU."
 
-#. Tooltip and aria-label of a translation line's chip, skipped because the line is already in the reading language. {language} is its name in the reading language.
-#: client/components/TranslationLine.vue
-msgctxt "translate.chip.alreadyIn"
-msgid "Already in {language}, not translated. Translation options"
-msgstr "Đã là {language}, không dịch. Tùy chọn dịch"
-
 #. Quiet label under a translated line in the message list, and the button for its translation options. {language} is the language the line was written in (or one or two guesses, or ?). Starts lowercase in English: it reads as a caption.
 #: client/components/TranslationLine.vue
 msgctxt "translate.chip.from"
@@ -14551,12 +14545,6 @@ msgstr "{languages}. Tùy chọn dịch"
 msgctxt "translate.chip.sentIn"
 msgid "sent in {language}"
 msgstr ""
-
-#. Tooltip and aria-label of a translation line's chip, skipped because the detector could not tell the language apart.
-#: client/components/TranslationLine.vue
-msgctxt "translate.chip.unsure"
-msgid "Language not told apart, not translated. Translation options"
-msgstr "Không phân biệt được ngôn ngữ, không dịch. Tùy chọn dịch"
 
 #. Tooltip and aria-label of the composer's translate button while the channel corrects every message (spelling and grammar) in {language}, the user's own language, before sending; a click opens the language sheet, where it can be changed or turned off. The middle dot is part of the copy.
 #: client/components/ChatInput.vue
@@ -14822,12 +14810,6 @@ msgctxt "translate.menu.showOriginal"
 msgid "Show original only"
 msgstr "Chỉ hiển thị nguyên bản"
 
-#. A translation chip's menu item.
-#: client/components/TranslationLine.vue
-msgctxt "translate.menu.translateAnyway"
-msgid "Translate anyway"
-msgstr "Vẫn dịch"
-
 #. Item of the menu the message toolbar's Translate action opens: pick the language this line is in before translating it. Ends in an ellipsis because a dialog follows.
 #: client/components/MessageActions.vue
 msgctxt "translate.menu.translateFromPicker"
@@ -14930,12 +14912,6 @@ msgstr "{percent}%"
 msgctxt "translate.model.smallBufferBuild"
 msgid "This GPU gets a build of the model made for small graphics buffers: its largest buffer is {size}."
 msgstr "GPU này nhận một bản dựng của mô hình dành cho bộ đệm đồ họa nhỏ: bộ đệm lớn nhất của nó là {size}."
-
-#. Label of the compact equals-icon chip shown in place of a translation that failed because the engine returned the source line as its own answer. Also the chip's tooltip and aria-label; the reason text beside it only appears in development builds.
-#: client/components/TranslationLine.vue
-msgctxt "translate.notTranslated"
-msgid "Not translated"
-msgstr "Không dịch"
 
 #. Lead sentence when a translation is unavailable for a language pair (the composer's language sheet, the retranslate dialog, the translation panel's 'Send my messages in'); the reason follows as a sentence of its own. {from} and {to} are language names, already in the interface language.
 #: client/components/SourceLanguagePicker.vue
@@ -15625,12 +15601,6 @@ msgstr "Hiện chủ đề đã dịch"
 msgctxt "translate.unavailable.lead"
 msgid "Translation can't run here right now."
 msgstr "Hiện không thể dịch ở đây."
-
-#. Failure reason shown inside the Not-translated chip in development builds only: the model returned the source line as its own translation, so there is nothing to show. Lowercase; it reads as the reason the chip stands for.
-#: client/components/TranslationLine.vue
-msgctxt "translate.unchangedReason"
-msgid "the line came back unchanged"
-msgstr "dòng trả về không thay đổi"
 
 #. Reason nothing can translate: the user turned off the language model and OPUS-MT. Shown wherever a translation action is unavailable (Settings → Translation's model rows, the composer's translate dialog, the per-channel translation panel, the message toolbar's tooltip), as a sentence of its own under a lead sentence such as 'Correcting a message needs the language model.'. 'Settings → Translation' names the settings tab. OPUS-MT is a product name.
 #: client/js/helpers/translateWhy.ts

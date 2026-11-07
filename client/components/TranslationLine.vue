@@ -1,41 +1,15 @@
 <template>
-	<!-- An own line handed back as it was (UNCHANGED) shows nothing either:
-	     the user wrote it, so a "not translated" chip under it is noise. -->
-	<!-- A line already in the reading language shows nothing: in a channel
-	     that writes it, a mark on every line is noise. The toolbar's
-	     Translate still translates it. Only an unplaced line ("?") is marked. -->
-	<span
-		v-if="entry && entry.status === 'skipped' && entry.reason !== 'same' && !entry.hidden"
-		class="msg-translation-skipped"
-		:data-reason="entry.reason"
-	>
-		<button
-			ref="chip"
-			type="button"
-			class="msg-translation-skipped-tag"
-			:aria-label="chipLabel"
-			:title="chipLabel"
-			@click.stop="openMenu"
-		>
-			{{ chipText }}
-		</button>
-		<SourceLanguagePicker
-			v-if="pickerOpen"
-			:anchor="chip"
-			:selected="entry.from"
-			:candidates="entry.candidates"
-			:to="entry.to"
-			@pick="pickSource"
-			@close="pickerOpen = false"
-		/>
-	</span>
+	<!-- Nothing at all for a line the reader left alone (a detection skip)
+	     or one the engine handed back as it was (UNCHANGED): in a channel
+	     that writes the reading language a mark on every line is noise. The
+	     toolbar's Translate still translates either. -->
 	<div
-		v-else-if="
+		v-if="
 			entry &&
 			!entry.hidden &&
 			entry.status !== 'dropped' &&
 			entry.status !== 'skipped' &&
-			!ownEcho
+			!(entry.status === 'failed' && entry.error === UNCHANGED)
 		"
 		class="msg-translation"
 		:data-status="entry.status"
@@ -60,35 +34,17 @@
 			@close="pickerOpen = false"
 		/>
 		<span v-if="entry.status === 'failed'" class="msg-translation-failed">
+			{{ t("translate.failed") }}
+			<span v-if="entry.error" class="msg-translation-reason" :title="reasonText">{{
+				shortReason(reasonText)
+			}}</span>
 			<button
-				v-if="entry.error === UNCHANGED"
 				type="button"
-				class="msg-translation-skipped-tag"
-				:title="notTranslatedLabel"
-				:aria-label="notTranslatedLabel"
-				@click.stop="openMenu"
-			>
-				<i class="fas fa-equals" aria-hidden="true" />
-				<span v-if="devtoolsAvailable" class="msg-translation-reason">{{
-					t("translate.unchangedReason")
-				}}</span>
-			</button>
-			<!-- The reason's tooltip is the reason in full (the line cuts it
-			     at REASON_MAX), in words: a declined download's raw error is
-			     a code and the model as JSON. -->
-			<template v-else>
-				{{ t("translate.failed") }}
-				<span v-if="entry.error" class="msg-translation-reason" :title="reasonText">{{
-					shortReason(reasonText)
-				}}</span>
-				<button
-					type="button"
-					class="msg-translation-retry"
-					:title="retryLabel"
-					:aria-label="retryLabel"
-					@click.stop="retry"
-				/>
-			</template>
+				class="msg-translation-retry"
+				:title="retryLabel"
+				:aria-label="retryLabel"
+				@click.stop="retry"
+			/>
 		</span>
 		<span v-else class="msg-translation-text" :lang="entry.to" dir="auto">
 			<ParsedMessage
@@ -110,7 +66,6 @@
 <script lang="ts">
 import {computed, defineComponent, PropType, ref} from "vue";
 import {writeClipboard} from "../js/clipboard";
-import {devtoolsAvailable} from "../js/devtools";
 import eventbus from "../js/eventbus";
 import {useI18n} from "../js/i18n";
 import {useStore} from "../js/store";
@@ -148,14 +103,6 @@ export default defineComponent({
 		const store = useStore();
 		const {t} = useI18n();
 		const entry = computed(() => store.state.translations[props.message.id]);
-		// The user's own line, handed back unchanged: nothing to show.
-		const ownEcho = computed(
-			() =>
-				!!props.message.self &&
-				entry.value?.status === "failed" &&
-				entry.value.error === UNCHANGED
-		);
-		const notTranslatedLabel = computed(() => t("translate.notTranslated"));
 		const retryLabel = computed(() => t("translate.retry"));
 		// The failure reason after "Couldn't translate": the classifier's
 		// verdicts are phrases of our own and come from the pot; any other
@@ -191,17 +138,11 @@ export default defineComponent({
 		const nameOf = (code: string) => languageName(code, readingLanguage());
 		// Source → target; `from` is "" when the engine placed the source
 		// itself, and the detector's contenders are named instead (labels.ts).
-		// A skipped line's tag is the language it was taken for, or "?" when
-		// the detector could not tell.
 		const chipText = computed(() => {
 			const value = entry.value;
 
 			if (!value) {
 				return "";
-			}
-
-			if (value.status === "skipped") {
-				return value.reason === "same" && value.from ? nameOf(value.from) : "?";
 			}
 
 			// An own line's translation is the read-back of what was sent
@@ -219,12 +160,6 @@ export default defineComponent({
 
 			if (!value) {
 				return "";
-			}
-
-			if (value.status === "skipped") {
-				return value.reason === "same" && value.from
-					? t("translate.chip.alreadyIn", {language: nameOf(value.from)})
-					: t("translate.chip.unsure");
 			}
 
 			return t("translate.chip.options", {
@@ -260,15 +195,10 @@ export default defineComponent({
 		// not among them: "Retranslate from German" on a line already read as
 		// German is just "Retranslate". An explicit source keeps the list, so
 		// the way back to the detector's own guess is on the menu too.
-		// A skipped line leaves the reading language off as well: "Retranslate
-		// from English" into English is no translation.
 		const alternatives = computed(() => {
 			const value = entry.value;
 
-			return (value?.candidates ?? []).filter(
-				(code) =>
-					code !== value?.from && !(value?.status === "skipped" && code === value.to)
-			);
+			return (value?.candidates ?? []).filter((code) => code !== value?.from);
 		});
 
 		// The context menu positions itself at the pointer, and a keyboard
@@ -313,45 +243,19 @@ export default defineComponent({
 				},
 			];
 
-			// A mark has no text to copy, hide or retranslate: what it offers
-			// is the translation it did not get.
-			if (entry.value?.status === "skipped") {
-				eventbus.emit("contextmenu:items", {
-					event,
-					items: [
-						{
-							label: t("translate.menu.translateAnyway"),
-							type: "item",
-							class: "translate-anyway",
-							action: () => retranslateFrom(),
-						},
-						...sources,
-					],
-				});
-				return;
-			}
-
-			// An entry that failed as "unchanged" has no translation to copy,
-			// so its menu is the failed row's minus the Copy item.
-			const unchanged = entry.value?.status === "failed" && entry.value.error === UNCHANGED;
-
 			eventbus.emit("contextmenu:items", {
 				event,
 				items: [
-					...(unchanged
-						? []
-						: [
-								{
-									label: t("translate.menu.copy"),
-									type: "item",
-									class: "translate-copy",
-									// Like the toolbar's Copy: nowhere to report a
-									// refused clipboard, so a failure is silent.
-									action() {
-										void writeClipboard(entry.value?.text ?? "");
-									},
-								},
-						  ]),
+					{
+						label: t("translate.menu.copy"),
+						type: "item",
+						class: "translate-copy",
+						// Like the toolbar's Copy: nowhere to report a refused
+						// clipboard, so a failure is silent.
+						action() {
+							void writeClipboard(entry.value?.text ?? "");
+						},
+					},
 					{
 						label: t("translate.menu.retranslate"),
 						type: "item",
@@ -397,9 +301,6 @@ export default defineComponent({
 			shortReason,
 			t,
 			UNCHANGED,
-			ownEcho,
-			devtoolsAvailable,
-			notTranslatedLabel,
 			retryLabel,
 			reasonText,
 		};

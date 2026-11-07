@@ -28,7 +28,7 @@
 // translation panel opens from the channel menu as one column of
 // controls of equal width, each language named in the interface's
 // language (never a code) and a link to Settings, and closes on Escape; a line the fake hands back
-// unchanged (its `[echo]` token) fails with "the line came back unchanged"
+// unchanged (its `[echo]` token) shows nothing under it at all
 // and costs the engine nothing -- the next line is still translated; a
 // German question the fake answers
 // (its `[answer]` token) fails with "answered the question instead of translating it"; a line carrying the fake's `[fail]`
@@ -1725,19 +1725,21 @@ async function scenario(page) {
 		echoMarker
 	)})).pop()`;
 
-	await page.waitFor(
-		`!!(${echoRow}) && !!(${echoRow}).querySelector('.msg-translation[data-status="failed"]')`,
-		{timeout: 20000, label: "the echoed line fails"}
-	);
+	const echoEntry = `document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translations[(${echoRow}).id.replace(/^msg-/, "")]`;
+
+	await page.waitFor(`!!(${echoRow}) && (${echoEntry})?.status === "failed"`, {
+		timeout: 20000,
+		label: "the echoed line fails",
+	});
 	await page.check(
-		"the reason says the line came back unchanged",
-		(await page.evaluate(
-			`((${echoRow}).querySelector(".msg-translation-reason") || {}).textContent.trim()`
-		)) === "the line came back unchanged"
+		"the store records the line came back unchanged",
+		(await page.evaluate(`(${echoEntry}).error`)) === "came back unchanged"
 	);
+	// A line handed back as it was is the line to read: no chip, no
+	// reason, no mark under it.
 	await page.check(
-		"the failed line still shows its chip",
-		await page.evaluate(`!!(${echoRow}).querySelector(".msg-translation-chip")`)
+		"the echoed line shows nothing under it",
+		await page.evaluate(`!(${echoRow}).querySelector(".msg-translation")`)
 	);
 	await page.evaluate(`(${echoRow}).scrollIntoView({block: "center"})`);
 	await page.screenshot("echoed-translation");

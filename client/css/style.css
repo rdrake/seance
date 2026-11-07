@@ -769,8 +769,7 @@ p {
 #chat button.close::before { content: "\f00d"; /* https://fontawesome.com/icons/times?style=solid */ }
 
 /* The inline `<i class="fas">` glyphs the translation feature renders
- * (TranslationLine.vue's unchanged chip; the toolbar's translate action is a
- * ::before like its neighbours). The bundled
+ * (the toolbar's translate action is a ::before like its neighbours). The bundled
  * fontawesome.css is the @font-face only, so the content and the font-family
  * come from here (the same shape the .msg-translation-retry rule uses). The
  * language icon marks everything that translates; the globe stays the
@@ -782,12 +781,6 @@ p {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-.fa-equals::before {
-	content: "\f52c"; /* https://fontawesome.com/icons/equals?style=solid */
-	font: normal normal normal 1em/1 FontAwesome;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-}
 #chat .connecting-indicator::before { content: "\f021"; /* https://fontawesome.com/icons/sync?style=solid */ }
 
 .context-menu-join::before { content: "\f067"; /* http://fontawesome.io/icon/plus/ */ }
@@ -8613,16 +8606,6 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	color: var(--body-color);
 }
 
-/* A line that came back unchanged (the "=" chip, `unchanged` in Message.vue)
- * has no translation row to be the bright line, so the original is read in
- * its place and wears the translation's ink -- over `.self`'s dimming too,
- * since an own line that translated shows a bright row and an own line that
- * did not should read the same. A detection skip is not this: its original
- * keeps whatever ink it had. */
-#chat .msg.unchanged .content {
-	color: var(--body-color);
-}
-
 @keyframes msg-translation-blink {
 	50% {
 		opacity: 0;
@@ -8635,40 +8618,6 @@ html[data-reduce-motion] #chat .msg-translation-caret {
 
 #chat .msg-translation-failed {
 	font-style: italic;
-}
-
-/* A line the reader left alone on detection (TranslationLine.vue): a small
- * tag after the message -- the language it was taken for, or "?" when
- * that could not be told -- whose menu translates it anyway. No text row, no
- * caret, and the original keeps its ink. The tag itself is shared with the
- * unchanged-failure chip and wears the same accent look as
- * .msg-translation-chip below. */
-#chat .msg-translation-skipped {
-	margin-inline-start: 0.4em;
-	white-space: nowrap;
-}
-
-/* Shared with the unchanged-failure chip inside .msg-translation-failed:
- * one accent look for every translation chip, detection mark included. */
-#chat .msg-translation-skipped-tag {
-	padding: 0 0.3em;
-	border: 1px solid var(--chat-accent-rule, var(--link-color));
-	border-radius: 0.2rem;
-	background: transparent;
-	color: var(--chat-accent, var(--link-color));
-	font: inherit;
-	font-size: 0.7em;
-	line-height: 1.5;
-	letter-spacing: 0.05em;
-	vertical-align: 0.1em;
-	cursor: pointer;
-}
-
-#chat .msg-translation-skipped-tag:hover,
-#chat .msg-translation-skipped-tag:focus-visible {
-	background: var(--accent-tint-20, rgb(128 128 128 / 15%));
-	opacity: 1;
-	outline: 0;
 }
 
 /* A model downloading for this line (TranslationLine.vue). */
