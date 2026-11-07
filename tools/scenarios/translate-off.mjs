@@ -555,14 +555,8 @@ export default async function run(page) {
 		label: "the composer's translate button is back",
 	});
 	await page.fill("#form #input", "one more");
-	// Lit for the kept write target, the button's first click turns it off;
-	// the next opens the picker.
 	await page.click("#translate-once");
-	await page.waitFor(`!document.querySelector("#translate-once.on")`, {
-		label: "the write target off",
-	});
-	await page.click("#translate-once");
-	await page.waitFor(`!!document.querySelector(".source-language-picker")`, {
+	await page.waitFor(`!!document.querySelector(".language-sheet")`, {
 		label: "the composer's language picker",
 	});
 	await openTab(page);
@@ -574,6 +568,6 @@ export default async function run(page) {
 	});
 	page.check(
 		"on again: the picker left open at the switch-off stays closed",
-		!(await page.evaluate(`!!document.querySelector(".source-language-picker")`))
+		!(await page.evaluate(`!!document.querySelector(".language-sheet")`))
 	);
 }

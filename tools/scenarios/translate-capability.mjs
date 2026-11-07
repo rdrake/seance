@@ -212,8 +212,7 @@ const SETTING = {
 };
 const text = (selector) =>
 	`((document.querySelector(${JSON.stringify(selector)}) || {}).textContent || "").trim()`;
-const PICKER = ".source-language-picker";
-const CONFIRM = `${PICKER} .source-language-picker-confirm`;
+const PICKER = ".language-sheet";
 
 /** A second user who says one line in the channel, for the toolbar. */
 function speaker(nick, line) {
@@ -381,33 +380,54 @@ export default async function run(page) {
 		});
 	};
 
-	const pickTarget = async (code) => {
-		await page.evaluate(
-			`(() => { const s = document.querySelector('${PICKER} select[name="translateInto"]'); s.value = ${JSON.stringify(
-				code
-			)}; s.dispatchEvent(new Event("change", {bubbles: true})); })()`
-		);
-		await page.sleep(100);
-	};
-
-	const pickerState = () =>
-		page.evaluate(`(() => {
-			const confirm = document.querySelector(${JSON.stringify(CONFIRM)});
-			const hint = document.querySelector("${PICKER} .source-language-picker-hint");
-			const described = confirm.getAttribute("aria-describedby");
+	// A row of the sheet's "They read" list, read without picking it: a
+	// row that runs would apply at once. A blocked one is tapped, which
+	// leaves the sheet up with the reason under the list.
+	const rowState = async (code) => {
+		const row = `${PICKER} .language-sheet-row[data-code="${code}"]`;
+		const state = await page.evaluate(`(() => {
+			const row = document.querySelector('${row}');
 			return {
-				disabled: confirm.disabled,
-				label: confirm.textContent.trim(),
-				lead: ((hint && hint.querySelector(".source-language-picker-blocked")) || {}).textContent?.trim() || "",
-				why: ((hint && hint.querySelector(".source-language-picker-why")) || {}).textContent?.trim() || "",
-				hint: hint ? hint.textContent.trim() : "",
-				describedOk: !described || document.getElementById(described) === hint,
+				disabled: row.classList.contains("blocked"),
+				status: (row.querySelector(".language-sheet-status") || {}).textContent?.trim() || "",
+			};
+		})()`);
+
+		if (!state.disabled) {
+			return {
+				...state,
+				lead: "",
+				why: "",
+				live: await page.evaluate(
+					`document.querySelector("${PICKER} .language-sheet-hint")?.getAttribute("aria-live") ?? null`
+				),
+			};
+		}
+
+		await page.evaluate(`document.querySelector('${row}').scrollIntoView({block: "nearest"})`);
+		await page.click(row);
+		await page.sleep(100);
+
+		const hint = await page.evaluate(`(() => {
+			const hint = document.querySelector("${PICKER} .language-sheet-hint");
+			return {
+				lead: ((hint && hint.querySelector(".language-sheet-blocked")) || {}).textContent?.trim() || "",
+				why: ((hint && hint.querySelector(".language-sheet-why")) || {}).textContent?.trim() || "",
 				live: hint ? hint.getAttribute("aria-live") : null,
 			};
 		})()`);
 
+		return {...state, ...hint};
+	};
+	const openedOnCode = () =>
+		page.evaluate(
+			`document.querySelector('${PICKER} .language-sheet-side[data-side="to"]').dataset.code`
+		);
+
 	const closePicker = async () => {
-		await page.click(`${PICKER} .source-language-picker-cancel`);
+		await page.evaluate(
+			`document.querySelector(".language-sheet").dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}))`
+		);
 		await page.waitFor(`!document.querySelector(${JSON.stringify(PICKER)})`, {
 			label: "dialog closed",
 		});
@@ -703,10 +723,8 @@ export default async function run(page) {
 		await openPicker();
 
 		const llm = device.runs[SMALL];
-		const opened = await pickerState();
-		const openedOn = await page.evaluate(
-			`document.querySelector('${PICKER} select[name="translateInto"]').value`
-		);
+		const openedOn = await openedOnCode();
+		const opened = await rowState(openedOn);
 
 		// No earlier pick: the cleanup pass where the GPU model runs, else
 		// the first language this device serves -- never a disabled dialog.
@@ -717,33 +735,28 @@ export default async function run(page) {
 			!opened.disabled && (llm ? openedOn === "en" : openedOn !== "en")
 		);
 		await page.screenshot(`${name}-composer-opened`, {selector: PICKER, pad: 8});
-		await pickTarget("en");
+		const same = await rowState("en");
 
-		const same = await pickerState();
-
-		page.check(`${name}: the dialog's hint is a polite live region`, same.live === "polite");
+		page.check(`${name}: the sheet's hint is a polite live region`, same.live === "polite");
 
 		if (llm) {
 			page.check(
-				`${name}: the cleanup pass is on offer ("${same.label}")`,
-				!same.disabled &&
-					same.label === EN["translate.picker.targetConfirmCorrect"] &&
-					same.hint === EN["translate.picker.sameLanguage"]
+				`${name}: the cleanup pass is on offer ("${same.status}")`,
+				!same.disabled && same.status === EN["translate.sheet.corrects"]
 			);
 		} else {
 			page.check(
 				`${name}: the cleanup pass is disabled with its reason (${same.lead} / ${same.why})`,
 				same.disabled &&
+					same.status === EN["translate.sheet.unavailable"] &&
 					same.lead === EN["translate.picker.sameLanguageNeedsGpu"] &&
-					same.why === device.why(SMALL) &&
-					same.describedOk
+					same.why === device.why(SMALL)
 			);
 		}
 
 		await page.screenshot(`${name}-composer-same`, {selector: PICKER, pad: 8});
-		await pickTarget("de");
 
-		const german = await pickerState();
+		const german = await rowState("de");
 
 		page.check(
 			`${name}: German is on offer (CPU models serve it)`,
@@ -856,9 +869,8 @@ export default async function run(page) {
 				.replace("{to}", "Japanese");
 
 			await openPicker();
-			await pickTarget("ja");
 
-			const off = await pickerState();
+			const off = await rowState("ja");
 
 			page.check(
 				`noWebgpu, NLLB off: Japanese is disabled, NLLB named (${off.lead} / ${off.why})`,
@@ -884,9 +896,8 @@ export default async function run(page) {
 			);
 			await closeSettings();
 			await openPicker();
-			await pickTarget("ja");
 
-			const on = await pickerState();
+			const on = await rowState("ja");
 
 			page.check(
 				`noWebgpu, NLLB on: Japanese is on offer (${on.lead || "enabled"})`,
@@ -954,18 +965,15 @@ export default async function run(page) {
 			await closeSettings();
 			await openPicker();
 
-			// The GPU model off: the dialog no longer opens on the cleanup pass.
-			const openedOff = await page.evaluate(
-				`document.querySelector('${PICKER} select[name="translateInto"]').value`
-			);
+			// The GPU model off: the sheet no longer opens on the cleanup pass.
+			const openedOff = await openedOnCode();
 
 			page.check(
-				`desktop, GPU off: the dialog opens on a pair that runs (${openedOff})`,
-				openedOff !== "en" && !(await pickerState()).disabled
+				`desktop, GPU off: the sheet opens on a pair that runs (${openedOff})`,
+				openedOff !== "en" && !(await rowState(openedOff)).disabled
 			);
-			await pickTarget("en");
 
-			const polish = await pickerState();
+			const polish = await rowState("en");
 
 			page.check(
 				`desktop, GPU off: the cleanup pass names the switch (${polish.why})`,
@@ -1081,9 +1089,8 @@ export default async function run(page) {
 			await closePanel();
 
 			await openPicker();
-			await pickTarget("de");
 
-			const blocked = await pickerState();
+			const blocked = await rowState("de");
 
 			page.check(
 				`desktop, both off: German in the dialog is disabled with the reason (${blocked.lead} / ${blocked.why})`,

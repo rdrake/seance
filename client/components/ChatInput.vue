@@ -80,6 +80,33 @@
 				✕
 			</button>
 		</div>
+		<!-- The suggestion card: a channel that mostly writes in another
+		     language offers to write in it here. Its decline is per channel. -->
+		<div
+			v-if="suggestion"
+			class="translate-suggest"
+			role="region"
+			aria-labelledby="translate-suggest-lead"
+		>
+			<p id="translate-suggest-lead" class="translate-suggest-lead">{{ suggestionLead }}</p>
+			<p v-if="suggestionNote" class="translate-suggest-note">{{ suggestionNote }}</p>
+			<div class="translate-suggest-actions">
+				<button
+					type="button"
+					class="btn btn-sm translate-suggest-accept"
+					@click="acceptSuggestion"
+				>
+					{{ t("translate.suggest.accept", {language: suggestionName}) }}
+				</button>
+				<button
+					type="button"
+					class="btn btn-sm translate-suggest-decline"
+					@click="declineSuggestion"
+				>
+					{{ t("translate.suggest.decline") }}
+				</button>
+			</div>
+		</div>
 		<!-- A translation streams in token by token, and every token is a
 		     patch of this region: announced live, a screen reader would read
 		     the strip out again on each one. It stays quiet while it streams
@@ -215,7 +242,7 @@
 				type="button"
 				:class="{on: !!sendTarget}"
 				:aria-label="translateOnceLabel"
-				:aria-pressed="!!sendTarget"
+				aria-haspopup="dialog"
 				:aria-expanded="translateOncePickerOpen"
 				:disabled="!canSend"
 				@mousedown.prevent
@@ -225,14 +252,16 @@
 					sendTargetCode
 				}}</span>
 			</button>
-			<SourceLanguagePicker
+			<ComposerLanguageSheet
 				v-if="translateOncePickerOpen"
 				:anchor="translateOnceButton"
-				:selected="translateOncePreselected"
-				:selected-from="translateOnceFrom"
+				:channel="channel"
+				:target="sendTarget"
+				:initial-to="translateOncePreselected"
+				:initial-from="translateOnceFrom"
 				:once-offered="canTranslateOnce"
-				purpose="target"
 				@pick="translateOnce"
+				@off="turnTranslateOff"
 				@close="translateOncePickerOpen = false"
 			/>
 		</span>
@@ -330,11 +359,13 @@ import {
 	setChannelOptions,
 	translationAvailable,
 } from "../js/translate/reader";
-import SourceLanguagePicker from "./SourceLanguagePicker.vue";
-import {loadNoteText} from "../js/helpers/modelLabel";
+import ComposerLanguageSheet from "./ComposerLanguageSheet.vue";
+import {loadNoteText, modelLabel} from "../js/helpers/modelLabel";
+import friendlysize from "../js/helpers/friendlysize";
+import {recentLanguages, suggestedLanguage} from "../js/translate/recent";
 import {translateErrorText} from "../js/helpers/translateErrors";
 import {translateWhyText} from "../js/helpers/translateWhy";
-import {loadNote} from "../js/translate/service";
+import {downloadBytes, loadNote} from "../js/translate/service";
 import {
 	cancelOutgoing,
 	lastOnceTarget,
@@ -399,7 +430,7 @@ const bracketWraps = {
 
 export default defineComponent({
 	name: "ChatInput",
-	components: {SourceLanguagePicker, TypingIndicator, QuotePreview, ReactionPicker},
+	components: {ComposerLanguageSheet, TypingIndicator, QuotePreview, ReactionPicker},
 	props: {
 		network: {type: Object as PropType<ClientNetwork>, required: true},
 		channel: {type: Object as PropType<ClientChan>, required: true},
@@ -1425,13 +1456,13 @@ export default defineComponent({
 			});
 		};
 
-		// The translate button is the channel's send target as a toggle,
-		// independent of the globe (which is reading): off, a click opens
-		// the dialog and the pick becomes the write target (channelStore
-		// `write`, the same setting the panel's "Send my messages in" shows)
-		// until the button is clicked again; the dialog's "This message
-		// only" makes the pick a one-off instead (writer.ts `translateOnce`),
-		// the way the toolbar's Translate reads one line. Shown wherever
+		// The translate button opens the language sheet
+		// (ComposerLanguageSheet.vue), independent of the globe (which is
+		// reading): the pick becomes the channel's write target (channelStore
+		// `write`, the same setting the panel's "Send my messages in" shows),
+		// lit on the button until the sheet's Off; its "This message only"
+		// makes the pick a one-off instead (writer.ts `translateOnce`), the
+		// way the toolbar's Translate reads one line. Shown wherever
 		// translation can run at all.
 		const translateOnceButton = ref<HTMLButtonElement | null>(null);
 		const translateOncePickerOpen = ref(false);
@@ -1492,44 +1523,56 @@ export default defineComponent({
 		// Read when the dialog opens: the last pick is plain session memory
 		// (writer.ts), not store state, so nothing would recompute it.
 		const translateOncePreselected = ref("");
-		// The dialog's source: the language the user reads.
-		const translateOnceFrom = computed(() => readingLanguage());
+
+		// The sheet's "I write": the language the user said they write in
+		// with the target that is set, else the one they read. Null (detect
+		// each draft) only where the target was set that way.
+		const translateOnceFrom = ref<string | null>(null);
+
+		// Off: the send target goes, and a strip in flight for it with it.
+		const turnTranslateOff = () => {
+			setChannelOptions(props.network, props.channel, {write: null, writeFrom: null});
+			cancelOutgoing(props.channel);
+			forgetPreview();
+			focusForTyping();
+		};
 
 		const openTranslateOnce = () => {
 			if (!canSend.value) {
 				return;
 			}
 
-			// On: the click turns the send target off; a strip in flight for
-			// it goes too. Off: the dialog.
-			if (sendTarget.value) {
-				setChannelOptions(props.network, props.channel, {write: null, writeFrom: null});
-				cancelOutgoing(props.channel);
-				forgetPreview();
-				focusForTyping();
+			if (translateOncePickerOpen.value) {
+				translateOncePickerOpen.value = false;
 				return;
 			}
 
-			// The channel's last pick, else a language the channel speaks,
-			// else the user's own (the cleanup pass) -- each only where this
-			// device can serve it from the reading language, so a device
-			// without the GPU model never opens on a disabled cleanup pass
-			// (outgoing.ts `onceTargetDefault`).
 			const reading = readingLanguage();
-			translateOncePreselected.value = onceTargetDefault({
-				reading,
-				last: lastOnceTarget(props.network, props.channel),
-				declared: channelTranslation(props.network, props.channel).languages,
-				fallback: SUPPORTED_LANGUAGES,
-				routes: (to) => !!pairVerdict(reading, to).route,
-			});
-			translateOncePickerOpen.value = !translateOncePickerOpen.value;
+			const target = sendTarget.value;
+
+			// The target that is set; else the channel's last pick, a
+			// language the channel speaks, or the user's own (the cleanup
+			// pass) -- each only where this device can serve it from the
+			// reading language, so a device without the GPU model never
+			// opens on a disabled cleanup pass (outgoing.ts `onceTargetDefault`).
+			translateOncePreselected.value =
+				target ??
+				onceTargetDefault({
+					reading,
+					last: lastOnceTarget(props.network, props.channel),
+					declared: channelTranslation(props.network, props.channel).languages,
+					fallback: SUPPORTED_LANGUAGES,
+					routes: (to) => !!pairVerdict(reading, to).route,
+				});
+			translateOnceFrom.value = target
+				? channelTranslation(props.network, props.channel).writeFrom
+				: reading;
+			translateOncePickerOpen.value = true;
 		};
 
 		// A same-language pick is a cleanup pass on the GPU model
-		// (writer.ts, router.ts): the dialog asks the router's own rule
+		// (writer.ts, router.ts): the sheet asks the router's own rule
 		// (reader.ts `pairVerdict`) and says why when it cannot run.
-
 		const translateOnce = (to: string, from: string | null = null, once = false) => {
 			translateOncePickerOpen.value = false;
 
@@ -1539,6 +1582,10 @@ export default defineComponent({
 				canTranslateOnce.value && (gate.kind === "ok" || gate.kind === "action");
 
 			if (once) {
+				// A Return waiting on the target's preview is not a send of
+				// the one-off: that strip is for reading first.
+				forgetPreview();
+
 				// The verdict is checked against the composer it started in,
 				// as the first Enter's is: a "plain" verdict (the draft is
 				// already in that language) leaves the draft where it is --
@@ -1555,13 +1602,83 @@ export default defineComponent({
 			// already typed gets the strip now rather than on its Enter.
 			// With the language the user said they write in: each draft is
 			// taken as that, not guessed at (a short English line scores as
-			// Afrikaans often enough).
+			// Afrikaans often enough). The same pair again changes nothing,
+			// a finished preview included; a strip for a target it replaces goes.
+			if (
+				to === sendTarget.value &&
+				from === channelTranslation(props.network, props.channel).writeFrom
+			) {
+				focusForTyping();
+				return;
+			}
+
+			cancelOutgoing(props.channel);
+			forgetPreview();
 			setChannelOptions(props.network, props.channel, {write: to, writeFrom: from});
 
 			if (translatable) {
 				void translateOutgoing(props.network, props.channel, gate.text);
 			}
 
+			focusForTyping();
+		};
+
+		// The suggestion card (spec § Composer): where a channel's recent
+		// lines from others are mostly in one language that is not the
+		// user's -- by the reading pipeline's own verdicts, so only with
+		// reading on -- and nothing is set or declined, offer to write in it.
+		const suggestion = computed(() => {
+			if (
+				!translateOnceAvailable.value ||
+				props.channel.type !== ChanType.CHANNEL ||
+				sendTarget.value ||
+				props.channel.editing ||
+				channelTranslation(props.network, props.channel).noSuggest
+			) {
+				return null;
+			}
+
+			const reading = readingLanguage();
+			const code = suggestedLanguage(
+				recentLanguages(props.channel.messages, store.state.translations),
+				reading
+			);
+			const route = code ? pairVerdict(reading, code).route : null;
+
+			return code && route ? {code, route} : null;
+		});
+		const suggestionName = computed(() =>
+			suggestion.value ? languageName(suggestion.value.code, readingLanguage()) : ""
+		);
+		const suggestionLead = computed(() =>
+			suggestion.value
+				? t("translate.suggest.lead", {
+						channel: props.channel.name,
+						language: suggestionName.value,
+				  })
+				: ""
+		);
+		// What saying yes costs, where it costs a download.
+		const suggestionNote = computed(() => {
+			const route = suggestion.value?.route;
+			const size = route ? downloadBytes(route, store.state.translation.models) : 0;
+
+			return route && size > 0
+				? t("translate.suggest.download", {
+						model: modelLabel(route.ref),
+						size: friendlysize(size),
+				  })
+				: "";
+		});
+		const acceptSuggestion = () => {
+			const code = suggestion.value?.code;
+
+			if (code) {
+				translateOnce(code, readingLanguage());
+			}
+		};
+		const declineSuggestion = () => {
+			setChannelOptions(props.network, props.channel, {noSuggest: true});
 			focusForTyping();
 		};
 
@@ -1677,6 +1794,8 @@ export default defineComponent({
 				// A draft left in the previous channel is reported `paused` there.
 				typing.switchTarget();
 				forgetPreview();
+				// The sheet was opened for the channel left behind.
+				translateOncePickerOpen.value = false;
 				focusForTyping();
 			}
 		);
@@ -2036,6 +2155,13 @@ export default defineComponent({
 			sendTarget,
 			openTranslateOnce,
 			translateOnce,
+			turnTranslateOff,
+			suggestion,
+			suggestionName,
+			suggestionLead,
+			suggestionNote,
+			acceptSuggestion,
+			declineSuggestion,
 		};
 	},
 });

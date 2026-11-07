@@ -193,6 +193,21 @@ export function loadNote(view: ModelView): LoadNote {
 	};
 }
 
+/**
+ * What a route still has to download before it can run: its copy's size, on
+ * the device it runs on, unless that copy's view says it is already in this
+ * device's cache. 0 when nothing is left to fetch or the size is unknown
+ * (a deploy's own model, Apple's system translation).
+ */
+export function downloadBytes(
+	route: Pick<Route, "ref" | "device">,
+	views: readonly Pick<ModelView, "ref" | "device" | "cached">[]
+): number {
+	const view = views.find((v) => v.ref.id === route.ref.id && v.device === route.device);
+
+	return view?.cached ? 0 : route.ref.copies[route.device]?.sizeBytes ?? 0;
+}
+
 /** What a copy's view is kept under. */
 /** A copy's files arrived or went: its view says so, as the worker's answer would. */
 function applyCached(view: ModelView, cached: boolean): void {

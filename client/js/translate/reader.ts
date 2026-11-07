@@ -866,7 +866,7 @@ export function setChannelOptions(
 	patch: Partial<
 		Pick<
 			ChannelTranslation,
-			"write" | "writeFrom" | "formality" | "variant" | "languages" | "once"
+			"write" | "writeFrom" | "formality" | "variant" | "languages" | "once" | "noSuggest"
 		>
 	>
 ): void {

@@ -404,14 +404,29 @@ export default async function run(page) {
 	// target and Enter sends the translation. The button is dead on an
 	// empty draft, and the dialog remembers the language for the next pick.
 	const ONCE = "#form #translate-once";
-	const ONCE_SELECT = '.source-language-picker select[name="translateInto"]';
+	const SHEET = ".language-sheet";
+	const sideValue = (n) =>
+		`((document.querySelectorAll("${SHEET} .language-sheet-side-value")[${n}] || {}).textContent || "").trim()`;
+	const row = (code) => `${SHEET} .language-sheet-row[data-code="${code}"]`;
+	// A row may sit under the list's own scroll: brought into it first, as
+	// a finger would scroll to it.
+	const pick = async (code) => {
+		await page.evaluate(
+			`document.querySelector('${row(code)}').scrollIntoView({block: "nearest"})`
+		);
+		await page.click(row(code));
+	};
+	const openSheet = async (label) => {
+		await page.click(ONCE);
+		await page.waitFor(`!!document.querySelector(${JSON.stringify(SHEET)})`, {label});
+	};
 	const onceDraft = `could someone translate just this one line ${RUN}`;
 
 	await page.waitFor(`!!document.querySelector(${JSON.stringify(ONCE)})`, {
 		label: "the composer's translate button",
 	});
-	// The button is the send target's toggle, live with or without a
-	// draft; with one, the dialog offers "This message only".
+	// The button opens the language sheet, live with or without a draft;
+	// with one, the sheet offers "This message only".
 	await page.check(
 		"the translate button is live on an empty draft",
 		!(await page.evaluate(`document.querySelector(${JSON.stringify(ONCE)}).disabled`))
@@ -419,57 +434,67 @@ export default async function run(page) {
 	await page.check(
 		"the translate button is off with no send target",
 		(await page.evaluate(
-			`document.querySelector(${JSON.stringify(ONCE)}).getAttribute("aria-pressed")`
-		)) === "false"
+			`document.querySelector(${JSON.stringify(ONCE)}).classList.contains("on")`
+		)) === false
 	);
 	await page.fill(INPUT, onceDraft);
-	await page.click(ONCE);
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-		label: "the translate-into dialog",
-	});
-	// It opens on a tap and nothing more: on a touch screen no select is
-	// focused, which would put the system's own list over the sheet unasked.
+	await openSheet("the language sheet");
+	// It opens on a tap and nothing more: on a touch screen the search is
+	// not focused, which would put the keyboard over the list unasked.
 	if (MOBILE) {
 		await page.check(
-			"the dialog opens without a language list over it",
-			(await page.evaluate(`document.activeElement?.tagName`)) !== "SELECT"
+			"the sheet opens without the keyboard",
+			(await page.evaluate(`document.activeElement?.tagName`)) !== "INPUT"
+		);
+	} else {
+		await page.check(
+			"the sheet's search has the keyboard on a desktop",
+			await page.evaluate(
+				`document.activeElement?.classList.contains("language-sheet-search")`
+			)
 		);
 	}
-	// Nothing picked on this channel yet: the target starts as the language
-	// the interface is in, not as whatever sorts first in the list.
+	// Nothing picked on this channel yet: "They read" starts as the
+	// language the interface is in, "I write" as the same.
 	await page.check(
-		"the dialog starts on the interface's own language",
-		(await page.evaluate(`document.querySelector(${JSON.stringify(ONCE_SELECT)}).value`)) ===
-			"en"
+		"the sheet starts on the interface's own language",
+		(await page.evaluate(sideValue(1))) === "English" &&
+			(await page.evaluate(sideValue(0))) === "English"
 	);
 	await page.check(
-		"the dialog's languages are named in the interface language",
+		"the sheet's languages are named in the interface language, with their own name beside",
 		await page.evaluate(
 			`(() => {
-				const s = document.querySelector(${JSON.stringify(ONCE_SELECT)});
-				const text = (v) => s.querySelector('option[value="' + v + '"]').textContent.trim();
-				// Not the endonym: an English interface offers "French"
-				// (SourceLanguagePicker.vue name()).
+				const name = (v) => document.querySelector('${SHEET} .language-sheet-row[data-code="' + v + '"] .language-sheet-name').textContent.trim();
+				const endonym = (v) => (document.querySelector('${SHEET} .language-sheet-row[data-code="' + v + '"] .language-sheet-endonym') || {}).textContent?.trim();
 				const names = new Intl.DisplayNames(
 					[document.documentElement.lang || "en"],
 					{type: "language"}
 				);
-				return text("de") === names.of("de") && text("fr") === names.of("fr");
+				return name("de") === names.of("de") && name("fr") === names.of("fr") && endonym("de") === "Deutsch";
 			})()`
 		)
 	);
-	await page.evaluate(
-		`(() => { const s = document.querySelector(${JSON.stringify(
-			ONCE_SELECT
-		)}); s.value = "es"; s.dispatchEvent(new Event("change", {bubbles: true})); })()`
+	// The search narrows the list, by either name.
+	await page.fill(`${SHEET} .language-sheet-search`, "espa");
+	await page.check(
+		"searching by a language's own name finds it",
+		await page.evaluate(
+			`(() => { const rows = [...document.querySelectorAll("${SHEET} .language-sheet-row[data-code]")]; return rows.length === 1 && rows[0].dataset.code === "es"; })()`
+		)
 	);
-	await page.click(".source-language-picker-once-box");
-	await page.click(".source-language-picker-confirm");
+	await page.fill(`${SHEET} .language-sheet-search`, "");
+	await page.click(".language-sheet-once-box");
+	await pick("es");
 	await page.waitFor(
 		`(document.querySelector(${JSON.stringify(
 			BAR_TEXT
 		)}) || {}).textContent === ${JSON.stringify(`[Spanish] ${onceDraft}`)}`,
 		{timeout: 30000, label: "the one-off translation is in the strip"}
+	);
+	await page.check(
+		"picking a language applied it and put the sheet away",
+		(await page.count(SHEET)) === 0
 	);
 	await page.check(
 		"the strip's chip names the picked language",
@@ -480,8 +505,8 @@ export default async function run(page) {
 	await page.check(
 		"the channel still has no write target",
 		(await page.evaluate(
-			`document.querySelector("#form #input").getAttribute("placeholder")`
-		)) === `Write to ${CHANNEL}`
+			`document.querySelector(${JSON.stringify(ONCE)}).classList.contains("on")`
+		)) === false
 	);
 	// The read-back under the strip runs first; a send waits for it.
 	await page.waitFor(
@@ -499,45 +524,28 @@ export default async function run(page) {
 		label: "the strip is gone after the send",
 	});
 
-	// The same language twice is a cleanup pass: the fake "corrects" the
-	// line, the chip says so, and Enter sends the corrected line.
-	const ONCE_FROM = '.source-language-picker select[name="translateFrom"]';
+	// The same language twice is a cleanup pass: the row says so, the fake
+	// "corrects" the line, the chip says so, and Enter sends it.
 	const polishDraft = `pls fix my speling here ${RUN}`;
 
 	await page.fill(INPUT, polishDraft);
-	await page.click(ONCE);
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-		label: "the dialog for the cleanup",
-	});
+	await openSheet("the sheet for the cleanup");
 	// The channel's last one-off, not the interface's language: a
 	// remembered pick still outranks the default (`lastOnceTarget`).
 	await page.check(
-		"the dialog remembers Spanish, the one-off picked before it",
-		(await page.evaluate(`document.querySelector(${JSON.stringify(ONCE_SELECT)}).value`)) ===
-			"es"
+		"the sheet remembers Spanish, the one-off picked before it",
+		(await page.evaluate(sideValue(1))) === "Spanish"
 	);
 	await page.check(
-		"the dialog's source starts as the language the page reads",
-		(await page.evaluate(`document.querySelector(${JSON.stringify(ONCE_FROM)}).value`)) === "en"
-	);
-	await page.evaluate(
-		`(() => { const s = document.querySelector(${JSON.stringify(
-			ONCE_SELECT
-		)}); s.value = "en"; s.dispatchEvent(new Event("change", {bubbles: true})); })()`
-	);
-	await page.waitFor(`!!document.querySelector(".source-language-picker-hint")`, {
-		label: "the same-language hint",
-	});
-	// The same language twice corrects rather than translates, and the
-	// button says which of the two it is.
-	await page.check(
-		"the confirm button says Correct for a same-language pick",
+		"the language the user writes reads 'Corrects spelling'",
 		(await page.evaluate(
-			`document.querySelector(".source-language-picker-confirm").textContent.trim()`
-		)) === "Correct"
+			`(document.querySelector('${row(
+				"en"
+			)} .language-sheet-status') || {}).textContent?.trim()`
+		)) === "Corrects spelling"
 	);
-	await page.click(".source-language-picker-once-box");
-	await page.click(".source-language-picker-confirm");
+	await page.click(".language-sheet-once-box");
+	await pick("en");
 	await page.waitFor(
 		`(document.querySelector(${JSON.stringify(
 			BAR_TEXT
@@ -563,28 +571,22 @@ export default async function run(page) {
 		label: "the strip is gone after the corrected send",
 	});
 
-	// The button as a toggle: with no draft, a pick without "This message
-	// only" becomes the channel's send target -- the button lit, the
-	// placeholder saying so -- until the button is clicked again.
+	// With no draft, a pick becomes the channel's send target -- the
+	// button lit -- until the sheet's Off.
 	await page.fill(INPUT, "");
-	await page.click(ONCE);
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-		label: "the dialog on an empty draft",
-	});
+	await openSheet("the sheet on an empty draft");
 	await page.check(
 		"no one-off box without a draft",
-		(await page.count(".source-language-picker-once-box")) === 0
+		(await page.count(".language-sheet-once-box")) === 0
 	);
-	await page.evaluate(
-		`(() => { const s = document.querySelector(${JSON.stringify(
-			ONCE_SELECT
-		)}); s.value = "de"; s.dispatchEvent(new Event("change", {bubbles: true})); })()`
+	await page.check(
+		"no Off chip with nothing to turn off",
+		(await page.count(".language-sheet-off")) === 0
 	);
-	await page.click(".source-language-picker-confirm");
-	await page.waitFor(
-		`document.querySelector(${JSON.stringify(ONCE)}).getAttribute("aria-pressed") === "true"`,
-		{label: "the button is on"}
-	);
+	await pick("de");
+	await page.waitFor(`document.querySelector(${JSON.stringify(ONCE)}).classList.contains("on")`, {
+		label: "the button is on",
+	});
 	await page.check(
 		"the button names the send target, EN → DE",
 		(await page.evaluate(buttonTarget)) === "EN → DE"
@@ -634,47 +636,60 @@ export default async function run(page) {
 	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
 		label: "the strip is gone after the one-step send",
 	});
-	await page.click(ONCE);
-	await page.waitFor(
-		`document.querySelector(${JSON.stringify(ONCE)}).getAttribute("aria-pressed") === "false"`,
-		{label: "the button is off again"}
-	);
+	// With the target set, the sheet opens on it, checked, and offers Off.
+	await openSheet("the sheet with a target set");
 	await page.check(
-		"the placeholder is plain again",
-		(await page.evaluate(
-			`document.querySelector("#form #input").getAttribute("placeholder")`
-		)) === `Write to ${CHANNEL}`
+		"the sheet opens on the target that is set",
+		(await page.evaluate(sideValue(1))) === "German" &&
+			(await page.evaluate(
+				`document.querySelector('${row("de")}').getAttribute("aria-current")`
+			)) === "true"
+	);
+	await page.screenshot("translate-sheet", {selector: SHEET});
+	await page.click(".language-sheet-off");
+	await page.waitFor(
+		`!document.querySelector(${JSON.stringify(ONCE)}).classList.contains("on")`,
+		{label: "Off turned the button off"}
 	);
 
 	// The next pick starts from the language picked last time.
 	await page.fill(INPUT, `and this one too ${RUN}`);
-	await page.click(ONCE);
-	await page.waitFor(`!!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-		label: "the dialog again",
-	});
+	await openSheet("the sheet again");
 	await page.check(
-		"the dialog remembers English, the last pick",
-		(await page.evaluate(`document.querySelector(${JSON.stringify(ONCE_SELECT)}).value`)) ===
-			"en"
+		"the sheet remembers English, the last one-off",
+		(await page.evaluate(sideValue(1))) === "English"
+	);
+	// "I write" first: its pick names the source and moves on to "They read".
+	await page.click(`${SHEET} .language-sheet-side:first-child`);
+	await pick("fr");
+	await page.check(
+		"picking in 'I write' sets it and moves to 'They read'",
+		(await page.evaluate(sideValue(0))) === "French" &&
+			(await page.evaluate(
+				`document.querySelectorAll("${SHEET} .language-sheet-side")[1].classList.contains("active")`
+			)) &&
+			(await page.count(SHEET)) === 1
 	);
 	await page.screenshot("translate-once", {selector: "#form"});
 	// On a phone the sidebar opening (a swipe, the menu button) puts the
-	// dialog away rather than leave it over the channel list; on a desktop
-	// the sidebar is open beside it all along, so Cancel does.
+	// sheet away rather than leave it over the channel list; on a desktop
+	// the sidebar is open beside it all along, so Escape does.
 	if (MOBILE) {
 		await page.evaluate(
 			`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", true)`
 		);
-		await page.waitFor(`!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-			label: "opening the sidebar closed the dialog",
+		await page.waitFor(`!document.querySelector(${JSON.stringify(SHEET)})`, {
+			label: "opening the sidebar closed the sheet",
 		});
 		await page.evaluate(
 			`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", false)`
 		);
 	} else {
-		await page.click(".source-language-picker-cancel");
-		await page.waitFor(`!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-			label: "the dialog closed",
+		await page.evaluate(
+			`document.querySelector(".language-sheet").dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}))`
+		);
+		await page.waitFor(`!document.querySelector(${JSON.stringify(SHEET)})`, {
+			label: "Escape closed the sheet",
 		});
 	}
 	await page.fill(INPUT, "");

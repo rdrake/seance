@@ -976,6 +976,40 @@ async function scenario(page) {
 		);
 	}
 
+	// The channel now mostly writes German: the composer offers to write in
+	// it (the suggestion card), and the language sheet lists it under
+	// "Spoken in … lately". Declined, the card stays gone for the channel.
+	await page.waitFor(`!!document.querySelector("#form .translate-suggest")`, {
+		label: "the suggestion card",
+	});
+	await page.check(
+		"the suggestion card offers German",
+		/German/.test(
+			await page.evaluate(
+				`document.querySelector("#form .translate-suggest-accept").textContent`
+			)
+		)
+	);
+	await page.screenshot("translate-suggest", {selector: "#form"});
+	await page.click("#form #translate-once");
+	await page.waitFor(`!!document.querySelector(".language-sheet")`, {
+		label: "the language sheet",
+	});
+	await page.check(
+		"the sheet lists German as spoken here lately",
+		await page.evaluate(
+			`[...document.querySelectorAll(".language-sheet-chip")].some((c) => c.textContent.trim() === "German")`
+		)
+	);
+	await page.evaluate(
+		`document.querySelector(".language-sheet").dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}))`
+	);
+	await page.waitFor(`!document.querySelector(".language-sheet")`, {label: "the sheet closed"});
+	await page.click("#form .translate-suggest-decline");
+	await page.waitFor(`!document.querySelector("#form .translate-suggest")`, {
+		label: "the declined card is gone",
+	});
+
 	// The chip's menu: copy one translation, hide one translation.
 	await page.evaluate(
 		`document.querySelector(${JSON.stringify(CHIP)}).scrollIntoView({block: "center"})`

@@ -1347,8 +1347,8 @@ where the user has gone meanwhile. There is
 no Send or Edit button on the strip any more -- the composer's own send
 button does what Return does -- only Copy.
 
-**The language the user writes in is theirs to say.** The dialog the
-translate button opens has a "Translate from" as well as a "Translate into";
+**The language the user writes in is theirs to say.** The sheet the
+translate button opens has an "I write" as well as a "They read";
 picked as the channel's target (not "This message only"), both are kept
 (`channelStore.ts` `writeFrom` beside `write`; turning the target off, or
 setting it from the panel, clears it), and every draft is then taken as that
@@ -1361,11 +1361,25 @@ the request fails (`writer.ts` `translateOutgoing`): a draft misplaced by
 the detector is likelier than a language the user writes in with no model
 for it.
 
-The dialog opens on a tap and nothing more: on a touch screen it focuses
-itself rather than its select, since focusing a select there opens the
-system's own wheel or list over the sheet before anyone asked
-(`SourceLanguagePicker.vue`). The phone's sheet is docked to the chat pane,
-not the screen, and opening the sidebar closes it.
+**The suggestion card.** Where a channel's recent lines from others are
+mostly in one language that is not the user's -- at least
+`SUGGEST_MIN_LINES` (5) of them and `SUGGEST_MIN_SHARE` (half) of every
+placed line among the newest `RECENT_LINES` (`recent.ts`
+`suggestedLanguage`) -- and the channel has no write target, the composer
+offers it above the strip: "Most of #linux writes in Portuguese. Write
+your messages in Portuguese here?", with the model and its download size
+when that is still to come. **Write in Portuguese** sets the target with
+the reading language as `writeFrom`, as a pick in the sheet would; **Not
+in this channel** sets `channelStore.ts` `noSuggest`, and the card is not
+offered there again. It needs reading on (the counts are the reader's
+verdicts), a channel rather than a query, and a route for the pair.
+
+The sheet opens on a tap and nothing more: on a touch screen it focuses
+itself rather than its search, since focusing the search there brings the
+keyboard up over the list before anyone asked (on a desktop the search has
+the keyboard, so typing a few letters and Return picks). The phone's sheet
+is docked to the chat pane, not the screen, and opening the sidebar closes
+it.
 
 The preview (or a Return that comes first) for a non-empty, non-command, non-edit draft
 (`outgoing.ts` `draftGate`) calls `writer.ts` `translateOutgoing` instead
@@ -1524,21 +1538,43 @@ channel switched off, a language change, drop-behind), never un-pauses an
 engine, and counts toward no pause; a user's Retry asks in the normal shape
 again and gets its own bare retry.
 
-**The composer's translate button is the send target's toggle.** The
+**The composer's translate button opens the language sheet.** The
 language mark beside the paperclip and the plane (`ChatInput.vue`
-`translateOnce`) is independent of the reading switch: off, a
-click opens the language picker in its "translate into" form
-(`SourceLanguagePicker.vue` `purpose="target"`), and the pick becomes the
-channel's write target -- `channelStore.ts` `write`, the very setting the
-panel's "Send my messages in" shows, so the two controls never disagree --
-until the button, lit and `aria-pressed` while a target is set, is clicked
-again (the panel's Off does the same). A draft already typed gets its
-strip at once. The dialog's **"This message only"** (offered when there is
+`translateOnce`) is independent of the reading switch: a click opens
+`ComposerLanguageSheet.vue`, and a pick in it becomes the channel's write
+target -- `channelStore.ts` `write`, the very setting the panel's "Send my
+messages in" shows, so the two controls never disagree -- lit on the
+button, and named in its label ("Sending in German · change or turn off"),
+while it is set, until the sheet's **Off** chip (or the panel's Off). The
+same pair picked again changes nothing; a new one replaces the strip. The
+sheet closes on a channel switch. A draft already typed gets its strip at
+once. The list is plain buttons (the current one `aria-current`, a row
+that cannot run labelled so, not disabled, since its tap gives the
+reason); "This message only" sits above it, as a pick applies at once,
+and Return in an empty search applies the highlighted language.
+
+The sheet is the pair on top -- **I write** ⇄ **They read**, two halves
+of which the lit one is what the list below fills in, and a swap between
+them -- then the languages the channel has been written in lately as
+chips ("Spoken in #linux lately": `recent.ts` `recentLanguages`, the
+reading pipeline's own verdicts on the newest `RECENT_LINES` lines from
+others, so only with reading on), a search (by the interface's name or the
+language's own, accents folded), and the whole list, each row the name in
+the interface's language with the endonym beside it. A row under "They
+read" says what picking it costs: **Corrects spelling** for the language
+the user writes, the model's download size where its copy is not on this
+device yet (`service.ts` `downloadBytes`, the route's own copy), and
+**Not available here** -- the row dimmed, its tap leaving the sheet up
+with the reason under the list -- where `pairVerdict` has no route.
+Picking under "They read" applies and closes; picking under "I write"
+names the source (or "Detect automatically") and moves on to "They read".
+The sheet's **"This message only"** (offered when there is
 a draft) makes the pick a one-off instead: `writer.ts` `translateOnce`,
 `translateOutgoing` with its target named rather than read off the
 channel, so it runs with no write target set and is not invalidated by
 the panel's target moving; the strip comes up as it does for a write
-target and the next Enter sends what it holds. The dialog preselects the
+target and the next Enter sends what it holds. The sheet's "They read"
+starts on the target that is set; with none it is preselected to the
 channel's last one-off language, else its write target (`lastOnceTarget`;
 the last pick is kept with the channel's record, `channelStore.ts` `once`,
 so it survives a reload and travels in the settings backup), else a
@@ -1548,9 +1584,9 @@ each only where this device serves it from the reading language
 (`outgoing.ts` `onceTargetDefault`, the router's `pairVerdict`), so a
 device without the GPU model never opens on a disabled cleanup pass. When
 nothing routes at all the last pick, else the interface's language, stands
-and the dialog says why. The dialog also asks what to translate **from**,
-preselected to the language the user reads, with "Detect automatically"
-as the write target has it. **The same language twice is a cleanup**: a
+and the sheet says why. Its "I write" starts on the language the user
+reads, or on the `writeFrom` kept with the target that is set ("Detect
+automatically" where that is none). **The same language twice is a cleanup**: a
 draft already in the language it is asked into is not sent as typed the
 way a write target would (the user asked for something) but corrected in
 place -- `purpose: "polish"`, the LLM as a copy editor with a wording
@@ -1559,13 +1595,11 @@ misspellings, grammar, punctuation **and a word that is the wrong word
 though it is spelled correctly** fixed, every other word kept,
 abbreviations and symbols included, nothing rephrased), the router sending a same-language
 request to the LLM alone (`router.ts`; no GPU model, no route, and the
-dialog says so), and an echo read as "nothing to correct" rather than a
-failure. The dialog says what it will do rather than what it is: with the
-source and the target the same, its confirm button reads **Correct**, not
-Translate -- and it is disabled where the cleanup cannot run at all (no
-GPU model, the hint under the selects saying why), which is the state a
-freshly opened dialog is in on a CPU-only device, both languages having
-defaulted to the interface's. **A polish carries none of the channel**: its prompt is the
+sheet says so), and an echo read as "nothing to correct" rather than a
+failure. The sheet says what it will do rather than what it is: the
+language the user writes reads **Corrects spelling** under "They read" --
+and **Not available here** where the cleanup cannot run at all (no GPU
+model, the reason under the list on a tap). **A polish carries none of the channel**: its prompt is the
 copy editor's system message and `Correct: <line>`, nothing above it, and
 `writer.ts` gives the request an empty context but for the register.
 Measured on the web build's 4B weights (2026-09-19,
