@@ -8,6 +8,7 @@
 			:class="{'source-language-picker--sheet': phone, flipped}"
 			:style="style"
 			role="dialog"
+			tabindex="-1"
 			:aria-label="dialogLabel"
 			@keydown.esc.stop.prevent="$emit('close')"
 		>
@@ -80,13 +81,23 @@
 </template>
 
 <script lang="ts">
-import {computed, defineComponent, nextTick, onBeforeUnmount, onMounted, PropType, ref} from "vue";
+import {
+	computed,
+	defineComponent,
+	nextTick,
+	onBeforeUnmount,
+	onMounted,
+	PropType,
+	ref,
+	watch,
+} from "vue";
 import {hasVirtualKeyboard} from "../js/helpers/device";
 import {useI18n} from "../js/i18n";
 import {collator} from "../js/i18n/collation";
 import {SUPPORTED_LANGUAGES, languageName} from "../js/translate/languages";
 import {liveLlmName, pairVerdict, readingLanguage} from "../js/translate/reader";
 import {translateWhyText} from "../js/helpers/translateWhy";
+import {useStore} from "../js/store";
 
 let pickers = 0;
 
@@ -125,6 +136,7 @@ export default defineComponent({
 	emits: ["pick", "close"],
 	setup(props, {emit}) {
 		const {t} = useI18n();
+		const store = useStore();
 		const root = ref<HTMLDivElement | null>(null);
 		const select = ref<HTMLSelectElement | null>(null);
 		const name = (code: string) => languageName(code, readingLanguage());
@@ -237,7 +249,15 @@ export default defineComponent({
 			}
 
 			if (phone.value) {
-				style.value = {};
+				// Docked to the chat pane, not the screen: on a tablet the
+				// sidebar beside the chat stays clear of it.
+				const pane = document.getElementById("chat")?.getBoundingClientRect();
+				style.value = pane
+					? {
+							left: `${Math.round(Math.max(0, pane.left))}px`,
+							right: `${Math.round(Math.max(0, window.innerWidth - pane.right))}px`,
+					  }
+					: {};
 				flipped.value = false;
 				return;
 			}
@@ -267,6 +287,17 @@ export default defineComponent({
 		};
 
 		const close = () => emit("close");
+
+		// The sidebar opening (a swipe, the menu button) is somewhere else
+		// to be: the sheet would otherwise stay over it.
+		watch(
+			() => store.state.sidebarOpen,
+			(open) => {
+				if (open) {
+					close();
+				}
+			}
+		);
 
 		const confirm = () => {
 			emit(
@@ -302,9 +333,17 @@ export default defineComponent({
 			window.addEventListener("resize", reposition);
 			narrowQuery?.addEventListener("change", onNarrow);
 
+			// Focus on the select with a keyboard, so arrows pick at once.
+			// Never on a touch screen: there, focusing a select opens the
+			// system's wheel or list over the sheet before anyone asked.
 			void nextTick(() => {
 				reposition();
-				select.value?.focus();
+
+				if (hasVirtualKeyboard()) {
+					root.value?.focus({preventScroll: true});
+				} else {
+					select.value?.focus();
+				}
 			});
 		});
 

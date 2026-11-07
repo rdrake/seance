@@ -122,6 +122,7 @@ const SURFACES = `(() => ({
 	lines: document.querySelectorAll("#chat .msg-translation, #chat [class*='msg-translation']").length,
 	topicFlip: !!document.querySelector("#chat .topic-flip"),
 	placeholder: document.querySelector("#input")?.getAttribute("placeholder") ?? "",
+	target: document.querySelector("#translate-once .translate-once-target")?.textContent.trim() ?? "",
 }))()`;
 
 const isPhone = `matchMedia("(hover: none) and (pointer: coarse)").matches`;
@@ -473,8 +474,8 @@ export default async function run(page) {
 	console.log("surfaces (fake, on)", JSON.stringify(onSurfaces));
 	page.check("on: the composer's translate button is there", onSurfaces.composer);
 	page.check(
-		"on: the kept write target names German in the placeholder",
-		onSurfaces.placeholder !== EN["composer.placeholder"].replace("{name}", CHANNEL)
+		"on: the kept write target names German on the translate button",
+		onSurfaces.target.endsWith("→ DE")
 	);
 	page.check("on: a line is read under its message", onSurfaces.lines > 0);
 	page.check(

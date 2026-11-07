@@ -864,7 +864,10 @@ export function setChannelOptions(
 	network: ClientNetwork,
 	channel: ClientChan,
 	patch: Partial<
-		Pick<ChannelTranslation, "write" | "formality" | "variant" | "languages" | "once">
+		Pick<
+			ChannelTranslation,
+			"write" | "writeFrom" | "formality" | "variant" | "languages" | "once"
+		>
 	>
 ): void {
 	commitChannel(network, channel, setChannelTranslation(network.uuid, channel.name, patch));

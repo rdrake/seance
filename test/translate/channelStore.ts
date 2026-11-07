@@ -73,6 +73,7 @@ describe("translate/channelStore", () => {
 		expect(defaultChannelTranslation()).to.deep.equal({
 			read: false,
 			write: null,
+			writeFrom: null,
 			formality: "auto",
 			variant: "",
 			languages: [],

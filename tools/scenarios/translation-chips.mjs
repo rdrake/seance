@@ -2,8 +2,9 @@
 // detection mark a reader left alone (.msg-translation-skipped-tag inside
 // .msg-translation-skipped) and the unchanged-failure chip (the same class
 // inside .msg-translation-failed, a fas fa-equals icon) both wear the same
-// accent border and ink as .msg-translation-chip, and neither keeps the old
-// muted grey or the old 0.75 dim. The unchanged line's original is the line
+// accent border and ink, and neither keeps the old muted grey or the old
+// 0.75 dim; the translated line's own label (.msg-translation-chip, "from
+// …") is the quiet one, muted and unboxed. The unchanged line's original is the line
 // to read, so it wears the translation's ink (#chat .msg.unchanged .content)
 // over the own-line dimming an untranslated `.self` row keeps.
 //
@@ -129,6 +130,8 @@ const STYLES = `(() => {
 		skippedBorder: s.borderTopColor,
 		unchangedBorder: u.borderTopColor,
 		chipBorder: c.borderTopColor,
+		chipColor: c.color,
+		chipBorderWidth: c.borderTopWidth,
 		skippedOpacity: s.opacity,
 		unchangedOpacity: u.opacity,
 		muted,
@@ -222,13 +225,16 @@ export default async function run(page) {
 	console.log("chips", JSON.stringify(s, null, 1));
 
 	page.check("exactly one accent chip on the page", s.chipCount === 1);
+	// The two tags mark a line that was not translated, and keep the
+	// accent so it can be found; the translated line's own "from …" label
+	// is the quiet one, muted and unboxed, under the translation.
 	page.check(
-		"the detection mark's border is the chip's accent border",
-		s.skippedBorder === s.chipBorder
+		"the detection mark and the unchanged chip share one accent border",
+		s.skippedBorder === s.unchangedBorder
 	);
 	page.check(
-		"the unchanged chip's border is the chip's accent border",
-		s.unchangedBorder === s.chipBorder
+		"the translated line's label is quiet: muted, no box",
+		s.chipColor === s.muted && s.chipBorderWidth === "0px"
 	);
 	page.check(
 		"neither tag kept the old muted grey",

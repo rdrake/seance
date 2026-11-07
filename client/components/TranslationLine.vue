@@ -114,7 +114,7 @@ import {
 import {translateWhyText} from "../js/helpers/translateWhy";
 import {ANSWERED, DEGENERATE, NARRATION, UNCHANGED} from "../js/translate/outgoing";
 import {languageName} from "../js/translate/languages";
-import {directionText} from "../js/translate/labels";
+import {directionText, sourceText} from "../js/translate/labels";
 import {loadNoteText} from "../js/helpers/modelLabel";
 import {translateErrorText} from "../js/helpers/translateErrors";
 import {loadNote} from "../js/translate/service";
@@ -186,7 +186,15 @@ export default defineComponent({
 				return value.reason === "same" && value.from ? nameOf(value.from) : "?";
 			}
 
-			return directionText(value.from, value.to, value.candidates ?? [], nameOf);
+			// An own line's translation is the read-back of what was sent
+			// (sentReadBack.ts): its language is the one it went out in.
+			if (props.message.self && value.from) {
+				return t("translate.chip.sentIn", {language: nameOf(value.from)});
+			}
+
+			return t("translate.chip.from", {
+				language: sourceText(value.from, value.to, value.candidates ?? [], nameOf),
+			});
 		});
 		const chipLabel = computed(() => {
 			const value = entry.value;
@@ -201,7 +209,9 @@ export default defineComponent({
 					: t("translate.chip.unsure");
 			}
 
-			return t("translate.chip.options", {languages: chipText.value});
+			return t("translate.chip.options", {
+				languages: directionText(value.from, value.to, value.candidates ?? [], nameOf),
+			});
 		});
 
 		// Nothing streamed yet and a model of this line's engine downloading:

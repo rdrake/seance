@@ -9,16 +9,16 @@
 // covers what the channel shows, not only what arrives after the switch;
 // the switch-on's requeue of the backlog is let settle and every later
 // count is taken against it); a German
-// line gets a "German → English" line with the fake's "[English] …" echo; an
+// line gets a translated line labelled "from German" with the fake's "[English] …" echo; an
 // English line gets no translation but a muted "English" mark, whose menu's
 // "Translate anyway" translates it; a Spanish line franc cannot tell from
 // Galician is translated with no source named and no "probably" guess in its
 // request; a three-word line too short for franc, said before any language is
 // declared, is translated with no source named (the engine places it; the
-// chip reads "? → English"); the chip's menu retranslates from another source
+// chip reads "from ?"); the chip's menu retranslates from another source
 // (the detector's runners-up one click each, never the line's own source;
 // "Retranslate from…" opens the picker, Escape asks for nothing, French
-// makes the chip read "French → English" and the request carry `from: "fr"`, and
+// makes the chip read "from French" and the request carry `from: "fr"`, and
 // the runners-up survive that choice so one click puts it back on German);
 // a five-line burst is translated and proved
 // batched (the in-page request log shows one multi-line LLM request, not
@@ -494,7 +494,7 @@ async function scenario(page) {
 		"a chip reads German → English in a channel read in English",
 		(await page.evaluate(
 			`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim()`
-		)) === "German → English"
+		)) === "from German"
 	);
 	await page.check(
 		"the fake's English echo is shown",
@@ -635,10 +635,10 @@ async function scenario(page) {
 		!!frenchRequest && frenchRequest.from === "fr" && frenchRequest.to === "en"
 	);
 	await page.check(
-		"the chip now reads French → English",
+		"the chip now reads from French",
 		(await page.evaluate(
 			`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim()`
-		)) === "French → English"
+		)) === "from French"
 	);
 	await page.waitFor(`${LINES} === ${base + 1}`, {
 		timeout: 15000,
@@ -664,7 +664,7 @@ async function scenario(page) {
 		`[...document.querySelectorAll(".context-menu-translate-retry-from")].find((i) => i.textContent.includes("German")).click()`
 	);
 	await page.waitFor(
-		`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim() === "German → English"`,
+		`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim() === "from German"`,
 		{timeout: 15000, label: "the one-click candidate put it back on German"}
 	);
 	await page.waitFor(`${LINES} === ${base + 1}`, {
@@ -762,8 +762,8 @@ async function scenario(page) {
 		label: "the Spanish line the detector could not place is translated",
 	});
 	// The chip names the detector's contenders instead of dropping the source
-	// (labels.ts): "Spanish / Portuguese → English", in whichever order franc
-	// ranked them this run -- never a bare "→ English".
+	// (labels.ts): "from Spanish / Portuguese", in whichever order franc
+	// ranked them this run -- never a bare "from".
 	const spanishChip = String(
 		await page.evaluate(
 			`((${newestRow(
@@ -775,7 +775,7 @@ async function scenario(page) {
 
 	await page.check(
 		`its chip names the detector's contenders (${JSON.stringify(spanishChip)})`,
-		new RegExp(`^${CONTENDER}( / ${CONTENDER}|\\?) → English$`).test(spanishChip)
+		new RegExp(`^from ${CONTENDER}( / ${CONTENDER}|\\?)$`).test(spanishChip)
 	);
 
 	const spanishRequests = await page.evaluate(
@@ -828,7 +828,7 @@ async function scenario(page) {
 			await page.evaluate(
 				`document.querySelector('#${unsureRowId} .msg-translation-chip').textContent`
 			)
-		).trim() === "German → English"
+		).trim() === "from German"
 	);
 	const unsureRequests = await page.evaluate(
 		`(${REQUESTS}).filter((r) => r.text.indexOf(${JSON.stringify(
@@ -869,12 +869,12 @@ async function scenario(page) {
 		{timeout: 20000, label: "the unplaceable word translated"}
 	);
 	await page.check(
-		"the unplaceable word's chip names no source (? → English)",
+		"the unplaceable word's chip names no source (from ?)",
 		(
 			await page.evaluate(
 				`document.querySelector('#${unplaceableRowId} .msg-translation-chip').textContent`
 			)
-		).trim() === "? → English"
+		).trim() === "from ?"
 	);
 	const unplaceableRequests = await page.evaluate(
 		`(${REQUESTS}).filter((r) => r.text.trim() === ${JSON.stringify(
@@ -894,7 +894,7 @@ async function scenario(page) {
 	// and no trigram can place: the short-line lookup (wordlookup.ts) reads it
 	// out of the frequency table instead, where "hola" is Spanish and nothing
 	// else. The chip names Spanish -- not the channel's German prior, and not
-	// a bare "? → English" -- and the request carries `from: "es"`, which is
+	// a bare "from ?" -- and the request carries `from: "es"`, which is
 	// what makes the engine translate *from* Spanish rather than echo the word
 	// back. Counted like the line above: four characters fit no RUN marker.
 	const loneWord = "hola";
@@ -926,7 +926,7 @@ async function scenario(page) {
 
 	await page.check(
 		`the lone word's chip names Spanish (${JSON.stringify(loneChip)})`,
-		loneChip === "Spanish → English"
+		loneChip === "from Spanish"
 	);
 
 	const loneRequests = await page.evaluate(
@@ -1039,7 +1039,7 @@ async function scenario(page) {
 			await page.evaluate(
 				`document.querySelector('#${shortRowId} .msg-translation-chip').textContent`
 			)
-		).trim() === "German? → English"
+		).trim() === "from German?"
 	);
 
 	const shortRequests = await page.evaluate(
@@ -1119,10 +1119,10 @@ async function scenario(page) {
 		(await page.evaluate(LINES)) === base + 8
 	);
 	await page.check(
-		"the own row's chip reads German → English",
+		"the own row's chip reads sent in German",
 		(await page.evaluate(
 			`((${ownRow}).querySelector(".msg-translation-chip") || {}).textContent.trim()`
-		)) === "German → English"
+		)) === "sent in German"
 	);
 
 	// The panel: opened from the channel menu, full language names, closes
@@ -1574,7 +1574,7 @@ async function scenario(page) {
 		"the short line's chip offers the guess (German? → English)",
 		(await page.evaluate(
 			`((${shortRow}).querySelector(".msg-translation-chip") || {}).textContent.trim()`
-		)) === "German? → English"
+		)) === "from German?"
 	);
 
 	// History the reader asks for: a "load more" is translated, newest line
@@ -1779,15 +1779,17 @@ async function scenario(page) {
 		label: "a translation already on screen is replaced with one in the new language",
 	});
 
+	// The chip shows only the source ("from …"); its title carries the
+	// whole direction, target included.
 	const afterEchoChip = String(
 		await page.evaluate(
-			`((${afterEchoRow}).querySelector(".msg-translation-chip") || {}).textContent || ""`
+			`((${afterEchoRow}).querySelector(".msg-translation-chip") || {title: ""}).title || ""`
 		)
 	).trim();
 
 	await page.check(
 		`the requeued translation's chip names the new target (${afterEchoChip})`,
-		afterEchoChip.endsWith(`→ ${frenchName}`)
+		afterEchoChip.includes(`→ ${frenchName}`)
 	);
 	// Nothing on screen still reads as English: a line the requeue's cap left
 	// behind has no translation at all, never a stale one.
@@ -1826,13 +1828,13 @@ async function scenario(page) {
 		await page.evaluate(
 			`((${newestRow(
 				frenchMarker
-			)}).querySelector(".msg-translation-chip") || {}).textContent || ""`
+			)}).querySelector(".msg-translation-chip") || {title: ""}).title || ""`
 		)
 	).trim();
 
 	await page.check(
 		`the new line's chip names the new target (${frenchChip})`,
-		frenchChip.endsWith(`→ ${frenchName}`)
+		frenchChip.includes(`→ ${frenchName}`)
 	);
 	await page.screenshot("reading-language-changed");
 
@@ -1944,7 +1946,7 @@ async function scenario(page) {
 
 	const adhocChip = String(
 		await page.evaluate(
-			`((${adhocRow}).querySelector(".msg-translation-chip") || {}).textContent || ""`
+			`((${adhocRow}).querySelector(".msg-translation-chip") || {title: ""}).title || ""`
 		)
 	).trim();
 
@@ -1955,7 +1957,7 @@ async function scenario(page) {
 
 	await page.check(
 		`the ad-hoc chip names the picked source and the reading language (${adhocChip})`,
-		adhocChip === `${germanInFrench} → ${frenchName}`
+		adhocChip.startsWith(`${germanInFrench} → ${frenchName}`)
 	);
 
 	const adhocRequest = await page.evaluate(

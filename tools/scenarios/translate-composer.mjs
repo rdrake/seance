@@ -5,13 +5,17 @@
 // page actually sends.
 // Steps, in order: the composer's translate dialog opens on the interface's
 // own language, names every language in it (not in itself) and says
-// "Correct" where the source and the target are the same; the panel sets
-// the write target and the placeholder says so; the first Enter puts an "English → German" strip above the input with
-// the fake's "[German] …" streaming in, Send disabled until it ends, the
-// draft still in the input, the request logged with purpose "write";
-// typing drops the strip; the check runs automatically once the
-// translation ends, disabling Send again until the read-back line
-// ("[English] [German] …", a read request) is done; the second Enter sends the
+// "Correct" where the source and the target are the same, opens without a
+// focused select on a phone and closes when the sidebar opens; the panel sets
+// the write target and the translate button says so ("EN → DE", the
+// placeholder staying plain); a pause in typing puts a "Will send in German"
+// strip above the input (the live preview) with the fake's "[German] …"
+// streaming in, Send live throughout, the draft still in the input, the
+// request logged with purpose "write"; typing dims the strip until the next
+// preview; the check runs automatically once the translation ends (a
+// "Reads back as" row, "[English] [German] …", a read request); a Return
+// before the preview is done says it sends when ready and then sends it;
+// Return sends the previewed
 // translation (the other user hears "[German] …", the strip goes, the
 // input clears) and ArrowUp recalls the original draft; Escape drops a
 // strip and keeps the draft; a draft carrying the fake's "[fail]" marker
@@ -244,6 +248,23 @@ async function typeAndEnter(page, text) {
 }
 
 /**
+ * Type a draft and leave it: with a send target (or a one-off) the pause
+ * translates it into the strip on its own -- the live preview -- and the
+ * Return that follows sends what the strip shows.
+ */
+async function typeForPreview(page, text) {
+	await page.fill(INPUT, text);
+}
+
+/** The strip is up and nothing in it is still streaming (translation, read-back). */
+const SETTLED = `(!!document.querySelector(${JSON.stringify(
+	BAR
+)}) && !document.querySelector(".translate-bar-is-stale") && !document.querySelector(".translate-bar-caret"))`;
+
+/** What the translate button says while a send target is set ("EN → DE"). */
+const buttonTarget = `((document.querySelector("#translate-once .translate-once-target") || {}).textContent || "").trim()`;
+
+/**
  * The newline-first keyboard case (F8): with a strip up, the Return's
  * newline arrives as an `input` event before the keypress, and the strip
  * must survive it so that Enter sends the translation instead of
@@ -252,15 +273,12 @@ async function typeAndEnter(page, text) {
 async function newlineFirstKeyboard(page, other) {
 	const nlDraft = `the keyboard sends its newline first ${RUN}`;
 
-	await typeAndEnter(page, nlDraft);
+	await typeForPreview(page, nlDraft);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${nlDraft}`)}`, {
 		timeout: 20000,
 		label: "the newline case translated",
 	});
-	await page.waitFor(
-		`!!document.querySelector(".translate-bar-send") && !document.querySelector(".translate-bar-send").disabled`,
-		{timeout: 25000, label: "its read-back finished"}
-	);
+	await page.waitFor(SETTLED, {timeout: 25000, label: "its read-back finished"});
 	await newlineThenEnter(page, "prose");
 	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
 		label: "the newline-first Enter sent the translation",
@@ -276,15 +294,12 @@ async function newlineFirstKeyboard(page, other) {
 
 	const nlAction = `nods at the keyboard ${RUN}`;
 
-	await typeAndEnter(page, `/me ${nlAction}`);
+	await typeForPreview(page, `/me ${nlAction}`);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${nlAction}`)}`, {
 		timeout: 20000,
 		label: "the action's newline case translated",
 	});
-	await page.waitFor(
-		`!!document.querySelector(".translate-bar-send") && !document.querySelector(".translate-bar-send").disabled`,
-		{timeout: 25000, label: "the action's read-back finished"}
-	);
+	await page.waitFor(SETTLED, {timeout: 25000, label: "the action's read-back finished"});
 	await newlineThenEnter(page, "/me");
 	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
 		label: "the newline-first Enter sent the action",
@@ -331,19 +346,19 @@ async function newlineThenEnter(page, label) {
  * The other half of the same rule, on a hardware keyboard: the Return is
  * preventDefaulted and never reaches the draft, so a trailing newline is a
  * deliberate Shift+Enter -- an edit of the draft like any other, and the
- * strip the draft was translated into goes.
+ * strip the draft was translated into goes stale.
  */
 async function hardwareNewlineIsAnEdit(page) {
 	const draft = `shift and enter is an edit ${RUN}`;
 
-	await typeAndEnter(page, draft);
+	await typeForPreview(page, draft);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${draft}`)}`, {
 		timeout: 20000,
 		label: "a strip to edit",
 	});
 	await appendNewline(page);
-	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
-		label: "the hardware keyboard's newline dropped the strip",
+	await page.waitFor(`!!document.querySelector(".translate-bar-is-stale")`, {
+		label: "the hardware keyboard's newline made the strip stale",
 	});
 	await page.check(
 		"the draft kept its newline (nothing stripped it)",
@@ -412,6 +427,14 @@ export default async function run(page) {
 	await page.waitFor(`!!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
 		label: "the translate-into dialog",
 	});
+	// It opens on a tap and nothing more: on a touch screen no select is
+	// focused, which would put the system's own list over the sheet unasked.
+	if (MOBILE) {
+		await page.check(
+			"the dialog opens without a language list over it",
+			(await page.evaluate(`document.activeElement?.tagName`)) !== "SELECT"
+		);
+	}
 	// Nothing picked on this channel yet: the target starts as the language
 	// the interface is in, not as whatever sorts first in the list.
 	await page.check(
@@ -563,19 +586,23 @@ export default async function run(page) {
 		{label: "the button is on"}
 	);
 	await page.check(
-		"the placeholder says the channel sends in German",
+		"the button names the send target, EN → DE",
+		(await page.evaluate(buttonTarget)) === "EN → DE"
+	);
+	await page.check(
+		"the placeholder stays plain, one line",
 		(await page.evaluate(
 			`document.querySelector("#form #input").getAttribute("placeholder")`
-		)) === `Write to ${CHANNEL} · sent in German`
+		)) === `Write to ${CHANNEL}`
 	);
 	const modeDraft = `sent while the button is on ${RUN}`;
 
-	await typeAndEnter(page, modeDraft);
+	await typeForPreview(page, modeDraft);
 	await page.waitFor(
 		`(document.querySelector(${JSON.stringify(
 			BAR_TEXT
 		)}) || {}).textContent === ${JSON.stringify(`[German] ${modeDraft}`)}`,
-		{timeout: 30000, label: "the first Enter translates under the button's target"}
+		{timeout: 30000, label: "the pause previews it under the button's target"}
 	);
 	await page.waitFor(
 		`(document.querySelector(".translate-bar-check .translate-bar-text") || {}).textContent === ${JSON.stringify(
@@ -585,11 +612,27 @@ export default async function run(page) {
 	);
 	await page.evaluate(ENTER);
 	await page.check(
-		"the second Enter sends it in German",
+		"Enter sends the preview in German",
 		await heard(other, `[German] ${modeDraft}`)
 	);
 	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
 		label: "the strip is gone after the German send",
+	});
+
+	// One step: a Return before the preview has come waits for it and
+	// sends it, saying so meanwhile; nothing goes as typed.
+	const quickDraft = `straight out with no pause ${RUN}`;
+
+	await typeAndEnter(page, quickDraft);
+	await page.waitFor(`!!document.querySelector(".translate-bar-queued")`, {
+		label: "the strip says it sends when ready",
+	});
+	await page.check(
+		"the Return sent the translation once it was done",
+		(await heard(other, `[German] ${quickDraft}`, 20000)) && !other.heard().includes(quickDraft)
+	);
+	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
+		label: "the strip is gone after the one-step send",
 	});
 	await page.click(ONCE);
 	await page.waitFor(
@@ -615,10 +658,17 @@ export default async function run(page) {
 			"en"
 	);
 	await page.screenshot("translate-once", {selector: "#form"});
-	await page.click(".source-language-picker-cancel");
+	// The sidebar opening (a swipe, the menu button) puts the dialog away
+	// rather than leave it over the channel list.
+	await page.evaluate(
+		`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", true)`
+	);
 	await page.waitFor(`!document.querySelector(${JSON.stringify(ONCE_SELECT)})`, {
-		label: "the dialog closed",
+		label: "opening the sidebar closed the dialog",
 	});
+	await page.evaluate(
+		`document.getElementById("app").__vue_app__.config.globalProperties.$store.commit("sidebarOpen", false)`
+	);
 	await page.fill(INPUT, "");
 
 	// 1. The write target.
@@ -647,12 +697,10 @@ export default async function run(page) {
 
 	await setWriteTarget(page, "en");
 	await page.check(
-		"the placeholder says the channel sends corrected",
-		(await page.evaluate(
-			`document.querySelector("#form #input").getAttribute("placeholder")`
-		)) === `Write to ${CHANNEL} · sent corrected`
+		"the button says the channel sends corrected",
+		(await page.evaluate(buttonTarget)) === "EN ✓"
 	);
-	await typeAndEnter(page, correctedDraft);
+	await typeForPreview(page, correctedDraft);
 	await page.waitFor(
 		`(document.querySelector(${JSON.stringify(
 			BAR_TEXT
@@ -670,7 +718,7 @@ export default async function run(page) {
 	);
 	await page.evaluate(ENTER);
 	await page.check(
-		"the second Enter sends the corrected line",
+		"Enter sends the corrected line",
 		await heard(other, `[Corrected] ${correctedDraft}`)
 	);
 	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
@@ -679,30 +727,28 @@ export default async function run(page) {
 
 	await setWriteTarget(page, "de");
 	await page.check(
-		"the placeholder says the channel sends in German",
-		(
-			await page.evaluate(`document.querySelector(${JSON.stringify(INPUT)}).placeholder`)
-		).includes("sent in German")
+		"the button says the channel sends in German",
+		(await page.evaluate(buttonTarget)) === "EN → DE"
 	);
 
 	if (MOBILE) {
 		await panelIsASheet(page);
 	}
 
-	// 2. The first Enter translates into the strip.
+	// 2. A pause in typing translates into the strip (the live preview).
 	const draft = `please keep the timestamps in the log ${RUN}`;
 
-	await typeAndEnter(page, draft);
+	await typeForPreview(page, draft);
 	await page.waitFor(`!!document.querySelector(${JSON.stringify(BAR)})`, {label: "the strip"});
 	// The chip is the pair, named in the reading language (English here);
 	// the source joins it once the route has answered.
 	await page.waitFor(
-		`(document.querySelector(".translate-bar-chip") || {textContent: ""}).textContent.trim() === "English → German"`,
-		{timeout: 20000, label: "the chip reads English → German"}
+		`(document.querySelector(".translate-bar-chip") || {textContent: ""}).textContent.trim() === "Will send in German"`,
+		{timeout: 20000, label: "the label reads Will send in German"}
 	);
 	await page.check(
-		"Send is disabled while it streams",
-		await page.evaluate(`document.querySelector("#submit").disabled`)
+		"Send stays live while it streams (a Return waits for it)",
+		!(await page.evaluate(`document.querySelector("#submit").disabled`))
 	);
 	await page.waitFor(
 		`${barText}.startsWith("[German] please keep") && !document.querySelector(".translate-bar-caret")`,
@@ -732,26 +778,22 @@ export default async function run(page) {
 	);
 	await page.screenshot("composer-strip");
 
-	// 3. Typing drops the strip; the next Enter translates afresh.
+	// 3. Typing dims the strip (the old preview, kept in place so the
+	// composer does not jump), and the next pause translates afresh.
 	await page.fill(INPUT, `${draft} edited`);
-	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
-		label: "typing dropped the strip",
+	await page.waitFor(`!!document.querySelector(".translate-bar-is-stale")`, {
+		label: "typing dimmed the strip",
 	});
-	await page.evaluate(ENTER);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${draft} edited`)}`, {
 		timeout: 20000,
-		label: "translated again",
+		label: "previewed again",
 	});
 
-	// 4. The check runs automatically and Send waits for it.
+	// 4. The check runs automatically, under the preview.
 	await page.waitFor(`!!document.querySelector(".translate-bar-check")`, {
 		timeout: 20000,
 		label: "the check started",
 	});
-	await page.check(
-		"Send is disabled while the check runs",
-		await page.evaluate(`document.querySelector("#submit").disabled`)
-	);
 	await page.waitFor(
 		`(document.querySelector(".translate-bar-check .translate-bar-text") || {}).textContent === ${JSON.stringify(
 			`[English] [German] ${draft} edited`
@@ -759,10 +801,10 @@ export default async function run(page) {
 		{timeout: 20000, label: "the read-back line"}
 	);
 	await page.check(
-		"the read-back row is labelled German → English",
+		"the read-back row is labelled Reads back as",
 		(await page.evaluate(
 			`(document.querySelector(".translate-bar-check-label") || {textContent: ""}).textContent.trim()`
-		)) === "German → English"
+		)) === "Reads back as"
 	);
 	await page.check(
 		"the read-back row is marked as the reading language",
@@ -772,8 +814,7 @@ export default async function run(page) {
 	);
 	await page.check(
 		"Send is enabled once the check ends",
-		!(await page.evaluate(`document.querySelector("#submit").disabled`)) &&
-			!(await page.evaluate(`document.querySelector(".translate-bar-send").disabled`))
+		!(await page.evaluate(`document.querySelector("#submit").disabled`))
 	);
 	await page.check(
 		"the check went out as a read",
@@ -827,14 +868,14 @@ export default async function run(page) {
 		{timeout: 5000, label: "the posted line shows the read-back as its translation"}
 	);
 	await page.check(
-		"the posted line's chip names German → English",
+		"the posted line's label says it was sent in German",
 		await page.evaluate(
 			`(() => {
 				const row = [...document.querySelectorAll(".msg.self:not(.pending)")].find((m) =>
 					m.textContent.includes(${JSON.stringify(`[German] ${draft} edited`)})
 				);
 				const chip = row && row.querySelector(".msg-translation-chip");
-				return !!chip && chip.textContent.trim() === "German → English";
+				return !!chip && chip.textContent.trim() === "sent in German";
 			})()`
 		)
 	);
@@ -895,7 +936,7 @@ export default async function run(page) {
 	// 6. Escape drops a strip and keeps the draft.
 	const kept = `this one I will keep typing ${RUN}`;
 
-	await typeAndEnter(page, kept);
+	await typeForPreview(page, kept);
 	await page.waitFor(`!!document.querySelector(${JSON.stringify(BAR)})`, {
 		label: "a strip to escape",
 	});
@@ -908,7 +949,7 @@ export default async function run(page) {
 	// 7. A failure offers the draft as written.
 	const failing = `[fail] this one breaks on purpose ${RUN}`;
 
-	await typeAndEnter(page, failing);
+	await typeForPreview(page, failing);
 	await page.waitFor(`!!document.querySelector(".translate-bar.failed")`, {
 		timeout: 20000,
 		label: "the failure strip",
@@ -916,11 +957,8 @@ export default async function run(page) {
 	await page.check(
 		"the send button offers the draft as written",
 		(await page.evaluate(
-			`document.querySelector(".translate-bar-send").getAttribute("aria-label")`
-		)) === "Send as written" &&
-			(await page.evaluate(
-				`document.querySelector(".translate-bar-send").getAttribute("title")`
-			)) === "Send as written"
+			`document.querySelector("#submit-tooltip").getAttribute("data-tooltip")`
+		)) === "Send as written"
 	);
 	await page.screenshot("composer-failed");
 	await page.evaluate(ENTER);
@@ -942,7 +980,7 @@ export default async function run(page) {
 	// rather than offering the draft as its own translation.
 	const echoed = `[echo] this one comes back as typed ${RUN}`;
 
-	await typeAndEnter(page, echoed);
+	await typeForPreview(page, echoed);
 	await page.waitFor(`!!document.querySelector(".translate-bar.failed")`, {
 		timeout: 20000,
 		label: "the echo strip",
@@ -1007,7 +1045,7 @@ export default async function run(page) {
 	await page.check(
 		"the send button offers the draft as written",
 		(await page.evaluate(
-			`document.querySelector(".translate-bar-send").getAttribute("aria-label")`
+			`document.querySelector("#submit-tooltip").getAttribute("data-tooltip")`
 		)) === "Send as written"
 	);
 	await page.screenshot("composer-echoed");
@@ -1028,7 +1066,7 @@ export default async function run(page) {
 	// second Enter sends it like any other.
 	const retried = `[echo-once] this one needs a second try ${RUN}`;
 
-	await typeAndEnter(page, retried);
+	await typeForPreview(page, retried);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${retried}`)}`, {
 		timeout: 30000,
 		label: "the bare retry's translation",
@@ -1037,14 +1075,13 @@ export default async function run(page) {
 		"the strip is not a failure",
 		!(await page.evaluate(`!!document.querySelector(".translate-bar.failed")`))
 	);
-	// The chip is the draft's direction, not the request's source: the bare
-	// retry named none, and the label still reads English → German; the
-	// title is where the retry shows.
+	// The label names the target, not the request's source: the bare
+	// retry named none; the title is where the retry shows.
 	await page.check(
-		"the chip still reads English → German after the retry",
+		"the label still reads Will send in German after the retry",
 		(await page.evaluate(
 			`document.querySelector(".translate-bar-chip").textContent.trim()`
-		)) === "English → German"
+		)) === "Will send in German"
 	);
 
 	const retryTitle = String(
@@ -1090,10 +1127,10 @@ export default async function run(page) {
 		)
 	);
 	await page.screenshot("composer-retried");
-	await page.waitFor(
-		`!!document.querySelector(".translate-bar-send") && !document.querySelector(".translate-bar-send").disabled`,
-		{timeout: 30000, label: "the round trip finished and Send is offered"}
-	);
+	await page.waitFor(SETTLED, {
+		timeout: 30000,
+		label: "the round trip finished and Send is offered",
+	});
 	await page.evaluate(ENTER);
 	await page.waitFor(settledSelf(`[German] ${retried}`), {
 		timeout: 20000,
@@ -1115,7 +1152,7 @@ export default async function run(page) {
 	// the second time bare, and then says it couldn't check.
 	const asked = `is the [answer] build green again ${RUN}?`;
 
-	await typeAndEnter(page, asked);
+	await typeForPreview(page, asked);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${asked}`)}`, {
 		timeout: 30000,
 		label: "the question's translation keeps its mark",
@@ -1170,7 +1207,7 @@ export default async function run(page) {
 	// the front of the translation. Every other command is left alone.
 	const action = `waves ${RUN}`;
 
-	await typeAndEnter(page, `/me ${action}`);
+	await typeForPreview(page, `/me ${action}`);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${action}`)}`, {
 		timeout: 20000,
 		label: "the action's text translated",
@@ -1179,10 +1216,7 @@ export default async function run(page) {
 		"the draft kept its command while the strip is up",
 		(await page.evaluate(inputValue)) === `/me ${action}`
 	);
-	await page.waitFor(
-		`!!document.querySelector(".translate-bar-send") && !document.querySelector(".translate-bar-send").disabled`,
-		{timeout: 25000, label: "the action's read-back finished"}
-	);
+	await page.waitFor(SETTLED, {timeout: 25000, label: "the action's read-back finished"});
 	await page.evaluate(ENTER);
 	await page.waitFor(`!document.querySelector(${JSON.stringify(BAR)})`, {
 		label: "the strip went with the action",
@@ -1215,7 +1249,6 @@ export default async function run(page) {
 	const lines = [`line one ${RUN}`, `line two ${RUN}`, `line three ${RUN}`];
 
 	await page.fill(INPUT, lines.join("\n"));
-	await page.evaluate(`document.querySelector("#form").requestSubmit()`);
 	await page.waitFor(
 		`${barText} === ${JSON.stringify(lines.map((l) => `[German] ${l}`).join("\n"))}`,
 		{
@@ -1227,10 +1260,10 @@ export default async function run(page) {
 		"one numbered request carried the three lines",
 		(await page.evaluate(`${REQUESTS}.slice(-1)[0].lines`)) === 3
 	);
-	// The automatic check runs on this draft too; Send waits for it.
-	await page.waitFor(`!document.querySelector("#submit").disabled`, {
+	// The automatic check runs on this draft too.
+	await page.waitFor(SETTLED, {
 		timeout: 20000,
-		label: "Send re-enabled once the multi-line draft's check ends",
+		label: "the multi-line draft's check ended",
 	});
 	await page.evaluate(`document.querySelector("#form").requestSubmit()`);
 	await page.waitFor(
@@ -1258,7 +1291,7 @@ export default async function run(page) {
 	const fidelity = `Hello everyone, this is supposed to be in *German*. Ask ${LISTENER}. See https://example.org/x and \`code\``;
 
 	await page.fill(INPUT, "");
-	await typeAndEnter(page, fidelity);
+	await typeForPreview(page, fidelity);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${fidelity}`)}`, {
 		timeout: 25000,
 		label: "the strip kept the markers, the nick, the URL and the code span",
@@ -1311,7 +1344,6 @@ export default async function run(page) {
 	].join("\n");
 
 	await page.fill(INPUT, fenced);
-	await page.evaluate(`document.querySelector("#form").requestSubmit()`);
 	await page.waitFor(`${barText} === ${JSON.stringify(fencedOut)}`, {
 		timeout: 25000,
 		label: "the code block shipped verbatim, the prose around it translated",
@@ -1333,7 +1365,7 @@ export default async function run(page) {
 	// round-trip's read-back row keep them intact.
 	const math = "the result is $`x^2`$ and it is **final**";
 
-	await typeAndEnter(page, math);
+	await typeForPreview(page, math);
 	await page.waitFor(`${barText} === ${JSON.stringify(`[German] ${math}`)}`, {
 		timeout: 25000,
 		label: "the strip kept the TeX and the bold word",
@@ -1376,7 +1408,7 @@ export default async function run(page) {
 		german
 	)}) !== -1).length`;
 
-	await typeAndEnter(page, german);
+	await typeForPreview(page, german);
 	await page.waitFor(`${barText} === ${JSON.stringify(posted)}`, {
 		timeout: 25000,
 		label: "the German draft translated into French",
@@ -1387,10 +1419,7 @@ export default async function run(page) {
 		)}`,
 		{timeout: 25000, label: "the French line's read-back"}
 	);
-	await page.waitFor(
-		`!!document.querySelector(".translate-bar-send") && !document.querySelector(".translate-bar-send").disabled`,
-		{timeout: 20000, label: "Send offered once the read-back is done"}
-	);
+	await page.waitFor(SETTLED, {timeout: 20000, label: "Send offered once the read-back is done"});
 
 	const readsBeforeSend = Number(await page.evaluate(readsOfPosted));
 

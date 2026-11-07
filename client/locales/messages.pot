@@ -14611,28 +14611,28 @@ msgctxt "translate.chip.alreadyIn"
 msgid "Already in {language}, not translated. Translation options"
 msgstr ""
 
+#. Quiet label under a translated line in the message list, and the button for its translation options. {language} is the language the line was written in (or one or two guesses, or ?). Starts lowercase in English: it reads as a caption.
+#: client/components/TranslationLine.vue
+msgctxt "translate.chip.from"
+msgid "from {language}"
+msgstr ""
+
 #. Tooltip and aria-label of a translation line's chip: the languages it names, then the standard suffix.
 #: client/components/TranslationLine.vue
 msgctxt "translate.chip.options"
 msgid "{languages}. Translation options"
 msgstr ""
 
+#. Quiet label under the user's own translated line in the message list (its read-back), and the button for its translation options. {language} is the language the line went out in. Starts lowercase in English: it reads as a caption.
+#: client/components/TranslationLine.vue
+msgctxt "translate.chip.sentIn"
+msgid "sent in {language}"
+msgstr ""
+
 #. Tooltip and aria-label of a translation line's chip, skipped because the detector could not tell the language apart.
 #: client/components/TranslationLine.vue
 msgctxt "translate.chip.unsure"
 msgid "Language not told apart, not translated. Translation options"
-msgstr ""
-
-#. Placeholder of the message composer in a channel or private conversation whose outgoing messages are translated. {name} is the channel or nickname; {language} is the language messages are sent in.
-#: client/components/ChatInput.vue
-msgctxt "translate.composer.placeholder"
-msgid "Write to {name} · sent in {language}"
-msgstr ""
-
-#. Placeholder of the message input when the channel's write target is the language the user reads: every line is corrected (spelling and grammar) before it is sent. {name} is the channel or user name, verbatim; the middle dot is part of the copy.
-#: client/components/ChatInput.vue
-msgctxt "translate.composer.placeholderCorrected"
-msgid "Write to {name} · sent corrected"
 msgstr ""
 
 #. Tooltip and aria-label of the composer's translate button while the channel corrects every message (spelling and grammar) in {language}, the user's own language, before sending; a click turns that off. The middle dot is part of the copy.
@@ -15444,16 +15444,16 @@ msgctxt "translate.strip.failed"
 msgid "couldn't translate, send as written?"
 msgstr ""
 
-#. Tooltip and aria-label of the button in the composer's translation strip that dismisses the translation and returns to the draft. Escape is the keyboard key of the same name.
-#: client/components/ChatInput.vue
-msgctxt "translate.strip.keepTyping"
-msgid "Keep typing (Escape)"
-msgstr ""
-
 #. Chip at the start of the composer's translation strip when the draft was corrected in its own language rather than translated. {language} is that language's name, in the interface language.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.polishChip"
 msgid "{language}, corrected"
+msgstr ""
+
+#. Label before the composer preview's round trip: the translation translated back into the user's language, so they can check it. A colon follows it, added by the stylesheet.
+#: client/components/ChatInput.vue
+msgctxt "translate.strip.readsBack"
+msgid "Reads back as"
 msgstr ""
 
 #. Tooltip of the composer translation strip's direction chip, naming the route a translation took. {from} and {to} are language names (or the word from translate.strip.sourceAuto), {model} is the model's technical id. This one ran on the main processor.
@@ -15504,10 +15504,22 @@ msgctxt "translate.strip.sendTranslation"
 msgid "Send the translation"
 msgstr ""
 
+#. Note under the composer's translation preview after Return was pressed while it was still translating: the message goes as soon as it is done.
+#: client/components/ChatInput.vue
+msgctxt "translate.strip.sendsWhenReady"
+msgid "Sends when the translation is ready"
+msgstr ""
+
 #. Stands in for the source language in the composer translation strip's route tooltip when no source was named and the model was left to work it out. Substituted as {from} in translate.strip.routeGpu and its siblings.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.sourceAuto"
 msgid "auto"
+msgstr ""
+
+#. Label over the composer's live translation preview: the line Return will send, and the language it is in. Shown in capitals by the stylesheet.
+#: client/components/ChatInput.vue
+msgctxt "translate.strip.willSendIn"
+msgid "Will send in {language}"
 msgstr ""
 
 #. Status line in the settings → Translation, the section for the device's own translator (Apple's Translation framework, iPhone and iPad app only). "Apple Translation" is the feature's name; keep it recognisable. {from} and {to} are language names. Shown while the system's download sheet is open.
