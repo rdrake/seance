@@ -1094,14 +1094,16 @@ stands); a switch-off or a fresh read (`requeueReading`) drops the entry
 `tools/scenarios/translate-reading.mjs` (the speaker sets a German topic
 before the switch-on and another after).
 
-**A skipped line is marked.** Every line detection skips gets a store entry
-of its own -- `status: "skipped"`, `reason` `same` (with `from` the reading
-language) or `unsure` (with the candidates kept) -- which
-`TranslationLine.vue` renders as a small chip after the message
+**A line it could not place is marked; one in the reading language is
+not.** Every line detection skips gets a store entry of its own --
+`status: "skipped"`, `reason` `same` (with `from` the reading language) or
+`unsure` (with the candidates kept). `TranslationLine.vue` renders an
+`unsure` one as a small "?" chip after the message
 (`.msg-translation-skipped-tag`, the same accent style as the `lang → lang`
-chip -- the old muted look is gone): the
-language's name in the reader's language for `same`, "?" for `unsure`; no
-text row, no caret, and the original keeps its ink. The tag's menu offers
+chip); no text row, no caret, and the original keeps its ink. A `same`
+line shows nothing at all: in a channel that writes the reading language
+an "English" mark on every line was noise (it was shown until 2026-11),
+and the toolbar's Translate still translates it. The tag's menu offers
 **Translate anyway** (the forced `retranslate`; the toolbar's Translate is
 offered on such a line too), a **Retranslate from `<Language>`** per
 candidate (neither the line's own source nor the reading language) and

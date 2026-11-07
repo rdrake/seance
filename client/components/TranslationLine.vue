@@ -1,6 +1,9 @@
 <template>
+	<!-- A line already in the reading language shows nothing: in a channel
+	     that writes it, a mark on every line is noise. The toolbar's
+	     Translate still translates it. Only an unplaced line ("?") is marked. -->
 	<span
-		v-if="entry && entry.status === 'skipped' && !entry.hidden"
+		v-if="entry && entry.status === 'skipped' && entry.reason !== 'same' && !entry.hidden"
 		class="msg-translation-skipped"
 		:data-reason="entry.reason"
 	>
@@ -25,7 +28,9 @@
 		/>
 	</span>
 	<div
-		v-else-if="entry && !entry.hidden && entry.status !== 'dropped'"
+		v-else-if="
+			entry && !entry.hidden && entry.status !== 'dropped' && entry.status !== 'skipped'
+		"
 		class="msg-translation"
 		:data-status="entry.status"
 	>
