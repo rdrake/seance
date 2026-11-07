@@ -8,9 +8,8 @@
 // over the own-line dimming an untranslated `.self` row keeps.
 //
 // Alongside it, the icon split: fa-language marks the translation surfaces
-// (the channel header's toggle and the message action's ::before glyph, both
-// \\f1ab) while the globe stays the language setting — the sidebar's dev
-// locale toggle still renders 🌐. The inline icons only draw because
+// (the message action's ::before glyph, \\f1ab) while the globe stays the
+// language setting — the sidebar's dev locale toggle still renders 🌐. The inline icons only draw because
 // style.css carries their content on top of the bundled @font-face.
 //
 // No ircd and no engine: the page boots to the connect form, a network is
@@ -150,7 +149,7 @@ const STYLES = `(() => {
  * The icon split as the rendered page tells it. Chrome may serialize a
  * computed content either as the escape (`"\\f1ab"`) or as the literal
  * private-use character, so each claim carries the glyph's code point as a
- * number: the header toggle's ::before, the message action's inline
+ * number: the message action's inline
  * .fa-language, the unchanged chip's .fa-equals, and the sidebar's dev
  * locale toggle's text.
  */
@@ -181,15 +180,11 @@ const ICONS = `(() => {
 		return null;
 	};
 
-	const toggle = document.querySelector("#chat button.translate");
 	const action = document.querySelector("#chat .msg-action-translate");
 	const locale = document.querySelector("#sidebar .locale-toggle");
 	const equals = document.querySelector("#chat .msg-translation-failed .fa-equals");
 
 	return {
-		togglePresent: !!toggle,
-		toggleContent: toggle ? getComputedStyle(toggle, "::before").content : null,
-		toggleCode: toggle ? glyphCode(getComputedStyle(toggle, "::before").content) : null,
 		actionPresent: !!action,
 		actionCode: action ? glyphCode(getComputedStyle(action, "::before").content) : null,
 		equalsCode: equals ? glyphCode(getComputedStyle(equals, "::before").content) : null,
@@ -260,11 +255,6 @@ export default async function run(page) {
 	const icons = await page.evaluate(ICONS);
 	console.log("icons", JSON.stringify(icons, null, 1));
 
-	page.check("the header's translate toggle is on the page", icons.togglePresent === true);
-	page.check(
-		"the header toggle draws the language glyph, not the globe",
-		icons.toggleCode === 0xf1ab
-	);
 	page.check("the message action is on the page", icons.actionPresent === true);
 	page.check("the message action's icon draws the language glyph", icons.actionCode === 0xf1ab);
 	page.check(

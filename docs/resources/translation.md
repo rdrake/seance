@@ -19,9 +19,8 @@ backup with the rest of `settings`). That one rule is
 state).
 
 Off, translation is absent, not disabled -- nothing renders, nothing is
-dimmed: no translate button in the channel header and no panel (neither the
-column nor the phone's sheet, and the channel menu's "Translation…" is gone,
-so nothing asks for one through `state.translation.panelFor`), no composer
+dimmed: no panel (the channel menu's "Translation…" is gone, so nothing
+asks for one through `state.translation.panelFor`), no composer
 button, strip or round-trip row, and the first Enter sends every draft as
 typed (`outgoing.ts` `firstEnterTranslates`; a kept write target and `/me`
 included), no Translate in the message toolbar, no `TranslationLine` under a
@@ -356,8 +355,7 @@ the chips' "Retranslate from…" (the confirm disabled, the reason in a polite
 live region that describes it); the panel (a notice when nothing runs, the
 reading switch's On disabled, languages nothing can write in greyed under
 "Send my messages in" with the reason, the note naming the greyed option);
-the header button (dimmed, labelled "Translation can't run here right
-now." on touch as with a pointer, its click opens the panel); the message
+the message
 toolbar's Translate (with a pointer disabled, the reason as its tooltip and
 description; under a finger, which shows no tooltip, `aria-disabled` and
 its tap opens the panel with the reason); and a line or strip that failed for
@@ -368,8 +366,8 @@ adapters, also `--mobile`).
 ### A download asks first
 
 The router sends a request to the best class whether its model is
-downloaded or not, and the service downloads on demand, so one click on the
-header's translate button could start a 1-2 GB download. Before the first
+downloaded or not, and the service downloads on demand, so one switch of a
+channel's reading on could start a 1-2 GB download. Before the first
 download of a model that is not on the device, not downloading already and
 never agreed to, the user is asked once (`consent.ts` `DownloadConsent`,
 held by the service): the app's confirm dialog (`ConfirmDialog.vue`, its
@@ -807,8 +805,9 @@ per copy, and `TranslateRequest` carries the device.
 
 ## Reading a channel
 
-The translate button in a channel's header switches translation on for that
-channel (`Chat.vue`, `translate/reader.ts`; the button carries the
+The reading switch in a channel's translation panel (the channel menu's
+"Translation…", below) switches translation on for that channel
+(`translate/reader.ts` `setReading`; translation's surfaces carry the
 `fa-language` glyph (`文A`) -- the globe keeps only the dev locale
 selector's language-setting role): from then on every message in it, the
 user's own included, is detected (`detect.ts`: the function-word classifier
@@ -1236,36 +1235,26 @@ switch-on, "load more", language-change and rejoin steps of
 
 The per-channel choices -- reading on/off, the languages spoken here,
 outgoing target, formality, variant -- are one component
-(`TranslationPanel.vue`) in two layouts. Where
-there is a pointer it is a column anchored under the channel header: each
-setting a label with its control beneath it, so the four controls share one
-width and one rhythm (20rem wide, 2.125rem controls); the section headings
-and the one-line hints are left out, and a footer carries a link to
-Settings -> Translation beside Done. Where `helpers/device.ts`
-`hasVirtualKeyboard()` reports a touch-primary device, or the window is as
-narrow as the phone's chat layout (`max-width: 479px`), the same markup
-`<Teleport>`s to `<body>` and takes `.translation-panel--sheet`: a
-full-screen sheet with 2.75rem controls, the two sections (Reading,
-Writing) under their headings, a hint under each control, formality as a
-three-way segmented control (`role="radiogroup"`, "As written" / "Formally"
-/ "Casually") rather than a native picker, and a full-width Done above the
-safe area. The sheet's height follows `--viewport-height`
-(`helpers/viewport.ts`), so iOS's keyboard cannot push Done off the screen.
+(`TranslationPanel.vue`), opened from the channel menu's "Translation…"
+(the header's ⋮, a sidebar row's menu, or a message's toolbar when nothing
+here can translate); there is no translate button in the header. It is a
+header popover, the mentions' own design (`docs/resources/client-features.md`
+§ Header popovers): the `.header-popover` surface under the ⋮ button with a
+title row ("Translation" and the channel, a ✕), the whole chat under the
+header on a phone. Inside, two sections (Reading, Writing) under their
+headings, each setting a label with its control beneath it and a one-line
+hint, the reading switch and formality as segmented controls
+(`role="radiogroup"`, "As written" / "Formally" / "Casually"), and a footer
+link to Settings -> Translation. Controls are 2.25rem with a pointer and
+2.75rem under a finger (`pointer: coarse`).
 
-How it opens splits the same way. With a pointer, a click on the translate
-button toggles reading and a right-click opens the panel -- and a click
-that turns reading **on** opens the panel with it, so the reader sees and
-can adjust the languages at once (a click that turns reading off only
-turns it off); on touch there is no
-right-click, so the **tap** opens the panel (whose first control is the
-reading switch) and the button's label says "Translation settings" (or,
-when nothing here can translate, that it cannot run). The
-channel menu's "Translation..." reaches it on both. It closes on the X, on
-Done, on Escape, and -- the anchored panel only, since the sheet has no
-outside -- on a click outside it; the caret goes back to the translate
-button when the panel is what held it. Browser checks:
-`tools/scenarios/translate-reading.mjs` (the column, and the sheet under
-`--mobile`) and `tools/scenarios/translate-composer.mjs --mobile --width=390 --height=844` (the sheet in full).
+It closes on the ✕, on Escape or Android's Back (its escape layer,
+`translation`), and on a press outside it, which also does what a header
+button pressed there says, as the mentions' pane does; the caret goes back
+to the ⋮ button when the panel is what held it, and Tab stays inside it.
+Browser checks: `tools/scenarios/translate-reading.mjs` (desktop and
+`--mobile`) and `tools/scenarios/translate-composer.mjs --mobile
+--width=390 --height=844` (the phone layout in full).
 
 _Languages spoken here_ is the one field that is not a single choice: the
 declared languages show as chips (`.translation-panel-chip`, each the
@@ -1274,7 +1263,7 @@ and a `translateLanguageAdd` select whose first option reads "Add a
 language…" appends one at a time and springs back to that option -- a
 fifty-long multi-select would be a poor way to name the two or three
 languages a channel speaks. It offers only what the channel has not
-declared yet. On the sheet its hint reads "Lines in these languages are
+declared yet. Its hint reads "Lines in these languages are
 recognised even when they are short or look alike."
 
 A language a translation is _about_ is named in the language the interface
@@ -1473,7 +1462,7 @@ again and gets its own bare retry.
 
 **The composer's translate button is the send target's toggle.** The
 language mark beside the paperclip and the plane (`ChatInput.vue`
-`translateOnce`) is independent of the globe, which is reading: off, a
+`translateOnce`) is independent of the reading switch: off, a
 click opens the language picker in its "translate into" form
 (`SourceLanguagePicker.vue` `purpose="target"`), and the pick becomes the
 channel's write target -- `channelStore.ts` `write`, the very setting the
