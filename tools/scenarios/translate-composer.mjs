@@ -588,6 +588,12 @@ export default async function run(page) {
 		label: "the button is on",
 	});
 	await page.check(
+		"setting a send target switched reading on for the channel",
+		await page.evaluate(
+			`Object.values(document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translateChannels).some((c) => c.write === "de" && c.read)`
+		)
+	);
+	await page.check(
 		"the button names the send target, EN → DE",
 		(await page.evaluate(buttonTarget)) === "EN → DE"
 	);

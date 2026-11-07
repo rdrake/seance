@@ -1545,7 +1545,7 @@ language mark beside the paperclip and the plane (`ChatInput.vue`
 target -- `channelStore.ts` `write`, the very setting the panel's "Send my
 messages in" shows, so the two controls never disagree -- lit on the
 button, and named in its label ("Sending in German · change or turn off"),
-while it is set, until **Turn off** in the sheet's header (or the panel's Off). The
+while it is set, until **Turn off** in the sheet's header (or the panel's Off). Setting a target in another language also switches the channel's reading on (`setReading`): the replies come back in it. Turning the target off leaves reading as it is. The
 same pair picked again changes nothing; a new one replaces the strip. The
 sheet closes on a channel switch. A draft already typed gets its strip at
 once. The list is plain buttons (the current one `aria-current`, a row

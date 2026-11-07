@@ -357,6 +357,7 @@ import {
 	pairVerdict,
 	readingLanguage,
 	setChannelOptions,
+	setReading,
 	translationAvailable,
 } from "../js/translate/reader";
 import ComposerLanguageSheet from "./ComposerLanguageSheet.vue";
@@ -1615,6 +1616,16 @@ export default defineComponent({
 			cancelOutgoing(props.channel);
 			forgetPreview();
 			setChannelOptions(props.network, props.channel, {write: to, writeFrom: from});
+
+			// Writing to a channel in another language is reading it too:
+			// the replies come back in that language. Turning the target
+			// off later leaves reading as it is.
+			if (
+				to !== readingLanguage() &&
+				!channelTranslation(props.network, props.channel).read
+			) {
+				setReading(props.network, props.channel, true);
+			}
 
 			if (translatable) {
 				void translateOutgoing(props.network, props.channel, gate.text);
