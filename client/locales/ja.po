@@ -14561,22 +14561,24 @@ msgctxt "translate.chip.unsure"
 msgid "Language not told apart, not translated. Translation options"
 msgstr "言語を判別できなかったため翻訳していません。翻訳オプション"
 
-#. Tooltip and aria-label of the composer's translate button while the channel corrects every message (spelling and grammar) in {language}, the user's own language, before sending; a click turns that off. The middle dot is part of the copy.
+#. Tooltip and aria-label of the composer's translate button while the channel corrects every message (spelling and grammar) in {language}, the user's own language, before sending; a click opens the language sheet, where it can be changed or turned off. The middle dot is part of the copy.
 #: client/components/ChatInput.vue
+#, fuzzy
 msgctxt "translate.composer.sendCorrectedOn"
-msgid "Sending corrected in {language} · click to stop"
+msgid "Sending corrected in {language} · change or turn off"
 msgstr "{language}で修正して送信中 · クリックで停止"
 
-#. Tooltip and aria-label of the composer's translate button (the language mark beside the attachment and send buttons) while no send target is set; a click opens a dialog to pick the language every message is sent in, or a correction pass. Ends with an ellipsis.
+#. Tooltip and aria-label of the composer's translate button (the language mark beside the attachment and send buttons) while no send target is set; a click opens the language sheet to pick the language every message is sent in, or a correction pass. Ends with an ellipsis.
 #: client/components/ChatInput.vue
 msgctxt "translate.composer.sendOff"
 msgid "Translate what I send…"
 msgstr "送信する内容を翻訳します…"
 
-#. Tooltip and aria-label of the composer's translate button while the channel sends every message translated into {language} (a language name in the interface language); a click turns that off. The middle dot is part of the copy.
+#. Tooltip and aria-label of the composer's translate button while the channel sends every message translated into {language} (a language name in the interface language); a click opens the language sheet, where it can be changed or turned off. The middle dot is part of the copy.
 #: client/components/ChatInput.vue
+#, fuzzy
 msgctxt "translate.composer.sendOn"
-msgid "Sending in {language} · click to stop"
+msgid "Sending in {language} · change or turn off"
 msgstr "{language}で送信中 · クリックで停止"
 
 #. The composer's translate button while the channel's send target is the user's own language: lines are corrected, not translated. {language} is the short code, e.g. EN.
@@ -14938,15 +14940,16 @@ msgctxt "translate.notTranslated"
 msgid "Not translated"
 msgstr "翻訳されていません"
 
-#. Lead sentence when a translation is unavailable for a language pair (the composer's translate dialog, the translation panel's 'Send my messages in'); the reason follows as a sentence of its own. {from} and {to} are language names, already in the interface language.
+#. Lead sentence when a translation is unavailable for a language pair (the composer's language sheet, the retranslate dialog, the translation panel's 'Send my messages in'); the reason follows as a sentence of its own. {from} and {to} are language names, already in the interface language.
 #: client/components/SourceLanguagePicker.vue
 #: client/components/TranslationPanel.vue
+#: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.pair.unavailable"
 msgid "Nothing on this device can translate {from} into {to}."
 msgstr "このデバイスには{from}から{to}に翻訳できるものがありません。"
 
-#. Lead sentence in the composer's translate dialog when the source is 'Detect automatically' and no engine here translates into the chosen language; the reason follows as a sentence of its own. {to} is a language name, already in the interface language.
-#: client/components/SourceLanguagePicker.vue
+#. Lead sentence in the composer's language sheet when the source is 'Detect automatically' and no engine here translates into the chosen language; the reason follows as a sentence of its own. {to} is a language name, already in the interface language.
+#: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.pair.unavailableInto"
 msgid "Nothing on this device can translate into {to}."
 msgstr "このデバイスには{to}に翻訳できるものがありません。"
@@ -15083,66 +15086,19 @@ msgctxt "translate.picker.dialog"
 msgid "Retranslate from another language"
 msgstr "他の言語から再翻訳"
 
-#. First option of the source-language picker in the composer's translate-into dialog: the draft's language is detected rather than named.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.fromAuto"
-msgid "Detect automatically"
-msgstr "自動で検出"
-
-#. Label of the source-language picker in the dialog the composer's translate button opens; preselected to the language the user reads.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.fromLabel"
-msgid "Translate from"
-msgstr "翻訳元"
-
 #. Label of the language picker in the dialog that translates one message again from a language the user picks.
 #: client/components/SourceLanguagePicker.vue
 msgctxt "translate.picker.label"
 msgid "Translate this line from"
 msgstr "この行の翻訳元"
 
-#. Hint under the selects in the composer's translate-into dialog when the source and the target are the same language: the draft is corrected, not translated.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.sameLanguage"
-msgid "Same language: spelling and grammar are corrected instead."
-msgstr "同じ言語: 代わりにスペルと文法を校正します。"
-
-#. Lead sentence in the composer's translate dialog and the translation panel when the same language is picked as source and target (a spelling and grammar cleanup pass), which only the language model (a large AI model) can do and which cannot run now; the reason (no WebGPU, buffer too small, switched off, …) follows as a sentence of its own.
+#. Lead sentence in the composer's language sheet, the retranslate dialog and the translation panel when the same language is picked as source and target (a spelling and grammar cleanup pass), which only the language model (a large AI model) can do and which cannot run now; the reason (no WebGPU, buffer too small, switched off, …) follows as a sentence of its own.
 #: client/components/SourceLanguagePicker.vue
 #: client/components/TranslationPanel.vue
+#: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.picker.sameLanguageNeedsGpu"
 msgid "Correcting a message needs the language model."
 msgstr "メッセージの校正には言語モデルが必要です。"
-
-#. Button that translates the draft into the language picked in the composer's translate-into dialog.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetConfirm"
-msgid "Translate"
-msgstr "翻訳"
-
-#. Button of the composer's translate dialog when the source and the target are the same language: the draft is corrected in that language rather than translated. Imperative verb ('correct this draft'), not the adjective.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetConfirmCorrect"
-msgid "Correct"
-msgstr "校正する"
-
-#. aria-label of the small dialog the composer's translate button opens: pick the language the draft is translated into, this once.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetDialog"
-msgid "Translate this message into a language"
-msgstr "このメッセージを翻訳する言語"
-
-#. Label of the language picker in the dialog the composer's translate button opens; the draft is translated into the picked language.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetLabel"
-msgid "Translate into"
-msgstr "翻訳先"
-
-#. Checkbox in the composer's translate dialog: ticked, the picked language applies to the draft alone (a one-off) rather than becoming the channel's send target.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.thisMessageOnly"
-msgid "This message only"
-msgstr "このメッセージのみ"
 
 #. Failure reason after 'Couldn't translate': the model replied to a question it found in the message rather than translating the message. Lowercase; reads as the tail of that sentence.
 #: client/components/TranslationLine.vue
@@ -15357,6 +15313,90 @@ msgctxt "translate.settings.workerError"
 msgid "Could not reach the translation worker: {error}"
 msgstr "翻訳ワーカーに接続できませんでした: {error}"
 
+#. Value of the language sheet's 'They read' side before any language is picked.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.choose"
+msgid "Choose…"
+msgstr ""
+
+#. Status beside the language the user writes in, in the language sheet's 'They read' list: picking it corrects spelling and grammar rather than translating. Short.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.corrects"
+msgid "Corrects spelling"
+msgstr ""
+
+#. Value of the language sheet's 'I write' side, and the first row of its list, when the language of each message is detected rather than named.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.detect"
+msgid "Detect automatically"
+msgstr ""
+
+#. aria-label of the language sheet the composer's translate button opens: pick the language you write in and the one your messages are translated into.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.dialog"
+msgid "Choose the language your messages are sent in"
+msgstr ""
+
+#. Status beside a language in the language sheet whose translation model is not on this device yet. {size} is a file size such as '312.5 MiB'. Short.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.download"
+msgid "{size} download"
+msgstr ""
+
+#. Label of the language sheet's first side: the language the user writes their messages in. Short, shown above the language's name.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.iWrite"
+msgid "I write"
+msgstr ""
+
+#. Shown in the language sheet's list when the search finds nothing. {query} is what the user typed.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.noMatch"
+msgid "No language matches “{query}”."
+msgstr ""
+
+#. Shortcut button in the language sheet: stop translating the user's messages in this channel.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.off"
+msgid "Off"
+msgstr ""
+
+#. Heading over shortcut buttons in the language sheet: the languages people wrote in most in this channel recently. {channel} is the channel's name, e.g. #linux.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.recent"
+msgid "Spoken in {channel} lately"
+msgstr ""
+
+#. Placeholder and aria-label of the search field in the language sheet.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.search"
+msgid "Search languages"
+msgstr ""
+
+#. Tooltip and aria-label of the button between the language sheet's two sides: exchanges the language the user writes and the one they send in.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.swap"
+msgid "Swap languages"
+msgstr ""
+
+#. Label of the language sheet's second side: the language the user's messages are sent in, the one the channel reads. Short, shown above the language's name.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.theyRead"
+msgid "They read"
+msgstr ""
+
+#. Checkbox in the language sheet: ticked, the picked language applies to the draft alone (a one-off) rather than to every message the user sends in this channel.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.thisMessageOnly"
+msgid "This message only"
+msgstr ""
+
+#. Status beside a language in the language sheet that nothing on this device can translate into from the language the user writes. Short.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.unavailable"
+msgid "Not available here"
+msgstr ""
+
 #. Text of the second row of the composer's translation strip when translating the translation back into the user's own language failed.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.checkFailed"
@@ -15458,6 +15498,30 @@ msgstr "自動"
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.willSendIn"
 msgid "Will send in {language}"
+msgstr ""
+
+#. Button on the suggestion card above the message box: from now on, the user's messages in this channel are translated into {language} (a language name) before they are sent.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.accept"
+msgid "Write in {language}"
+msgstr ""
+
+#. Button on the suggestion card above the message box: dismiss it and do not suggest it again in this channel.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.decline"
+msgid "Not in this channel"
+msgstr ""
+
+#. Note on the suggestion card above the message box. {model} is a translation model's name; {size} is a file size such as '312.5 MiB'.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.download"
+msgid "Uses {model}, a {size} download."
+msgstr ""
+
+#. Card above the message box. {channel} is a channel name such as #linux; {language} is a language name such as Portuguese. Saying yes translates the user's messages into that language before they are sent.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.lead"
+msgid "Most of {channel} writes in {language}. Write your messages in {language} here?"
 msgstr ""
 
 #. Status line in the settings → Translation, the section for the device's own translator (Apple's Translation framework, iPhone and iPad app only). "Apple Translation" is the feature's name; keep it recognisable. {from} and {to} are language names. Shown while the system's download sheet is open.

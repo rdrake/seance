@@ -28,6 +28,7 @@ import {
 	GPU_IDLE_UNLOAD_MS,
 	TRANSLATION_UNAVAILABLE,
 	TranslateService,
+	downloadBytes,
 	loadNote,
 	type CpuFallbackAnswer,
 	type CpuFallbackInfo,
@@ -504,6 +505,24 @@ describe("translate/service", () => {
 			ref: catalog.nllb,
 			percent: 42,
 		});
+	});
+
+	it("downloadBytes is the route's copy size until that copy is cached", () => {
+		const route = {ref: catalog.nllb, device: "cpu" as const};
+		const size = catalog.nllb.copies.cpu?.sizeBytes ?? 0;
+
+		expect(size).to.be.above(0);
+		expect(downloadBytes(route, [])).to.equal(size);
+		expect(downloadBytes(route, [{ref: catalog.nllb, device: "cpu", cached: false}])).to.equal(
+			size
+		);
+		expect(downloadBytes(route, [{ref: catalog.nllb, device: "cpu", cached: true}])).to.equal(
+			0
+		);
+		// Another device's copy being cached says nothing about this one.
+		expect(downloadBytes(route, [{ref: catalog.nllb, device: "gpu", cached: true}])).to.equal(
+			size
+		);
 	});
 
 	it("marks a candidate down when its model fails to load and takes the next", async () => {

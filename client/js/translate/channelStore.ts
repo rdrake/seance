@@ -61,6 +61,11 @@ export interface ChannelTranslation {
 	 * dialog next time; null until it has been used.
 	 */
 	once: string | null;
+	/**
+	 * The composer's suggestion card ("Most of #linux writes in
+	 * Portuguese") was turned down here: it is not offered again.
+	 */
+	noSuggest: boolean;
 }
 
 export interface StorageBackend {
@@ -96,6 +101,7 @@ export function defaultChannelTranslation(): ChannelTranslation {
 		languages: [],
 		terms: [],
 		once: null,
+		noSuggest: false,
 	};
 }
 
@@ -180,6 +186,7 @@ function sanitize(value: unknown): ChannelTranslation | null {
 	out.once = typeof raw.once === "string" && isSupported(raw.once) ? raw.once : null;
 	out.writeFrom =
 		typeof raw.writeFrom === "string" && isSupported(raw.writeFrom) ? raw.writeFrom : null;
+	out.noSuggest = raw.noSuggest === true;
 	out.formality = isFormality(raw.formality) ? raw.formality : "auto";
 	out.variant = typeof raw.variant === "string" ? raw.variant : "";
 	out.languages = languagesOf(raw.languages);
