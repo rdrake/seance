@@ -78,7 +78,13 @@ describe("ShellSocket", function () {
 		await tick();
 		expect(bridge.calls[0]).to.deep.equal({
 			method: "open",
-			options: {id: "a", host: "irc.example.org", port: 6697, tls: true},
+			options: {
+				id: "a",
+				page: bridge.calls[0].options.page,
+				host: "irc.example.org",
+				port: 6697,
+				tls: true,
+			},
 		});
 		expect(socket.readyState).to.equal(socket.CONNECTING);
 
@@ -93,6 +99,55 @@ describe("ShellSocket", function () {
 			method: "send",
 			options: {id: "a", lines: ["NICK me", "USER me 0 * :me"]},
 		});
+	});
+
+	it("sends one page token with every open", function () {
+		const bridge = new FakeBridge();
+		new ShellSocket(bridge, endpoint, "p1");
+		new ShellSocket(bridge, endpoint, "p2");
+		return tick().then(() => {
+			const [a, b] = bridge.calls.map((c) => c.options.page as string);
+			expect(a).to.match(/^[0-9a-f-]{36}$/);
+			expect(b).to.equal(a);
+		});
+	});
+
+	it("fails like a refusal when the bridge throws at once", async function () {
+		const bridge = new FakeBridge();
+		bridge.call = () => {
+			throw new Error("no IPC");
+		};
+		const socket = new ShellSocket(bridge, endpoint, "t");
+		const log = record(socket);
+		await tick();
+		expect(log).to.deep.equal(["error:no IPC", "close:1006:no IPC:false"]);
+	});
+
+	it("delivers the rest of a batch when a listener throws", function () {
+		const bridge = new FakeBridge();
+		const socket = new ShellSocket(bridge, endpoint, "x");
+		const got: string[] = [];
+		socket.addEventListener("message", (ev) => {
+			if (ev.data === "boom") {
+				throw new Error("listener failed");
+			}
+
+			got.push(String(ev.data));
+		});
+		bridge.emit("open", {id: "x"});
+		// The throw is rethrown in a microtask; catch the scheduling instead.
+		const rethrows: Array<() => void> = [];
+		const real = globalThis.queueMicrotask;
+		globalThis.queueMicrotask = (fn) => rethrows.push(fn);
+
+		try {
+			bridge.emit("lines", {id: "x", lines: ["a", "boom", "b"]});
+		} finally {
+			globalThis.queueMicrotask = real;
+		}
+
+		expect(() => rethrows.forEach((fn) => fn())).to.throw("listener failed");
+		expect(got).to.deep.equal(["a", "b"]);
 	});
 
 	it("throws on send before it is open", function () {

@@ -80,6 +80,12 @@ function newId(): string {
 	return globalThis.crypto.randomUUID();
 }
 
+/**
+ * This page load's token, sent with every open: after a reload the shell
+ * refuses an open from the page before, which can still be in flight.
+ */
+const PAGE = newId();
+
 export class ShellSocket implements LineSocket {
 	readonly CONNECTING = 0;
 	readonly OPEN = 1;
@@ -106,9 +112,23 @@ export class ShellSocket implements LineSocket {
 		this.id = id;
 		this.sockets = routesFor(bridge);
 		this.sockets.set(id, this);
-		this.chain = bridge
-			.call(PLUGIN, "open", {id, host: endpoint.host, port: endpoint.port, tls: endpoint.tls})
-			.catch((err: unknown) => this.onShellClose(1006, messageOf(err)));
+		const options = {
+			id,
+			page: PAGE,
+			host: endpoint.host,
+			port: endpoint.port,
+			tls: endpoint.tls,
+		};
+		let opened: Promise<unknown>;
+
+		try {
+			opened = bridge.call(PLUGIN, "open", options);
+		} catch (err: unknown) {
+			// A bridge that throws at once fails like one that rejects.
+			opened = Promise.reject(err instanceof Error ? err : new Error(messageOf(err)));
+		}
+
+		this.chain = opened.catch((err: unknown) => this.onShellClose(1006, messageOf(err)));
 	}
 
 	get readyState(): number {
@@ -222,7 +242,15 @@ export class ShellSocket implements LineSocket {
 
 	private fire<K extends keyof Listeners>(type: K, ev: unknown): void {
 		for (const listener of [...this.listeners[type]]) {
-			listener(ev);
+			// One listener's throw must not cost the rest of a read's lines;
+			// it is rethrown on its own so it is still reported.
+			try {
+				listener(ev);
+			} catch (err: unknown) {
+				queueMicrotask(() => {
+					throw err;
+				});
+			}
 		}
 	}
 }

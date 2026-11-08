@@ -409,7 +409,7 @@ fn create_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
             if started {
                 handle.state::<Mutex<Links>>().lock().unwrap().listening = false;
                 // The old page's connections go with it.
-                handle.state::<socket::Sockets>().close_all();
+                handle.state::<socket::Sockets>().close_all(&handle);
             }
 
             let waiting = {

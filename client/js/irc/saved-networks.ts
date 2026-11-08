@@ -576,7 +576,12 @@ export function lastUsed(): SavedNetwork | undefined {
  * An existing entry for the same server and nick, so re-typing a network
  * into the connect form keeps its uuid (and the preferences keyed by it).
  */
-export function findMatching(host: string, port: number, nick: string): SavedNetwork | undefined {
+export function findMatching(
+	host: string,
+	port: number,
+	nick: string,
+	transport?: ConnectOptions["transport"]
+): SavedNetwork | undefined {
 	const h = hostnameOf(host).toLowerCase();
 	const n = nick.trim().toLowerCase();
 
@@ -584,6 +589,32 @@ export function findMatching(host: string, port: number, nick: string): SavedNet
 		(net) =>
 			hostnameOf(net.host).toLowerCase() === h &&
 			net.port === port &&
-			net.nick.toLowerCase() === n
+			net.nick.toLowerCase() === n &&
+			net.transport === transport
 	);
+}
+
+/**
+ * The stored entry with the connect options laid over it (undefined options
+ * keep the stored value). The connection type is the exception: options
+ * without `transport: "tcp"` are a WebSocket connection, whatever was stored.
+ */
+export function mergeOptions(
+	existing: SavedNetwork | undefined,
+	uuid: string,
+	options: Partial<ConnectOptions> & Record<string, unknown>
+): Record<string, unknown> {
+	const merged: Record<string, unknown> = {...(existing ?? {}), uuid};
+
+	for (const [key, value] of Object.entries(options)) {
+		if (value !== undefined) {
+			merged[key] = value;
+		}
+	}
+
+	if (options.transport !== "tcp") {
+		delete merged.transport;
+	}
+
+	return merged;
 }
