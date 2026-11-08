@@ -359,7 +359,7 @@ import {
 	readingLanguage,
 	setChannelOptions,
 	setReading,
-	translationAvailable,
+	translationMayRun,
 } from "../js/translate/reader";
 import ComposerLanguageSheet from "./ComposerLanguageSheet.vue";
 import {loadNoteText, modelLabel} from "../js/helpers/modelLabel";
@@ -1465,12 +1465,14 @@ export default defineComponent({
 		// lit on the button until the sheet's Off; its "This message only"
 		// makes the pick a one-off instead (writer.ts `translateOnce`), the
 		// way the toolbar's Translate reads one line. Shown wherever
-		// translation can run at all.
+		// translation can run at all, and while the device probe is still
+		// out: a button that appeared when it landed shifted the composer on
+		// every app load.
 		const translateOnceButton = ref<HTMLButtonElement | null>(null);
 		const translateOncePickerOpen = ref(false);
 		const translateOnceAvailable = computed(
 			() =>
-				translationAvailable() &&
+				translationMayRun() &&
 				(props.channel.type === ChanType.CHANNEL || props.channel.type === ChanType.QUERY)
 		);
 		// Translation switched off (or no longer able to run here): the

@@ -78,7 +78,12 @@ describe("translate/detect", () => {
 				],
 				"da"
 			)
-		).to.deep.equal({lang: "da", confidence: DETECT_MIN_GAP, candidates: ["nb", "da"]});
+		).to.deep.equal({
+			lang: "da",
+			confidence: DETECT_MIN_GAP,
+			candidates: ["nb", "da"],
+			settled: true,
+		});
 		// not a tie: the prior does not override a clear winner
 		expect(
 			detectWith(
@@ -566,11 +571,18 @@ describe("translate/detect", () => {
 			).to.equal(null);
 		});
 
-		// franc's measured Spanish/Portuguese/Galician near tie: unplaced is
-		// unplaced, and the toolbar's Translate is there for it.
-		it("skips an unplaced line whose candidates leave the reading language out", () => {
+		// franc's measured Spanish/Portuguese/Galician near tie: nothing names
+		// English, so the line is translated with its source left to the engine.
+		it("translates an unplaced line whose candidates leave the reading language out", () => {
 			expect(
 				detectionSkip({lang: null, confidence: 0.007, candidates: ["es", "pt", "gl"]}, "en")
+			).to.equal(null);
+			// ... unless it is too few words to judge.
+			expect(
+				detectionSkip(
+					{lang: null, confidence: 0.007, candidates: ["es", "pt"], thin: true},
+					"en"
+				)
 			).to.equal("unsure");
 		});
 
@@ -596,11 +608,32 @@ describe("translate/detect", () => {
 
 		it("skips a thin or weak verdict in a language the channel is not known to write", () => {
 			const thin = {lang: "sv", confidence: 0.5, candidates: ["sv"], thin: true as const};
-			const weak = {lang: "pl", confidence: 0.1, candidates: ["pl"], weak: true};
+			const weak = {lang: "af", confidence: 0.1, candidates: ["af", "tl", "en"], weak: true};
 
 			expect(detectionSkip(thin, "en")).to.equal("unsure");
 			expect(detectionSkip(thin, "en", ["en"])).to.equal("unsure");
+			// "that is so weird man": a hint at Afrikaans, English in the running.
 			expect(detectionSkip(weak, "en", ["de"])).to.equal("unsure");
+			// A long German line franc only leans toward still translates.
+			expect(
+				detectionSkip({...weak, lang: "de", candidates: ["de", "nl", "nb"]}, "en")
+			).to.equal(null);
+		});
+
+		it("skips a tie the prior broke against the reading language", () => {
+			const tie = {
+				lang: "pl",
+				confidence: 0.1,
+				candidates: ["en", "pl", "pt"],
+				settled: true as const,
+			};
+
+			expect(detectionSkip(tie, "en", ["en", "pl"])).to.equal("unsure");
+			// The prior agreed with the leader ("ja so gut", German ahead).
+			expect(detectionSkip({...tie, candidates: ["pl", "sk", "en"]}, "en", ["pl"])).to.equal(
+				null
+			);
+			expect(detectionSkip({...tie, candidates: ["pl", "cs"]}, "en", ["pl"])).to.equal(null);
 		});
 
 		it("translates a thin or weak verdict in a language the channel writes", () => {
@@ -769,6 +802,16 @@ describe("translate/detect", () => {
 
 			expect(many.thin).to.equal(undefined);
 			expect(prior.top()).to.equal("de");
+		});
+
+		it("learns the channel's language from the classifier, not from own lines", async () => {
+			setDetector(() => [["eng", 1]]);
+			const prior = new LanguagePrior();
+
+			await detectLanguage("what are you doing tonight", prior, [], {learn: false});
+			expect(prior.top()).to.equal(null);
+			await detectLanguage("what are you doing tonight", prior);
+			expect(prior.top()).to.equal("en");
 		});
 
 		it("marks a lookup verdict thin", async () => {

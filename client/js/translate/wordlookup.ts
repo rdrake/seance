@@ -172,7 +172,7 @@ export async function lookupShortLine(
 	const top = prior?.top() ?? null;
 
 	if (top !== null && scores.has(top)) {
-		return placed(top, scores.get(top)!);
+		return {...placed(top, scores.get(top)!), settled: true};
 	}
 
 	// Several languages, none of them backed: today's answer, with the
