@@ -856,13 +856,6 @@ function swIrcOpen(net, pre, onReady, optional = []) {
 
 		ws.onopen = () => {
 			ws.send("CAP LS 302");
-
-			// A server password the network remembers (the stash carries it
-			// under the same rule as the SASL password); the page refuses CR/LF/NUL.
-			if (net.serverPassword) {
-				ws.send("PASS :" + net.serverPassword);
-			}
-
 			ws.send("NICK " + nick);
 			ws.send("USER seance-sw 0 * :seance service worker");
 		};
