@@ -228,19 +228,31 @@ export default async function run(page) {
 	);
 	await page.screenshot("translation-chips-replaced");
 
-	await page.evaluate(`${row}.querySelector(".msg-translate-flip").click()`);
+	page.check(
+		"the marker is no button",
+		(await page.evaluate(`${row}.querySelector(".msg-translate-flip").tagName`)) === "SPAN"
+	);
+	await page.evaluate(`${row}.querySelector(".msg-flippable").click()`);
 	await page.waitFor(`!${row}.querySelector(".msg-translated")`, {
-		label: "the flipper swapped the original back",
+		label: "a tap on the text swapped the original back",
 	});
 	page.check(
-		"the original is back, the flipper kept to swap again",
+		"the original is back, the marker kept and dimmed",
 		(await page.evaluate(
 			`${row}.querySelector(".content").textContent.includes("a much longer line")`
 		)) &&
 			(await page.evaluate(
-				`${row}.querySelector(".msg-translate-flip").getAttribute("aria-pressed")`
-			)) === "false"
+				`${row}.querySelector(".msg-translate-flip").classList.contains("original")`
+			))
 	);
+	await page.evaluate(`${row}.querySelector(".msg-flippable").click()`);
+	await page.waitFor(`!!${row}.querySelector(".msg-translated")`, {
+		label: "a second tap brought the translation back",
+	});
+	await page.evaluate(`${row}.querySelector(".msg-flippable").click()`);
+	await page.waitFor(`!${row}.querySelector(".msg-translated")`, {
+		label: "and a third swapped the original back again",
+	});
 
 	const icons = await page.evaluate(ICONS);
 	console.log("icons", JSON.stringify(icons, null, 1));

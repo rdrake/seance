@@ -527,6 +527,8 @@ async function scenario(page) {
 	const translatedRow = newestRow("Ich schicke dir gleich das Log");
 	const translatedRowId = String(await page.evaluate(`(${translatedRow}).id`));
 	const LINE_FLIP = `#${translatedRowId} .msg-translate-flip`;
+	// The line's text: a tap on it swaps the translation and the original.
+	const LINE_TEXT = `#${translatedRowId} .msg-flippable`;
 	const TEXT = `#${translatedRowId} .msg-translated`;
 
 	// Every label names its languages in the reader's language: this
@@ -957,11 +959,11 @@ async function scenario(page) {
 			`(${translatedRow}).querySelector(".content .msg-translated").textContent.trim().startsWith("[English]") && !!(${translatedRow}).querySelector(".content > .msg-translated")`
 		)
 	);
-	// The flipper swaps the original back, one tap.
-	await page.click(LINE_FLIP);
+	// A tap on the text swaps the original back.
+	await page.click(LINE_TEXT);
 	await page.waitFor(`${LINES} === ${base + 5}`, {label: "one translation swapped back"});
 	await page.check(
-		"the flipper shows the original, at the line's own colour",
+		"the tap shows the original, at the line's own colour",
 		(await page.evaluate(`(${translatedRow}).classList.contains("translated")`)) === false &&
 			(await page.evaluate(
 				`!(${translatedRow}).querySelector(".msg-translated") && !(${translatedRow}).querySelector(".content").textContent.includes("[English]")`
@@ -971,10 +973,12 @@ async function scenario(page) {
 			)) === bodyColor
 	);
 	await page.check(
-		"the flipper stays, to swap the translation back in",
+		"the marker stays, dimmed, and says a tap brings the translation back",
 		(await page.evaluate(
-			`document.querySelector(${JSON.stringify(LINE_FLIP)}).getAttribute("aria-pressed")`
-		)) === "false"
+			`(() => { const f = document.querySelector(${JSON.stringify(
+				LINE_FLIP
+			)}); return f.classList.contains("original") && f.title === "Show the translation" && f.tagName === "SPAN"; })()`
+		)) === true
 	);
 
 	// No word floor: a two-word line both identifiers call German translates

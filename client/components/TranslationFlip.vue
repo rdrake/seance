@@ -1,26 +1,24 @@
 <template>
 	<!-- A translated line shows its translation in the original's place
-	     (Message.vue `replaced`); this button before it swaps the two, like
-	     the topic's flipper in the header. -->
-	<button
+	     (Message.vue `replaced`) and a tap on the text swaps the two; this
+	     marker before it only says which is showing, so it is no button. -->
+	<span
 		v-if="entry && entry.status === 'done'"
-		type="button"
 		class="msg-translate-flip"
 		:class="{original: entry.hidden}"
+		role="img"
 		:aria-label="label"
 		:title="label"
-		:aria-pressed="!entry.hidden"
-		@click.stop="flip"
 	>
 		<i class="fas fa-language" aria-hidden="true" />
-	</button>
+	</span>
 </template>
 
 <script lang="ts">
 import {computed, defineComponent, PropType} from "vue";
 import {useI18n} from "../js/i18n";
 import {useStore} from "../js/store";
-import {readingLanguage, showOriginal} from "../js/translate/reader";
+import {readingLanguage} from "../js/translate/reader";
 import {languageName} from "../js/translate/languages";
 import {sourceText} from "../js/translate/labels";
 import type {ClientMessage} from "../js/types";
@@ -57,15 +55,7 @@ export default defineComponent({
 			});
 		});
 
-		const flip = () => {
-			const value = entry.value;
-
-			if (value) {
-				showOriginal(props.message.id, !value.hidden);
-			}
-		};
-
-		return {entry, label, flip};
+		return {entry, label};
 	},
 });
 </script>

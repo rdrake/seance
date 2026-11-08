@@ -8604,9 +8604,10 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 }
 
 /* A translated line stands in the original's place (Message.vue
- * `replaced`). The flipper before it swaps the two (TranslationFlip.vue),
- * wearing the translation chips' accent look, and dimmed while the
- * original is the one showing -- the header topic's flipper, in a row. */
+ * `replaced`), and a tap on the text swaps the two. The marker before it
+ * (TranslationFlip.vue) wears the translation chips' accent look, dimmed
+ * while the original is the one showing -- the header topic's flipper's
+ * look, though only a marker. */
 #chat .msg-translate-flip {
 	display: inline-flex;
 	align-items: center;
@@ -8620,7 +8621,6 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	font: inherit;
 	font-size: 0.75em;
 	line-height: 1.5;
-	cursor: pointer;
 }
 
 #chat .msg-translate-flip.original {
@@ -8628,10 +8628,10 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	color: var(--body-color-muted);
 }
 
-#chat .msg-translate-flip:hover,
-#chat .msg-translate-flip:focus-visible {
-	background: var(--accent-tint-20, rgb(128 128 128 / 15%));
-	outline: 0;
+/* A tap on a translated line's text swaps it with the original (Message.vue
+   onFlipClick). */
+#chat .msg-flippable {
+	cursor: pointer;
 }
 
 @keyframes msg-translation-blink {

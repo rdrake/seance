@@ -377,8 +377,8 @@ export default defineComponent({
 		/**
 		 * The action's menu. An untranslated line: translate now, with its
 		 * language left to the detector, or name that language first. A
-		 * translated one: swap it with the original (the flipper's one tap,
-		 * TranslationFlip.vue), copy, retranslate, or retranslate from the
+		 * translated one: swap it with the original (what a tap on the text
+		 * does, Message.vue onFlipClick), copy, retranslate, or retranslate from the
 		 * detector's runners-up or a picked language. A keyboard activation gives the menu no pointer to open at,
 		 * so it is anchored under the button, as the chip's is.
 		 */
