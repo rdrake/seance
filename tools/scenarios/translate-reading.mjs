@@ -11,11 +11,10 @@
 // count is taken against it); a German
 // line gets a translated line labelled "from German" with the fake's "[English] …" echo; an
 // English line gets no translation and no mark, and the toolbar's Translate
-// translates it; a Spanish line franc cannot tell from Galician is
-// translated with no source named and no "probably" guess in its request; a
-// "lol" nothing can place and a "hola" only the word list places are left
-// alone, with nothing under them and no request; a short German line the channel's
-// prior settles is translated from German; the chip's menu retranslates from another source
+// translates it; a Spanish line in this German channel is translated from
+// Spanish, not from the channel's German; a "lol" and a "hola" neither
+// identifier is sure of are left alone, with nothing under them and no
+// request; a short German line is translated from German; the chip's menu retranslates from another source
 // (the detector's runners-up one click each, never the line's own source;
 // "Retranslate from…" opens the picker, Escape asks for nothing, French
 // makes the chip read "from French" and the request carry `from: "fr"`, and
@@ -55,7 +54,7 @@
 // line from before the part included; and, with the channel switched off
 // again at the end, the toolbar's Translate still translates one line ad
 // hoc from a language picked in its menu's dialog.
-// Detection is real (franc); only the engine is scripted.
+// Detection is real (fastText and ELD); only the engine is scripted.
 //
 // The speaker negotiates message-tags + echo-message so it learns the
 // msgid the server gave its own line, and batch + draft/multiline so it
@@ -231,7 +230,7 @@ async function expectLeftAlone(page, row, text, label) {
 /**
  * What a translated row says of its source, as the flipper before it tells
  * it (TranslationFlip.vue's title, English interface): "from German",
- * "from German?", "sent in German", or "" with no flipper.
+ * "sent in German", or "" with no flipper.
  */
 function chipOf(row) {
 	return `(() => { const r = ${row}; const f = r && r.querySelector(".msg-translate-flip"); const m = f && /^(?:Translated from (.+)\\. Show the original|Sent in (.+)\\. Show what was sent)$/.exec(f.title); return m ? (m[1] ? "from " + m[1] : "sent in " + m[2]) : ""; })()`;
@@ -777,49 +776,38 @@ async function scenario(page) {
 	base += 1;
 	await page.check("one more done line", (await page.evaluate(LINES)) === base + 1);
 
-	// A line the detector cannot place, with no English among its candidates
-	// (franc ranks Spanish, Portuguese and Galician within a hundredth of each
-	// other here), is translated: its source left to the engine, and the
-	// request told no guess -- not "probably German" from this channel's prior.
+	// A Spanish line in a channel that has written German all along: both
+	// identifiers call it Spanish, so it is translated from Spanish -- not
+	// "probably German" from this channel's prior.
 	const spanish = "claude es muy lento estos días";
 
 	other.say(spanish);
 	await page.waitFor(`${LINES} === ${base + 2}`, {
 		timeout: 20000,
-		label: "the Spanish line the detector could not place is translated",
+		label: "the Spanish line is translated",
 	});
-	// The chip names the detector's contenders instead of dropping the source
-	// (labels.ts): "from Spanish / Portuguese", in whichever order franc
-	// ranked them this run -- never a bare "from".
-	const spanishChip = String(await page.evaluate(chipOf(newestRow(spanish)))).trim();
-	const CONTENDER = "(Spanish|Portuguese|Galician)";
-
 	await page.check(
-		`its chip names the detector's contenders (${JSON.stringify(spanishChip)})`,
-		new RegExp(`^from ${CONTENDER}( / ${CONTENDER}|\\?)$`).test(spanishChip)
+		"its chip names Spanish",
+		String(await page.evaluate(chipOf(newestRow(spanish)))).trim() === "from Spanish"
 	);
 
 	const spanishRequests = await page.evaluate(
 		`(${REQUESTS}).filter((r) => r.text.indexOf(${JSON.stringify(
 			spanish
-		)}) !== -1).map((r) => ({from: r.from, sourceHint: r.sourceHint}))`
+		)}) !== -1).map((r) => ({from: r.from}))`
 	);
 
 	await page.check(
-		`its request named no source and no probable one (${JSON.stringify(spanishRequests)})`,
+		`its request asked for Spanish as the source (${JSON.stringify(spanishRequests)})`,
 		Array.isArray(spanishRequests) &&
 			spanishRequests.length > 0 &&
-			spanishRequests.every((r) => r.from === null && r.sourceHint === null)
+			spanishRequests.every((r) => r.from === "es")
 	);
 	base += 1;
 
-	// A short line with no function words ("ja so gut": nine characters, three
-	// words, under DETECT_MIN_LENGTH so franc is never asked): the classifier
-	// has no verdict for it, and the short-line lookup (wordlookup.ts) finds
-	// German, Slovak, Polish and English all listing some of its words, with
-	// German only 1.8x ahead — too close to place on its own. The channel's
-	// prior is what settles it: everything said here has been German, German
-	// is among the contenders, so the line is placed German and translated
+	// A short German line ("ja so gut", nine characters): fastText barely
+	// ranks it, but ELD calls it German and reliable, and English is not
+	// among fastText's contenders, so it is placed German and translated
 	// *from* German. No RUN marker fits under ten characters, so the rows with
 	// this text are counted first and the new one is the newest.
 	const unsureLine = "ja so gut";
@@ -842,7 +830,7 @@ async function scenario(page) {
 		{timeout: 20000, label: "the short German line translated"}
 	);
 	await page.check(
-		"the short line's chip names German (the prior settled the lookup's tie)",
+		"the short line's chip names German",
 		(
 			await page.evaluate(chipOf(`document.getElementById(${JSON.stringify(unsureRowId)})`))
 		).trim() === "from German"
@@ -861,10 +849,9 @@ async function scenario(page) {
 	base += 1;
 	await page.check("one more done line", (await page.evaluate(LINES)) === base + 1);
 
-	// A word nothing can place at all ("lol": no function word, in no
-	// language's frequency table) and a lone word only the frequency table
-	// places ("hola", Spanish) in a channel that writes German: both left
-	// alone. Handed to the engine, a "lol" came back "from Polish".
+	// Two words neither identifier is sure of ("lol"; "hola", which fastText
+	// ranks English first): both left alone. Handed to the engine, a "lol"
+	// came back "from Polish".
 	for (const word of ["lol", "hola"]) {
 		const rows = `[...document.querySelectorAll(".msg")].filter((m) => m.textContent.includes(${JSON.stringify(
 			word
@@ -990,13 +977,9 @@ async function scenario(page) {
 		)) === "false"
 	);
 
-	// No word floor: a two-word line the classifier places ("ist" is a German
-	// function word, and a single hit decides a line of three words or fewer)
-	// translates by itself now. One hit is a hint, not a source
-	// (detect.ts `Detection.weak`), so the line goes to the engine with no
-	// source named and the chip offers the guess with a question mark. Like
-	// "ja so gut" above, no RUN marker fits, so the rows with this text are
-	// counted first and the new one is newest.
+	// No word floor: a two-word line both identifiers call German translates
+	// by itself, from German. Like "ja so gut" above, no RUN marker fits, so
+	// the rows with this text are counted first and the new one is newest.
 	const shortAsk = "ist gut";
 	const shortRows = `[...document.querySelectorAll(".msg")].filter((m) => m.textContent.includes(${JSON.stringify(
 		shortAsk
@@ -1016,10 +999,10 @@ async function scenario(page) {
 		{timeout: 20000, label: "the two-word line is translated by itself"}
 	);
 	await page.check(
-		"the two-word line's chip offers the guess (German? → English)",
+		"the two-word line's chip names German",
 		(
 			await page.evaluate(chipOf(`document.getElementById(${JSON.stringify(shortRowId)})`))
-		).trim() === "from German?"
+		).trim() === "from German"
 	);
 
 	const shortRequests = await page.evaluate(
@@ -1029,12 +1012,10 @@ async function scenario(page) {
 	);
 
 	await page.check(
-		`a one-hit verdict is no source: its request left it to the engine (${JSON.stringify(
-			shortRequests
-		)})`,
+		`its request asked for German as the source (${JSON.stringify(shortRequests)})`,
 		Array.isArray(shortRequests) &&
 			shortRequests.length > 0 &&
-			shortRequests.every((r) => r.from === null)
+			shortRequests.every((r) => r.from === "de")
 	);
 
 	// The toolbar's Translate on a line the pipeline leaves alone, once more.
@@ -1531,12 +1512,8 @@ async function scenario(page) {
 	// Switching on again queues what the channel shows once more.
 	const reBase = await settledLines(page, "the second switch-on's requeue");
 
-	// Nine characters, three words: under DETECT_MIN_LENGTH, so franc is
-	// never asked; the classifier places it ("ist" is a German function word
-	// and a single hit decides a line of three words or fewer). German is
-	// declared as spoken here by now, though the verdict does not need it.
-	// One hit is a hint: the line translates with no source named and the
-	// chip offers German as a guess.
+	// Nine characters, three words: both identifiers call it German. German
+	// is declared as spoken here by now, though the verdict does not need it.
 	const shortLine = "So ist es";
 
 	other.say(shortLine);
@@ -1550,8 +1527,8 @@ async function scenario(page) {
 	)})).pop()`;
 
 	await page.check(
-		"the short line's chip offers the guess (German? → English)",
-		(await page.evaluate(chipOf(shortRow))) === "from German?"
+		"the short line's chip names German",
+		(await page.evaluate(chipOf(shortRow))) === "from German"
 	);
 
 	// History the reader asks for: a "load more" is translated, newest line
