@@ -544,10 +544,8 @@ function sendTargets(client: IrcClient, state: TargetsState): void {
 	// From the start: the server's index moves on messages only (not joins,
 	// parts, topics, redactions), so the newest line we hold can be well past
 	// a quiet channel's newest message, and a window starting there would
-	// leave it out. TARGETS takes BETWEEN's semantics: both bounds exclusive,
-	// the limit counted from the first one, so the newer bound goes first to
-	// get the newest `limit` targets (the spec's reconnect example). Sent the
-	// other way round, a server that follows the spec answers the oldest.
+	// leave it out. The limit counts from the first bound, so the newer one
+	// goes first: the newest `limit` targets, as in the spec's example.
 	const since = new Date(0);
 	const until = new Date(Date.now() + TARGETS_AHEAD_MS);
 	const tags: Record<string, string> = {};

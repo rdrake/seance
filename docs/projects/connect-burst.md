@@ -211,16 +211,9 @@ parked until it answers (`catchup.ts`):
   it (`filter_targets_window`), and a server clock ahead of ours would lose
   exactly the channel just written to. The limit is 100 (capped by ISUPPORT
   `CHATHISTORY`). The newer bound goes first: TARGETS takes BETWEEN's
-  semantics (both bounds exclusive, the limit counted from the first
-  argument, the order sets the direction), so this asks for the newest
-  `limit` targets, the spec's own reconnect example. Sent oldest first, as
-  it was until 2026-11-08 (evilnet/seance#216), a server that follows the
-  spec answers the oldest `limit` instead; nefarious2 returned the newest
-  whatever the order until its fork's W5 Push E. A page edge never splits
-  targets that share a latest timestamp, and a page missing a storage
-  peer's answer comes without `draft/chathistory-end`; the order reads
-  the rows into a map and needs neither. nefarious2 lists the channels we
-  may read history of: those we are a member of, and `+H` (public history) channels without
+  semantics, the limit counting from the first argument, so oldest first
+  would get the oldest `limit` from a server that follows the spec (#216).
+  nefarious2 lists the channels we may read history of: those we are a member of, and `+H` (public history) channels without
   membership (`check_history_access`). So it is asked once the JOINs are
   in, newest first; a listed `+H` channel we are not in is simply not
   among the parked ones.
