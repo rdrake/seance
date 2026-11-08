@@ -1,6 +1,6 @@
 <template>
 	<!-- A done translation stands in the original's place (Message.vue
-	     `replaced`, TranslationFlip.vue swaps it back), so this row is only
+	     `replaced`, a tap on the text swaps it back), so this row is only
 	     for what is not one: a failure with its retry, or a line waiting on a
 	     model download. Nothing at all for a line the reader left alone (a
 	     detection skip), one the engine handed back as it was (UNCHANGED), or

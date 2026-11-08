@@ -826,13 +826,18 @@ behind dropped, an engine paused after three failures in a row). The
 result lives in `store.state.translations` keyed by the message id. **A
 done translation stands in the original's place** (`Message.vue`
 `replaced`, the `.msg-translated` span inside `.content`, `lang` the
-target): no row of its own, and the flipper before it
+target): no row of its own. **A tap on the text swaps the original
+back**, and the next tap the translation in again (`.msg-flippable`,
+`Message.vue` `onFlipClick` → `showOriginal`, the entry's `hidden`); a tap
+on a link, nick, channel or spoiler inside it, the end of a selection or
+long press, and the tap that closes an open toolbar do not count, and the
+toolbar's menu has the same swap for a keyboard. The marker before the text
 (`TranslationFlip.vue`, the fa-language glyph in the chips' accent box,
+dimmed while the original shows) is only that, a marker, not a button:
 "Translated from German. Show the original" its tooltip and accessible
-name, "Sent in Polish. Show what was sent" on an own line's read-back)
-swaps the original back in one tap and the translation in again with the
-next (`showOriginal`, the entry's `hidden`; the header topic's flipper is
-the same control). Until 2026-11 the translation was a second row under
+name, "Sent in Polish. Show what was sent" on an own line's read-back.
+Until 2026-11 the marker was the button and a tap on the text did nothing;
+the header topic keeps its flipper button. Until 2026-11 the translation was a second row under
 the original with a "from German" label; a channel reader asked for the
 original to be replaced instead. Nothing renders while a line is pending:
 it swaps in when done, rather than streaming into a row that then

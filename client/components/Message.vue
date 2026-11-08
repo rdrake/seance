@@ -82,8 +82,15 @@
 					@click="hideRevealed"
 					><ParsedMessage :message="message" />
 					<span class="msg-redacted-note">{{ redactedLabel }}</span></span
-				><span v-else-if="replaced" class="msg-translated" :lang="replaced.to"
-					><ParsedMessage :message="message" :text="replaced.text" /></span
+				><span
+					v-else-if="flippable"
+					class="msg-flippable"
+					:class="{'msg-translated': !!replaced}"
+					:lang="replaced ? replaced.to : undefined"
+					@click="onFlipClick"
+					><ParsedMessage
+						:message="message"
+						:text="replaced ? replaced.text : undefined" /></span
 				><ParsedMessage v-else :message="message" />
 				<span
 					v-if="message.editOf || message.editedAt"
@@ -181,11 +188,16 @@
 					@click="hideRevealed"
 					><ParsedMessage :network="network" :message="message" />
 					<span class="msg-redacted-note">{{ redactedLabel }}</span></span
-				><span v-else-if="replaced" class="msg-translated" :lang="replaced.to"
+				><span
+					v-else-if="flippable"
+					class="msg-flippable"
+					:class="{'msg-translated': !!replaced}"
+					:lang="replaced ? replaced.to : undefined"
+					@click="onFlipClick"
 					><ParsedMessage
 						:network="network"
 						:message="message"
-						:text="replaced.text" /></span
+						:text="replaced ? replaced.text : undefined" /></span
 				><ParsedMessage v-else :network="network" :message="message" />
 				<span
 					v-if="message.editOf || message.editedAt"
@@ -238,6 +250,7 @@ import TranslationFlip from "./TranslationFlip.vue";
 import TranslationLine from "./TranslationLine.vue";
 import QuotePreview from "./QuotePreview.vue";
 import {replyQuote} from "../js/helpers/messageUpdates";
+import {showOriginal} from "../js/translate/reader";
 import socket from "../js/socket";
 import {quoteLayout, toPlainText} from "../js/helpers/ircmessageparser/layout";
 import {MessageType} from "../../shared/types/msg";
@@ -533,14 +546,46 @@ export default defineComponent({
 		const hasTranslationEntry = computed(() => !!store.state.translations[props.message.id]);
 
 		// A finished, shown translation stands in the original's place
-		// (docs/resources/translation.md § Reading a channel); the flipper
-		// before it (TranslationFlip.vue) swaps the original back. Pending,
-		// failed, dropped or hidden translations leave the original as it is.
-		const replaced = computed(() => {
+		// (docs/resources/translation.md § Reading a channel); a tap on the
+		// text swaps the original back and the translation in again, and the
+		// marker before it (TranslationFlip.vue) says which is showing.
+		// Pending, failed, dropped or hidden translations leave the original
+		// as it is.
+		const doneEntry = computed(() => {
 			const entry = store.state.translations[props.message.id];
 
-			return entry && entry.status === "done" && !entry.hidden && entry.text ? entry : null;
+			return entry && entry.status === "done" && entry.text ? entry : null;
 		});
+		const replaced = computed(() =>
+			doneEntry.value && !doneEntry.value.hidden ? doneEntry.value : null
+		);
+		const flippable = computed(() => doneEntry.value !== null);
+
+		// Not a tap on something in the text (a link, a nick, a channel, a
+		// spoiler), not the end of a selection or a long press, and not the
+		// tap that closes an open toolbar.
+		const onFlipClick = (e: MouseEvent) => {
+			const entry = doneEntry.value;
+			const target = e.target as HTMLElement | null;
+
+			if (
+				!entry ||
+				swallowClick ||
+				selectionActive.value ||
+				openActions.value !== null ||
+				target?.closest("a, button, input, [role='button'], .user, .inline-channel")
+			) {
+				return;
+			}
+
+			const selection = window.getSelection();
+
+			if (selection && !selection.isCollapsed && selection.toString().trim() !== "") {
+				return;
+			}
+
+			showOriginal(props.message.id, !entry.hidden);
+		};
 		const translated = computed(() => replaced.value !== null);
 
 		const isAction = () => {
@@ -694,6 +739,8 @@ export default defineComponent({
 			canAct,
 			translated,
 			replaced,
+			flippable,
+			onFlipClick,
 			hasTranslationEntry,
 		};
 	},
