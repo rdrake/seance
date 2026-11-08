@@ -5,17 +5,31 @@
 	     model download. Nothing at all for a line the reader left alone (a
 	     detection skip), one the engine handed back as it was (UNCHANGED), or
 	     one still being translated: it swaps in when done. The toolbar's
-	     Translate still translates any of them. -->
+	     Translate still translates any of them. Two offers nobody is
+	     interrupted by: a download the line needs (`needed`, a Download link
+	     in place of the failure), and the system translator's language pack
+	     on the first line translated from its pair (`applePack`). -->
 	<div
 		v-if="
 			entry &&
 			!entry.hidden &&
-			(entry.status === 'failed' ? entry.error !== UNCHANGED : !!download)
+			(entry.status === 'failed'
+				? entry.error !== UNCHANGED
+				: entry.status === 'done'
+				? applePack
+				: !!download)
 		"
 		class="msg-translation"
 		:data-status="entry.status"
 	>
+		<span v-if="entry.status === 'done'" class="msg-translation-offer">
+			{{ t("translate.line.applePack", {language: sourceName}) }}
+			<button type="button" class="msg-translation-get" @click.stop="getApplePack">
+				{{ t("translate.line.applePackGet") }}
+			</button>
+		</span>
 		<button
+			v-else
 			ref="chip"
 			type="button"
 			class="msg-translation-chip"
@@ -34,7 +48,17 @@
 			@pick="pickSource"
 			@close="pickerOpen = false"
 		/>
-		<span v-if="entry.status === 'failed'" class="msg-translation-failed">
+		<span
+			v-if="entry.status === 'failed' && needed"
+			class="msg-translation-offer"
+			:title="reasonText"
+		>
+			{{ t("translate.line.needsDownload", {size: neededSize}) }}
+			<button type="button" class="msg-translation-get" @click.stop="getDownload">
+				{{ t("translate.line.download") }}
+			</button>
+		</span>
+		<span v-else-if="entry.status === 'failed'" class="msg-translation-failed">
 			{{ t("translate.failed") }}
 			<span v-if="entry.error" class="msg-translation-reason" :title="reasonText">{{
 				shortReason(reasonText)
@@ -47,7 +71,12 @@
 				@click.stop="retry"
 			/>
 		</span>
-		<span v-else class="msg-translation-text" :lang="entry.to" dir="auto">
+		<span
+			v-else-if="entry.status !== 'done'"
+			class="msg-translation-text"
+			:lang="entry.to"
+			dir="auto"
+		>
 			<ParsedMessage
 				v-if="entry.text"
 				:network="network"
@@ -88,6 +117,10 @@ import {loadNote} from "../js/translate/service";
 import type {ClientChan, ClientMessage, ClientNetwork} from "../js/types";
 import ParsedMessage from "./ParsedMessage.vue";
 import SourceLanguagePicker from "./SourceLanguagePicker.vue";
+import friendlysize from "../js/helpers/friendlysize";
+import {parseNeedsDownload} from "../js/translate/consent";
+import {packShownOn, takePack} from "../js/translate/applePacks";
+import {activeService, systemTranslator} from "../js/translate";
 
 /** Characters of a failure reason the line shows; the title has all of it. */
 const REASON_MAX = 120;
@@ -276,6 +309,45 @@ export default defineComponent({
 
 		const retry = () => retryTranslation(props.network, props.channel, props.message);
 
+		// A download the line needs and nobody agreed to (service.ts
+		// `ResolveOptions.quiet`): the line offers it, and the yes retries it,
+		// the download's progress then shown on the line (`download`).
+		const needed = computed(() => {
+			const error = entry.value?.status === "failed" ? entry.value.error : null;
+
+			return error ? parseNeedsDownload(error) : null;
+		});
+		const neededSize = computed(() => friendlysize(needed.value?.sizeBytes ?? 0));
+		const getDownload = () => {
+			const need = needed.value;
+
+			if (need) {
+				activeService()?.allowDownload(need.id, need.device);
+				retry();
+			}
+		};
+
+		// The system translator could take this line's pair once its pack is
+		// downloaded (applePacks.ts); the sheet opens only on this tap.
+		const applePack = computed(() => {
+			const value = entry.value;
+
+			return (
+				!!value &&
+				value.status === "done" &&
+				packShownOn(props.message.id, value.from, value.to)
+			);
+		});
+		const sourceName = computed(() => (entry.value?.from ? nameOf(entry.value.from) : ""));
+		const getApplePack = () => {
+			const value = entry.value;
+
+			if (value?.from) {
+				takePack(value.from, value.to);
+				void systemTranslator()?.offer(value.from, value.to);
+			}
+		};
+
 		// Why it failed, after "couldn't translate": an engine's error can be
 		// long and multi-line, so the line shows the head of it and the title
 		// carries the whole thing.
@@ -299,6 +371,12 @@ export default defineComponent({
 			openMenu,
 			pickSource,
 			retry,
+			needed,
+			neededSize,
+			getDownload,
+			applePack,
+			sourceName,
+			getApplePack,
 			shortReason,
 			t,
 			UNCHANGED,

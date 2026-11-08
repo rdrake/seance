@@ -69,6 +69,7 @@ import {sentReadBacks, takesReadBack} from "./sentReadBack";
 import {protect, stripCopiedNickPrefix} from "./spans";
 import {topicEntryId} from "./topic";
 import {yieldToPage} from "./yieldToPage";
+import {claimPack} from "./applePacks";
 
 const queues = new Map<string, TranslateQueue>();
 const priors = new Map<string, LanguagePrior>();
@@ -455,17 +456,24 @@ function queueFor(network: ClientNetwork): TranslateQueue {
 		const service = translateService();
 
 		queue = new TranslateQueue({
-			// A route a declined download left empty fails the line with the
-			// model named (consent.ts), through the queue's rejection path,
-			// which pauses nothing.
+			// Quiet: nothing the reader did not ask for interrupts them. A
+			// route that needs a download nobody agreed to fails the line
+			// with the model named (consent.ts), through the queue's rejection
+			// path, which pauses nothing, and the line offers the download
+			// (TranslationLine.vue); a system language pack is offered on the
+			// line too (applePacks.ts), never in the system's sheet.
 			route: (from, to, hint) =>
-				service.resolve(from, to, hint).then(({route, refused, refusedDevice}) => {
-					if (!route && refused) {
-						throw new Error(needsDownloadError(refused, refusedDevice ?? undefined));
-					}
+				service
+					.resolve(from, to, hint, {quiet: true})
+					.then(({route, refused, refusedDevice}) => {
+						if (!route && refused) {
+							throw new Error(
+								needsDownloadError(refused, refusedDevice ?? undefined)
+							);
+						}
 
-					return route ? {engine: route.ref.engine, device: route.device} : null;
-				}),
+						return route ? {engine: route.ref.engine, device: route.device} : null;
+					}),
 			translate: (req, signal) => service.translate(req, signal),
 			loadTicks: () => service.loadTicks(),
 			priority(chanId) {
@@ -588,6 +596,11 @@ function applyUpdate(id: number, update: QueueUpdate): void {
 					error: null,
 				},
 			});
+
+			if (existing) {
+				claimPack(id, existing.from, existing.to);
+			}
+
 			break;
 		case "failed":
 			// A line queued with its source left to the engine because the

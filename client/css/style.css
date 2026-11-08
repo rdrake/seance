@@ -8654,6 +8654,28 @@ html[data-reduce-motion] #chat .msg-translation-caret {
 	font-style: italic;
 }
 
+/* An offer under a line, never a dialog (TranslationLine.vue): a download
+   the line needs, or the system translator's language pack. Quiet text, its
+   action a link-like button. */
+#chat .msg-translation-offer {
+	color: var(--body-color-muted);
+}
+
+#chat .msg-translation-get {
+	padding: 0;
+	margin-inline-start: 0.25em;
+	border: 0;
+	background: none;
+	color: var(--link-color);
+	font: inherit;
+	cursor: pointer;
+}
+
+#chat .msg-translation-get:hover,
+#chat .msg-translation-get:focus-visible {
+	text-decoration: underline;
+}
+
 /* Why it failed, from the engine: an ORT session error or a model id, so it
    is long, it is not prose, and it must not push the retry button off the
    row. `anywhere` lets it break mid-token; the title has the untruncated
