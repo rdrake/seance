@@ -31,6 +31,29 @@
  * the foreground poke leaves them be, and only Connect now cuts them.
  */
 
+/**
+ * The part of `WebSocket` that {@link WsTransport} uses, and all a socket
+ * underneath it has to provide: the browser's `WebSocket` is one, the app
+ * shell's TCP socket (shellSocket.ts) another.
+ */
+export interface LineSocket {
+	readonly readyState: number;
+	readonly OPEN: number;
+	readonly protocol: string;
+	binaryType: string;
+	addEventListener(type: "open", listener: () => void): void;
+	addEventListener(type: "message", listener: (ev: {data: unknown}) => void): void;
+	addEventListener(type: "error", listener: (ev: unknown) => void): void;
+	addEventListener(
+		type: "close",
+		listener: (ev: {code: number; reason: string; wasClean: boolean}) => void
+	): void;
+	send(data: string): void;
+	close(code?: number, reason?: string): void;
+}
+
+export type LineSocketCtor = new (url: string, protocols?: string | string[]) => LineSocket;
+
 export interface ReconnectOptions {
 	enabled: boolean;
 	initialDelayMs: number;
@@ -51,8 +74,8 @@ export interface TransportOptions {
 	 * used to drop the connection on frames >= 528 bytes, #98, fixed 2026-08-28).
 	 */
 	maxLineBytes?: number;
-	/** WebSocket constructor to use instead of `globalThis.WebSocket`. */
-	WebSocketImpl?: typeof WebSocket;
+	/** Socket constructor to use instead of `globalThis.WebSocket`. */
+	WebSocketImpl?: LineSocketCtor;
 }
 
 /** Why a retry waits, when it is not the schedule's own wait. */
@@ -117,7 +140,7 @@ export class WsTransport {
 		Pick<TransportOptions, "WebSocketImpl">;
 	private readonly listeners = new Set<(ev: TransportEvent) => void>();
 	private readonly decoder = new TextDecoder();
-	private ws: WebSocket | null = null;
+	private ws: LineSocket | null = null;
 	private _state: TransportState = "closed";
 	private attempt = 0;
 	private timer: ReturnType<typeof setTimeout> | null = null;
@@ -183,14 +206,14 @@ export class WsTransport {
 		this.hold = false;
 		// A superseded socket's open says nothing about this one.
 		this.openedAt = null;
-		const Impl = this.opts.WebSocketImpl ?? globalThis.WebSocket;
+		const Impl: LineSocketCtor | undefined = this.opts.WebSocketImpl ?? globalThis.WebSocket;
 
 		if (typeof Impl !== "function") {
 			throw new Error("WsTransport: no WebSocket implementation available");
 		}
 
 		this._state = "connecting";
-		let ws: WebSocket;
+		let ws: LineSocket;
 
 		try {
 			ws = new Impl(this.opts.url, this.opts.subprotocols);
@@ -222,17 +245,17 @@ export class WsTransport {
 				this.emit({type: "open", subprotocol: ws.protocol});
 			}
 		});
-		ws.addEventListener("message", (ev: MessageEvent) => {
+		ws.addEventListener("message", (ev) => {
 			if (ws === this.ws) {
 				this.handleMessage(ev.data);
 			}
 		});
-		ws.addEventListener("error", (ev: Event) => {
+		ws.addEventListener("error", (ev) => {
 			if (ws === this.ws) {
 				this.emit({type: "error", message: errorMessage(ev)});
 			}
 		});
-		ws.addEventListener("close", (ev: CloseEvent) => {
+		ws.addEventListener("close", (ev) => {
 			if (ws === this.ws) {
 				this.ws = null;
 				this.handleClosed(ev.code, ev.reason, ev.wasClean);

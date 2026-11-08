@@ -40,6 +40,11 @@ export type ConnectOptions = {
 	host: string;
 	port: number;
 	tls: boolean;
+	/**
+	 * `tcp`: plain IRC over TCP (TLS when `tls`), made by the app shell
+	 * (shellSocket.ts); unavailable in a browser. Absent: IRC over WebSocket.
+	 */
+	transport?: "tcp";
 	nick: string;
 	/** Comma-separated channel list, optionally with keys (`#a key, #b`). */
 	join: string;

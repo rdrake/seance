@@ -78,6 +78,37 @@ describe("saved-networks", function () {
 		expect(saved.list()).to.deep.equal([]);
 	});
 
+	it("keeps IRC over TCP through save, edit and connect options", function () {
+		saved.save({...entry(), transport: "tcp", port: 6697});
+		expect(saved.get(entry().uuid)?.transport).to.equal("tcp");
+		expect(saved.toConnectOptions(saved.get(entry().uuid)!)).to.include({
+			transport: "tcp",
+			port: 6697,
+		});
+
+		// The form sends `websocket` to go back; the stored `tcp` must not survive the merge.
+		const back = saved.fromForm(
+			{uuid: entry().uuid, transport: "websocket", tls: "on"},
+			saved.get(entry().uuid)
+		);
+		expect(back).to.not.have.property("transport");
+		expect(saved.toConnectOptions(back)).to.not.have.property("transport");
+
+		// Anything but `tcp` is the WebSocket default.
+		expect(saved.normalize({...entry(), transport: "carrier pigeon"})).to.not.have.property(
+			"transport"
+		);
+	});
+
+	it("has TCP default ports beside the WebSocket ones", function () {
+		expect(saved.defaultPort(true, "tcp")).to.equal(6697);
+		expect(saved.defaultPort(false, "tcp")).to.equal(6667);
+		expect(saved.defaultPort(true)).to.equal(9998);
+		expect(
+			saved.normalize({...entry(), transport: "tcp", tls: false, port: ""})?.port
+		).to.equal(6667);
+	});
+
 	it("saves and reads back an entry under thelounge.networks", function () {
 		saved.save(entry());
 
