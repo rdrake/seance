@@ -1,5 +1,5 @@
 // A WebSocket "ircd" just able to register a client: CAP LS with nothing,
-// 001/005/376 once NICK and USER are in, JOIN echoed with a NAMES reply,
+// 001/005/422 once NICK and USER are in, JOIN echoed with a NAMES reply,
 // PING answered. For scenarios about what the page does around a connection
 // (the sidebar, routing), not about the protocol; anything else it is sent
 // goes unanswered. One IRC line per text frame, `text.ircv3.net`.
@@ -12,10 +12,22 @@ const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 function frame(text) {
 	const payload = Buffer.from(text, "utf8");
 	const len = payload.length;
-	const head =
-		len < 126
-			? Buffer.from([0x81, len])
-			: Buffer.from([0x81, 126, (len >> 8) & 0xff, len & 0xff]);
+	let head;
+
+	if (len < 126) {
+		head = Buffer.from([0x81, len]);
+	} else if (len < 65536) {
+		head = Buffer.alloc(4);
+		head.writeUInt8(0x81, 0);
+		head.writeUInt8(126, 1);
+		head.writeUInt16BE(len, 2);
+	} else {
+		head = Buffer.alloc(10);
+		head.writeUInt8(0x81, 0);
+		head.writeUInt8(127, 1);
+		head.writeBigUInt64BE(BigInt(len), 2);
+	}
+
 	return Buffer.concat([head, payload]);
 }
 

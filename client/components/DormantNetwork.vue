@@ -126,14 +126,22 @@ export default defineComponent({
 		const editLabel = computed(() => t("lobby.edit"));
 
 		const connect = () => {
-			if (needsPassword.value) {
+			// The entry as stored now: the row's copy is only as new as what
+			// it shows, and createNetwork writes what it is given back.
+			const entry = saved.get(props.network.uuid);
+
+			if (!entry) {
+				return;
+			}
+
+			if (entry.sasl === "plain" && !entry.saslPassword) {
 				// The connect form, filled from the entry, asks for it.
-				void router.push({name: "Connect", query: {savedLink: props.network.uuid}});
+				void router.push({name: "Connect", query: {savedLink: entry.uuid}});
 				return;
 			}
 
 			// The network announces itself and takes this row's place.
-			createNetwork(props.network);
+			createNetwork(entry);
 		};
 
 		const editNetwork = () => {
