@@ -432,8 +432,24 @@ function read(): SavedNetwork[] {
 	return result;
 }
 
+const changeListeners = new Set<() => void>();
+
+/**
+ * Hear every write of the list in this page (another tab's arrive as a
+ * `storage` event). The sidebar's saved-but-not-connected rows follow it.
+ * Returns the unsubscribe.
+ */
+export function onSavedNetworksChange(listener: () => void): () => void {
+	changeListeners.add(listener);
+	return () => changeListeners.delete(listener);
+}
+
 function write(entries: SavedNetwork[]): void {
 	backend.set(STORAGE_KEY, JSON.stringify(entries));
+
+	for (const listener of changeListeners) {
+		listener();
+	}
 }
 
 /** Never let a password reach disk unless the user asked for it. */

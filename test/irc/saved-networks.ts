@@ -534,4 +534,23 @@ describe("saved-networks", function () {
 		expect(saved.get(net.uuid)?.presenceMode).to.equal(undefined);
 		expect(saved.presenceModeOf(saved.get(net.uuid))).to.equal("global");
 	});
+
+	it("tells change listeners about every write until they unsubscribe", function () {
+		let calls = 0;
+		const off = saved.onSavedNetworksChange(() => calls++);
+		const net = entry();
+
+		saved.save(net);
+		saved.touchLastUsed(net.uuid);
+		saved.setCursor(net.uuid, {msgid: "a", time: 1});
+		saved.remove(net.uuid);
+		expect(calls).to.equal(4);
+
+		saved.remove(net.uuid); // nothing to remove, nothing written
+		expect(calls).to.equal(4);
+
+		off();
+		saved.save(net);
+		expect(calls).to.equal(4);
+	});
 });
