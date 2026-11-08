@@ -29,9 +29,6 @@ tokio-rustls = { version = "=0.26.6", default-features = false, features = ["rin
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 webpki-roots = "=1.0.11"
 
-[dev-dependencies]
-tokio = { version = "=1.54.1", features = ["rt", "macros", "net", "io-util"] }
-
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "=2.5.5"
 tauri-plugin-window-state = "=2.5.0"

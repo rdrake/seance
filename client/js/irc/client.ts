@@ -970,7 +970,7 @@ export class IrcClient {
 			next.host !== o.host ||
 			next.port !== o.port ||
 			next.tls !== o.tls ||
-			next.transport !== o.transport
+			(next.transport === "tcp") !== (o.transport === "tcp")
 		);
 	}
 
@@ -1104,7 +1104,7 @@ export class IrcClient {
 
 		if (
 			pending &&
-			pending.transport === this.options.transport &&
+			(pending.transport === "tcp") === (this.options.transport === "tcp") &&
 			policyHost(pending.host) === policyHost(this.options.host)
 		) {
 			this.pendingOptions = {...pending, ...secure};

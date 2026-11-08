@@ -501,7 +501,7 @@ export default defineComponent({
 		const pinServer = () => {
 			if (hostLocked) {
 				Object.assign(form, server);
-				delete form.transport; // the deploy's server is a WebSocket one
+				form.transport = "websocket"; // the deploy's server is a WebSocket one
 			}
 		};
 
@@ -510,17 +510,13 @@ export default defineComponent({
 		const connection = computed({
 			get: () => form.transport ?? "websocket",
 			set(value: string) {
-				const next = value === "tcp" ? "tcp" : undefined;
+				const next = value === "tcp" ? "tcp" : "websocket";
 
 				if (form.port === defaultPort(form.tls, form.transport)) {
 					form.port = defaultPort(form.tls, next);
 				}
 
-				if (next) {
-					form.transport = next;
-				} else {
-					delete form.transport;
-				}
+				form.transport = next;
 			},
 		});
 
@@ -576,11 +572,7 @@ export default defineComponent({
 			form.port = net.port;
 			form.tls = net.tls;
 
-			if (net.transport) {
-				form.transport = net.transport;
-			} else {
-				delete form.transport;
-			}
+			form.transport = net.transport ?? "websocket";
 
 			form.nick = net.nick;
 			form.join = net.join;

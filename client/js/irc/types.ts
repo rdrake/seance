@@ -42,9 +42,11 @@ export type ConnectOptions = {
 	tls: boolean;
 	/**
 	 * `tcp`: plain IRC over TCP (TLS when `tls`), made by the app shell
-	 * (shellSocket.ts); unavailable in a browser. Absent: IRC over WebSocket.
+	 * (shellSocket.ts); unavailable in a browser. `websocket` or absent: IRC
+	 * over WebSocket. The forms send `websocket` to switch back (an absent
+	 * option keeps the stored value); a saved entry never holds it.
 	 */
-	transport?: "tcp";
+	transport?: "tcp" | "websocket";
 	nick: string;
 	/** Comma-separated channel list, optionally with keys (`#a key, #b`). */
 	join: string;

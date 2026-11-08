@@ -102,17 +102,24 @@ describe("saved-networks", function () {
 
 	it("lets the connect form switch a saved TCP network back to WebSocket", function () {
 		const tcp = saved.normalize({...entry(), transport: "tcp", port: 6697})!;
-		const merged = saved.mergeOptions(tcp, tcp.uuid, {host: tcp.host, port: 8443, tls: true});
-		expect(saved.normalize(merged)).to.not.have.property("transport");
-		expect(
-			saved.normalize(saved.mergeOptions(tcp, tcp.uuid, {transport: "tcp", nick: "bob"}))
-		).to.include({transport: "tcp", nick: "bob"});
+		const back = {host: tcp.host, port: 8443, tls: true, transport: "websocket" as const};
+		expect(saved.normalize(saved.mergeOptions(tcp, tcp.uuid, back))).to.not.have.property(
+			"transport"
+		);
+		// Options that do not name the connection type keep the stored one.
+		expect(saved.normalize(saved.mergeOptions(tcp, tcp.uuid, {nick: "bob"}))).to.include({
+			transport: "tcp",
+			nick: "bob",
+		});
 	});
 
 	it("keeps a TCP and a WebSocket entry for one host and port apart", function () {
 		saved.save({...entry(), uuid: "ws", port: 6697});
 		saved.save({...entry(), uuid: "tcp", port: 6697, transport: "tcp"});
 		expect(saved.findMatching("irc.example.org", 6697, "alice")?.uuid).to.equal("ws");
+		expect(saved.findMatching("irc.example.org", 6697, "alice", "websocket")?.uuid).to.equal(
+			"ws"
+		);
 		expect(saved.findMatching("irc.example.org", 6697, "alice", "tcp")?.uuid).to.equal("tcp");
 	});
 

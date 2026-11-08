@@ -851,7 +851,7 @@ export default defineComponent({
 					props.defaults.port = tcp ? defaultPort(tls, "tcp") : tls ? 8443 : 8067;
 				}
 
-				props.defaults.transport = tcp ? "tcp" : undefined;
+				props.defaults.transport = tcp ? "tcp" : "websocket";
 			},
 		});
 

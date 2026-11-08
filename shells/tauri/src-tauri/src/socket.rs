@@ -11,7 +11,8 @@
 // - until the server has said something that looks like IRC, only the
 //   registration commands may be sent, and a first line that does not look
 //   like IRC (an HTTP status, a Redis `-ERR`) closes the socket;
-// - lines, queues and writes are capped; at most MAX_SOCKETS at once.
+// - lines, queues and writes are capped; at most MAX_SOCKETS at once, and
+//   MAX_OPENS a minute (no scanning the LAN through it).
 //
 // `Socket.open {id, page, host, port, tls}` → events `open {id}`, `lines
 // {id, lines}` (one per read), `close {id, code, reason}`: 1000 when the
@@ -24,10 +25,10 @@
 // page load) is refused.
 
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -37,12 +38,16 @@ use crate::ShellError;
 
 const PLUGIN: &str = "Socket";
 const MAX_SOCKETS: usize = 16;
+/// Opens allowed per OPEN_WINDOW: enough for every network's quick retries
+/// after a network change, too few for the page to scan a LAN with.
+const MAX_OPENS: usize = 30;
+const OPEN_WINDOW: Duration = Duration::from_secs(60);
 /// Queued outbound lines per socket; past it the socket is closed.
 const SEND_QUEUE: usize = 512;
 /// A sent line, before CRLF. The page caps lines at 500 bytes already.
 const MAX_SEND_LINE: usize = 4096;
 /// A received line; an ircd's own limit is 8191 + 512 bytes of tags.
-pub const MAX_LINE: usize = 16 * 1024;
+const MAX_LINE: usize = 16 * 1024;
 const ADDRESS_TIMEOUT: Duration = Duration::from_secs(5);
 const DIAL_DEADLINE: Duration = Duration::from_secs(20);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
@@ -90,8 +95,11 @@ struct State {
     retired: HashSet<String>,
     /// The page before a reload's sockets, for PAGE_GONE_GRACE: WebKit
     /// starts the new load before the old page's `pagehide`, whose QUIT
-    /// must still get out. They say nothing more to the page.
+    /// must still get out. They are closed nowhere but here; what they
+    /// still read reaches no page route.
     retiring: HashMap<String, Entry>,
+    /// When the last MAX_OPENS opens were accepted.
+    opens: VecDeque<Instant>,
 }
 
 #[derive(Default)]
@@ -187,6 +195,22 @@ pub fn call(app: &AppHandle, method: &str, options: &Value) -> Result<Value, She
                     return Err(refuse("too many connections"));
                 }
 
+                let now = Instant::now();
+
+                while state
+                    .opens
+                    .front()
+                    .is_some_and(|at| now.duration_since(*at) >= OPEN_WINDOW)
+                {
+                    state.opens.pop_front();
+                }
+
+                if state.opens.len() >= MAX_OPENS {
+                    return Err(refuse("too many connections opened; trying again shortly"));
+                }
+
+                state.opens.push_back(now);
+
                 // In the map before the task starts: a close that comes
                 // while it dials finds it, and the dial is abandoned.
                 state.sockets.insert(
@@ -241,12 +265,12 @@ pub fn call(app: &AppHandle, method: &str, options: &Value) -> Result<Value, She
                 });
 
                 if let Err(reason) = checked {
-                    drop_socket(app, &id, 1006, reason);
+                    end_socket(app, &id, None, 1006, reason);
                     return Err(refuse(reason));
                 }
 
                 if tx.try_send(line.to_owned()).is_err() {
-                    drop_socket(app, &id, 1006, "send queue full");
+                    end_socket(app, &id, None, 1006, "send queue full");
                     return Err(refuse("send queue full"));
                 }
             }
@@ -266,36 +290,30 @@ pub fn call(app: &AppHandle, method: &str, options: &Value) -> Result<Value, She
     }
 }
 
-/// Close a socket the page did not ask to close, and tell it why.
-fn drop_socket(app: &AppHandle, id: &str, code: u16, reason: &str) {
+/// Close a socket the page did not ask to close, and tell the page why.
+/// `owner`: the socket's own task ending it (the server, the network), which
+/// says nothing if the page closed it meanwhile or a newer page owns the id.
+/// None: the shell refusing a send; a page that is gone hears nothing.
+fn end_socket(
+    app: &AppHandle,
+    id: &str,
+    owner: Option<&mpsc::Sender<String>>,
+    code: u16,
+    reason: &str,
+) {
     let sockets = app.state::<Sockets>();
     let mut state = sockets.0.lock().unwrap();
-    state.retiring.remove(id); // a page that is gone hears nothing
-    let live = state.sockets.remove(id).is_some();
-    drop(state);
 
-    if live {
-        crate::emit(
-            app,
-            PLUGIN,
-            "close",
-            json!({"id": id, "code": code, "reason": reason}),
-            false,
-        );
+    if owner.is_none() {
+        state.retiring.remove(id);
     }
-}
 
-/// Our socket ended on its own (the server, the network): tell the page,
-/// unless the page closed it or a newer page owns the map.
-fn finished(app: &AppHandle, id: &str, tx: &mpsc::Sender<String>, code: u16, reason: &str) {
-    let sockets = app.state::<Sockets>();
-    let mut state = sockets.0.lock().unwrap();
-
-    if state
+    let ours = state
         .sockets
         .get(id)
-        .is_some_and(|ours| ours.tx.same_channel(tx))
-    {
+        .is_some_and(|entry| owner.map_or(true, |tx| entry.tx.same_channel(tx)));
+
+    if ours {
         state.sockets.remove(id);
         drop(state);
         crate::emit(
@@ -401,7 +419,7 @@ impl Task {
     /// The socket ended on its own: tell the page, unless it closed us.
     fn end(&self, code: u16, reason: &str) {
         if let Some(tx) = self.marker.upgrade() {
-            finished(&self.app, &self.id, &tx, code, reason);
+            end_socket(&self.app, &self.id, Some(&tx), code, reason);
         }
     }
 }
@@ -488,6 +506,14 @@ fn tls_failure(e: std::io::Error) -> (u16, String) {
                     ": it is for a different name"
                 }
                 C::UnknownIssuer => ": it is signed by an unknown authority",
+                // The device's clock may be what is wrong: worth retrying.
+                C::NotValidYet | C::NotValidYetContext { .. } => {
+                    return (
+                        1006,
+                        "the server's certificate is not valid yet: is this device's clock right?"
+                            .into(),
+                    );
+                }
                 _ => ": it may be self-signed",
             };
             (
@@ -517,7 +543,7 @@ fn tls_connector() -> Result<tokio_rustls::TlsConnector, String> {
 }
 
 /// `[::1]` → `::1`; anything else as given, trimmed.
-pub fn clean_host(host: &str) -> String {
+fn clean_host(host: &str) -> String {
     let host = host.trim();
     host.strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
@@ -525,11 +551,11 @@ pub fn clean_host(host: &str) -> String {
         .to_owned()
 }
 
-pub fn port_allowed(port: u16) -> bool {
+fn port_allowed(port: u16) -> bool {
     !BAD_PORTS.contains(&port)
 }
 
-pub fn check_send_line(line: &str) -> Result<(), &'static str> {
+fn check_send_line(line: &str) -> Result<(), &'static str> {
     if line.is_empty() {
         Err("an empty line")
     } else if line.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0) {
@@ -546,7 +572,7 @@ fn command_of(line: &str) -> &str {
     line.split(' ').next().unwrap_or("")
 }
 
-pub fn is_registration(line: &str) -> bool {
+fn is_registration(line: &str) -> bool {
     let command = command_of(line);
     REGISTRATION.iter().any(|c| c.eq_ignore_ascii_case(command))
 }
@@ -554,21 +580,27 @@ pub fn is_registration(line: &str) -> bool {
 /// A server's first line: tags, a prefix (an ircd prefixes its numerics),
 /// or a command an ircd sends unprompted. An HTTP status line, a Redis
 /// `-ERR` or an SMTP `220` greeting is none of these.
-pub fn looks_like_irc(line: &str) -> bool {
+fn looks_like_irc(line: &str) -> bool {
     if line.starts_with('@') || line.starts_with(':') {
         return true;
     }
 
+    // Without a prefix, only what a server says before it knows us, and
+    // with a parameter: a bare `ERROR` is memcached's answer to anything.
     let command = command_of(line);
-    ["PING", "NOTICE", "ERROR", "CAP", "AUTHENTICATE"]
-        .iter()
-        .any(|c| c.eq_ignore_ascii_case(command))
+    let has_param = line
+        .split_once(' ')
+        .is_some_and(|(_, rest)| !rest.trim().is_empty());
+    has_param
+        && ["PING", "NOTICE", "ERROR"]
+            .iter()
+            .any(|c| c.eq_ignore_ascii_case(command))
 }
 
 /// The complete lines in `buf` (LF-terminated, a trailing CR stripped, empty
 /// ones dropped), decoded; the unterminated rest stays in `buf`. A line over
 /// MAX_LINE, finished or not, is an error.
-pub fn take_lines(buf: &mut Vec<u8>) -> Result<Vec<String>, &'static str> {
+fn take_lines(buf: &mut Vec<u8>) -> Result<Vec<String>, &'static str> {
     let mut lines = Vec::new();
     let mut start = 0;
 
@@ -602,7 +634,7 @@ pub fn take_lines(buf: &mut Vec<u8>) -> Result<Vec<String>, &'static str> {
 }
 
 /// UTF-8, or Latin-1 for a line that is not (older networks and clients).
-pub fn decode(bytes: &[u8]) -> String {
+fn decode(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {
         Ok(text) => text.to_owned(),
         Err(_) => bytes.iter().map(|&b| b as char).collect(),
@@ -708,6 +740,9 @@ mod tests {
             "+OK",
             "SSH-2.0-OpenSSH_9.6",
             "220 smtp ready ESMTP",
+            "ERROR",
+            "ERROR ",
+            "CAP LS 302",
         ] {
             assert!(!looks_like_irc(line), "{line}");
         }

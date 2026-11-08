@@ -373,12 +373,6 @@ export function fromForm(data: Record<string, unknown>, existing?: SavedNetwork)
 		}
 	}
 
-	// The connection select sends `websocket` (or a cleared value) to go
-	// back from TCP: the loop above would keep the stored `tcp` for it.
-	if ("transport" in data && data.transport !== "tcp") {
-		delete base.transport;
-	}
-
 	// A blank password field in the edit form means "keep what I had".
 	if (existing && asString(data.saslPassword) === "" && existing.saslPassword) {
 		base.saslPassword = existing.saslPassword;
@@ -590,15 +584,11 @@ export function findMatching(
 			hostnameOf(net.host).toLowerCase() === h &&
 			net.port === port &&
 			net.nick.toLowerCase() === n &&
-			net.transport === transport
+			(net.transport === "tcp") === (transport === "tcp")
 	);
 }
 
-/**
- * The stored entry with the connect options laid over it (undefined options
- * keep the stored value). The connection type is the exception: options
- * without `transport: "tcp"` are a WebSocket connection, whatever was stored.
- */
+/** The stored entry with the connect options laid over it (undefined options keep the stored value). */
 export function mergeOptions(
 	existing: SavedNetwork | undefined,
 	uuid: string,
@@ -610,10 +600,6 @@ export function mergeOptions(
 		if (value !== undefined) {
 			merged[key] = value;
 		}
-	}
-
-	if (options.transport !== "tcp") {
-		delete merged.transport;
 	}
 
 	return merged;
