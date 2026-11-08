@@ -34,14 +34,7 @@ import {
 	termsFor,
 } from "./channelStore";
 import {buildContext} from "./context";
-import {
-	type Detection,
-	LanguagePrior,
-	declaredLanguages,
-	detectLanguage,
-	detectionSkip,
-	sourceFor,
-} from "./detect";
+import {type Detection, LanguagePrior, detectLanguage, detectionSkip, sourceFor} from "./detect";
 import {ReplayBatches, historyQueueOrder, isChatLine, isEligible, plainTextOf} from "./eligibility";
 import {namesFor} from "./names";
 import {fromLocaleTag} from "./languages";
@@ -391,14 +384,6 @@ export function pairVerdict(from: string | null, to: string): RouteVerdict {
 	}
 
 	return explainRoute(service.routeTable, liveCatalog(), input);
-}
-
-/** What a channel is known to write: its declared languages and its prior. */
-function knownLanguages(prior: LanguagePrior, declared: readonly string[]): string[] {
-	const top = prior.top();
-	const languages = declaredLanguages(declared);
-
-	return top ? [...languages, top] : languages;
 }
 
 function priorFor(network: ClientNetwork, channel: ClientChan): LanguagePrior {
@@ -828,7 +813,7 @@ export async function readTopic(network: ClientNetwork, channel: ClientChan): Pr
 
 	const to = readingLanguage();
 
-	if (detectionSkip(detection, to, knownLanguages(prior, settings.languages))) {
+	if (detectionSkip(detection, to)) {
 		// Already readable: no entry, the header shows the topic as it is.
 		items.delete(id);
 		store.commit("translationRemoveMany", [id]);
@@ -1032,16 +1017,16 @@ export async function translateMessage(
 				candidates: store.state.translations[message.id]?.candidates ?? [],
 		  }
 		: await detectLanguage(plainText(), prior, initial.languages, {
-				// The language the reader already reads, so a channel that
-				// declares one other can place a line too short for franc. The
-				// switch is re-read after the await below; this is the target as
-				// it stands now, which is the one the reader is looking at.
+				// The language the reader already reads: a lone verdict with it
+				// in the running is no verdict (detect.ts `decide`). The switch
+				// is re-read after the await below; this is the target as it
+				// stands now, which is the one the reader is looking at.
 				exclude: readingLanguage(),
 				// The user's own lines say what they write, not the channel.
 				learn: !message.self,
 		  });
 
-	// Detection (the first call also awaits the franc chunk download) can
+	// Detection (the first call also awaits the identifiers' chunk) can
 	// take a while: re-read the switch afterwards, since a switch-off or a
 	// target change during that wait must not still ship a translation (a
 	// target change queues the channel again itself), and a channel left
@@ -1063,9 +1048,7 @@ export async function translateMessage(
 	// Placed in the reading language, not placed at all, or placed on doubt
 	// in a language the channel is not known to write: left alone (detect.ts
 	// `detectionSkip`), and the toolbar's Translate still translates it.
-	const skip = force
-		? null
-		: detectionSkip(detection, to, knownLanguages(prior, settings.languages));
+	const skip = force ? null : detectionSkip(detection, to);
 
 	if (skip) {
 		markSkipped(message.id, skip, to, detection);
@@ -1074,8 +1057,8 @@ export async function translateMessage(
 
 	// What the line is translated from, whether the source is left to the
 	// engine, and what the router may still be told (detect.ts `sourceFor`):
-	// a chosen source as it stands, a verdict that is neither missing nor
-	// weak, or nothing at all. Unsure means the prompt says nothing about the
+	// a chosen source as it stands, the detector's verdict, or nothing at
+	// all. Unsure means the prompt says nothing about the
 	// source (`context.sourceHint` is null) -- the channel's prior is no
 	// better a guess, having announced a Spanish line in a German channel as
 	// "probably German" -- while `routeHint` keeps the line routable.
@@ -1088,10 +1071,10 @@ export async function translateMessage(
 		spans: protectedText.spans,
 		meta: protectedText.meta,
 		from: source,
-		// Routing only, never the prompt: a weak verdict names no source in
-		// the request the model reads, but still steers the router, so a
-		// CPU-only device can route the line to a seq2seq model instead of
-		// leaving it untranslated (detect.ts `sourceFor`).
+		// Routing only, never the prompt: where the request names no source,
+		// the channel's prior still steers the router, so a CPU-only device
+		// can route the line to a seq2seq model instead of leaving it
+		// untranslated (detect.ts `sourceFor`).
 		routeHint,
 		to,
 		context: buildContext(channel, message, {

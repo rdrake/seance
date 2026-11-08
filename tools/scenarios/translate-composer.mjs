@@ -47,7 +47,7 @@
 // typed -- so it runs under `--mobile` only, and the desktop run asserts
 // the opposite instead: there a trailing newline is a deliberate
 // Shift+Enter, an edit of the draft, and it drops the strip.
-// Detection is real (franc); only the engine is scripted.
+// Detection is real (fastText and ELD); only the engine is scripted.
 //
 //   NODE_ENV=development pnpm build && python3 -m http.server -d public 8021 &
 //   CHROME_BIN=/seance/tmp/chrome-pw.sh node tools/browser-drive.mjs tools/scenarios/translate-composer.mjs
