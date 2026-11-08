@@ -63,6 +63,12 @@ export type SavedNetwork = ConnectOptions & {
 	notifyEnabled?: boolean;
 	/** Slash commands run in the lobby after every registration, one per entry. */
 	commands?: string[];
+	/**
+	 * A bouncer's control connection (irc/bouncer.ts): the ids of its networks
+	 * already offered here. Each is added as a network of its own once; one the
+	 * user removes is not added again.
+	 */
+	bouncerSeen?: string[];
 	/** Epoch ms of the last connect; the picker lists most recent first. */
 	lastUsed?: number;
 	/** Newest message seen on this network (see {@link NetworkCursor}). */
@@ -270,6 +276,16 @@ export function normalize(raw: Record<string, unknown>): SavedNetwork | undefine
 		net.lastUsed = raw.lastUsed;
 	}
 
+	const netId = asString(raw.bouncerNetId);
+
+	if (netId) {
+		net.bouncerNetId = netId;
+	}
+
+	if (Array.isArray(raw.bouncerSeen)) {
+		net.bouncerSeen = raw.bouncerSeen.map(asString).filter(Boolean);
+	}
+
 	const cursor = asCursor(raw.cursor);
 
 	if (cursor) {
@@ -397,6 +413,7 @@ export function toConnectOptions(net: SavedNetwork): ConnectOptions {
 		sasl: net.sasl,
 		saslAccount: net.saslAccount,
 		saslPassword: net.saslPassword,
+		...(net.bouncerNetId ? {bouncerNetId: net.bouncerNetId} : {}),
 	};
 }
 
@@ -566,8 +583,11 @@ export function findMatching(host: string, port: number, nick: string): SavedNet
 	const h = hostnameOf(host).toLowerCase();
 	const n = nick.trim().toLowerCase();
 
+	// A network added from a bouncer's list shares its host, port and nick
+	// with the bouncer's own entry, which is the one the connect form means.
 	return read().find(
 		(net) =>
+			!net.bouncerNetId &&
 			hostnameOf(net.host).toLowerCase() === h &&
 			net.port === port &&
 			net.nick.toLowerCase() === n

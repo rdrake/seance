@@ -29,7 +29,8 @@ import type {
 	SharedServerOptions,
 } from "../../../shared/types/network";
 import type {PushSession, ServerToClientEvents} from "../../../shared/types/socket-events";
-import {CapNegotiator, SEANCE_CAPS, webpushVapidOf, WEBPUSH_CAP} from "./caps";
+import {bindLine, isBouncerControl, listNetworks, type BouncerNetwork} from "./bouncer";
+import {CapNegotiator, SEANCE_CAPS, SOJU_WEBPUSH_CAP, webpushVapidOf, WEBPUSH_CAP} from "./caps";
 import {casefold, namesEqual} from "./casemap";
 import {Channel, MsgRef, SAID_TYPES, countsAsUnread} from "./channel";
 import {QueryLog} from "./querylog";
@@ -294,6 +295,12 @@ export interface IrcClientOptions extends ConnectOptions {
 	 * way back to the connect screen to fix them.
 	 */
 	onSaslRejected?: () => void;
+	/**
+	 * A bouncer's control connection listed its networks (bouncer.ts). The
+	 * manager adds the new ones as networks of their own and returns their
+	 * names, for the lobby to say so.
+	 */
+	onBouncerNetworks?: (networks: BouncerNetwork[]) => string[];
 }
 
 /** What to try after a SASL login the deploy insists on did not happen. */
@@ -1430,6 +1437,13 @@ export class IrcClient {
 				lines.push(`METADATA * SUB ${MUTE_KEY} ${PRESENCE_KEY} ${MODE_KEY} ${CLOSED_KEY}`);
 			}
 
+			// Bound to one of a bouncer's networks (bouncer.ts): said before CAP END.
+			const bind = bindLine(this);
+
+			if (bind) {
+				lines.unshift(bind);
+			}
+
 			const line = registrationAwayLine(this);
 			return line ? [...lines, line] : lines;
 		};
@@ -1780,6 +1794,9 @@ export class IrcClient {
 		// subscription and the Settings UI can tell the two cases apart. The
 		// WEBPUSH REGISTER itself is emitted later through the bus — a
 		// REGISTER sent before CAP END is silently dropped by nefarious2.
+		// A bouncer's control connection: what networks it has (bouncer.ts).
+		listNetworks(this);
+
 		this.dispatch("webpush:available", {
 			network: this.uuid,
 			vapid: this.webpushVapid(),
@@ -1800,9 +1817,32 @@ export class IrcClient {
 			// (bounce_setup_local_alias): it is already on the wire, and the
 			// note extends the wait. Otherwise nothing comes, so a short wait.
 			awaitRestoration(this, RESTORE_QUIET_MS);
+		} else if (this.behindBouncer) {
+			// soju and ZNC send the channels they hold right behind the MOTD:
+			// wait for them before deciding what is left to JOIN (autojoin).
+			awaitRestoration(this, RESTORE_QUIET_MS);
 		} else {
 			this.restorationSettled();
 		}
+	}
+
+	/**
+	 * This connection goes through a bouncer that keeps its own channel list:
+	 * soju (`BOUNCER_NETID`, `soju.im/bouncer-networks`) or ZNC (its `znc.in/*`
+	 * caps). What it holds is what the user is in, on every device.
+	 */
+	get behindBouncer(): boolean {
+		if (this.isupport.tokens.has("BOUNCER_NETID")) {
+			return true;
+		}
+
+		for (const name of this.caps.available.keys()) {
+			if (name.startsWith("znc.in/") || name === "soju.im/bouncer-networks") {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -1836,16 +1876,32 @@ export class IrcClient {
 	}
 
 	/**
-	 * JOIN every autojoin channel we are not in, the active one's catch-up
+	 * JOIN every autojoin channel we are not in (behind a bouncer that holds
+	 * channels, none: see {@link behindBouncer}), the active one's catch-up
 	 * pipelined behind it: the server processes lines in order, so by the
 	 * time it reads the history request we are a member. Saves a round trip
 	 * on the channel the user is looking at.
 	 */
 	autojoin(): void {
-		const joining = this.channels.filter(
-			(chan) =>
-				chan.type === ChanType.CHANNEL && chan.autoJoin && chan.state === ChanState.PARTED
-		);
+		// A bouncer that gave channels back owns the list: one it did not give
+		// back was left from another client, and stays left here. A bouncer
+		// that gave none back (a new one, or one not on the network yet) is
+		// sent the saved channels, as any server is.
+		// A bouncer's control connection has no channels at all (bouncer.ts).
+		const bouncerHolds =
+			isBouncerControl(this) ||
+			(this.behindBouncer &&
+				this.channels.some(
+					(chan) => chan.type === ChanType.CHANNEL && chan.state === ChanState.JOINED
+				));
+		const joining = bouncerHolds
+			? []
+			: this.channels.filter(
+					(chan) =>
+						chan.type === ChanType.CHANNEL &&
+						chan.autoJoin &&
+						chan.state === ChanState.PARTED
+			  );
 
 		if (joining.length > 0) {
 			this.joinChannels(joining.map((chan) => ({name: chan.name, key: chan.shared.key})));
@@ -1869,19 +1925,24 @@ export class IrcClient {
 
 	/**
 	 * The VAPID public key this server advertises for Web Push, when the
-	 * `draft/webpush` capability is enabled: the `VAPID` ISUPPORT token the
+	 * `draft/webpush` capability (or soju's `soju.im/webpush`) is enabled: the `VAPID` ISUPPORT token the
 	 * spec has the server send once the cap is on, or nefarious2's cap 302
 	 * value (`vapid=<key>`). The cap is requested bare too, as the spec has
 	 * it offered; undefined when the network cannot push (cap missing or no
 	 * key), and nothing subscribes then.
 	 */
 	webpushVapid(): string | undefined {
-		if (!this.caps.hasCapability(WEBPUSH_CAP)) {
+		// soju offers only its own name for it (caps.ts SOJU_WEBPUSH_CAP).
+		const cap = [WEBPUSH_CAP, SOJU_WEBPUSH_CAP].find((name) => this.caps.hasCapability(name));
+
+		// A bouncer's control connection carries no conversations; its bound
+		// networks subscribe for theirs (bouncer.ts).
+		if (!cap || isBouncerControl(this)) {
 			return undefined;
 		}
 
 		return (
-			webpushVapidOf(this.caps.value(WEBPUSH_CAP) ?? "") ??
+			webpushVapidOf(this.caps.value(cap) ?? "") ??
 			// The same checks and normal form for the 005 token.
 			webpushVapidOf(`vapid=${this.isupport.vapid ?? ""}`)
 		);

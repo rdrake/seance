@@ -1,4 +1,5 @@
 {
+  "bouncer.networksAdded": "Added this bouncer's networks: {names}",
   "browse.all": "All channels",
   "browse.aria": "Channel browser for {network}",
   "browse.ask": "Load channels",

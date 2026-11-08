@@ -40,6 +40,16 @@ Replies, reactions, deletion and edits (bus-contract §1.4): `Channel.idByMsgid`
 
 ## A login can give its dial back
 
+## Bouncers: soju and ZNC
+
+Neither needs a profile; each is told by what it offers. `IrcClient.behindBouncer` is true with `BOUNCER_NETID` (soju bound to a network), `soju.im/bouncer-networks` or any `znc.in/*` cap.
+
+- **The bouncer owns the channel list.** Behind a bouncer the autojoin waits for the bouncer's own JOINs after the MOTD (`awaitRestoration`, as for nefarious2's held session). If it gave any back, nothing else is JOINed: a saved channel it did not give back was left from another client and stays a parted placeholder. A bouncer that gave none back (new, or not on the network yet) gets the saved list as any server does. Tests: `test/irc/bouncer.ts`.
+- **ZNC's buffer replay** (`BATCH +x znc.in/playback <target>`, on every attach) goes the catch-up's way (`history.ts` `zncPlaybackBatch` → `deliverCatchup`): appended, unread but silent, a closed query reopened only by what was said since. ZNC has no msgids, so a line not newer than the conversation's newest message or action (`Channel.newestChatAt`) is dropped: a buffer ZNC keeps (`AutoClearChanBuffer` off) comes back on every attach.
+- **soju's networks** (`bouncer.ts`, `soju.im/bouncer-networks` and `-notify`): a login without a network is the control connection (the cap, and no `BOUNCER_NETID`). It JOINs nothing and asks `BOUNCER LISTNETWORKS` through the background queue; the manager (`addBouncerNetworks`) adds each network the entry has not offered before (`SavedNetwork.bouncerSeen`, so one the user removes is not added back) as a saved network of its own: the same server and login, `join` empty, `bouncerNetId` set. A bound entry sends `BOUNCER BIND <id>` in the `CAP END` flush (`finalLines`). The control connection does not subscribe to push; the bound ones do. `findMatching` skips bound entries, so the connect form finds the bouncer's own.
+- **Push** through soju's `soju.im/webpush`: the same command, `VAPID` token and one-line payload as `draft/webpush` (`caps.ts` `SOJU_WEBPUSH_CAP`).
+- Search on soju: `docs/resources/client-features.md` § Searching history.
+
 ## `/who`
 
 **`/who`** (`commands/who.ts`, `handlers/who.ts`): one `who` message per query, rendered as a table by `MessageTypes/who.vue` in the channel the mask names (or where it was typed). With `WHOX` in ISUPPORT the query asks for `%tcuhsnfdar,<token>` (account names included; the token is checked on every 354), otherwise a plain `WHO` and 352 rows; queries are matched to replies in order, a user's own `%fields` spec is sent as typed and answered as plain text, and a reply nobody asked for lands in the lobby as text. The table reads only the base tokens (`--body-color-muted`, `--link-color`, `--window-heading-color`) so every theme colours it; the server is a tooltip on the host, not a column. Tests: `test/irc/who.ts`; browser check: `tools/scenarios/who-list.mjs` (also `--mobile --width=390 --height=844`).

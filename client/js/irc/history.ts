@@ -159,6 +159,12 @@ export function takesMsgidRefs(client: IrcClient): boolean {
 	return types === undefined || types.split(",").includes("msgid");
 }
 
+/** Whether the server takes `timestamp=` references (MSGREFTYPES; unlisted means any). */
+export function takesTimestampRefs(client: IrcClient): boolean {
+	const types = client.isupport.tokens.get("MSGREFTYPES");
+	return types === undefined || types.split(",").includes("timestamp");
+}
+
 /** `msgid=…` when we have one and the server takes it, else `timestamp=<ISO 8601>`. */
 export function formatRef(client: IrcClient, ref: MsgRef): string {
 	if (ref.msgid && takesMsgidRefs(client)) {
@@ -702,6 +708,32 @@ export const chathistoryBatch: BatchHandler = (client, batch) => {
 		const {messages, after} = replay(client, chan, batch.messages);
 		deliverPrepend(client, chan, messages, false);
 		runAfter(after);
+	}
+};
+
+/** ZNC's buffer replay on attach: `BATCH +x znc.in/playback <target>`. */
+export const ZNC_PLAYBACK_BATCH = "znc.in/playback";
+
+/**
+ * ZNC's buffer replay (`BATCH +x znc.in/playback <target>`, sent on every
+ * attach, and by the `*playback` module). The lines are stored ones, so they
+ * go the catch-up's way: appended, counted as unread but silent, a closed
+ * query reopened only by what was said since. ZNC has no msgids, so what is
+ * not newer than the newest message already shown is dropped: a buffer ZNC
+ * does not clear (`AutoClearChanBuffer` off, or the `*playback` module)
+ * comes back on every attach.
+ */
+export const zncPlaybackBatch: BatchHandler = (client, batch) => {
+	const target = batch.params[0] ?? "";
+	const chan = target ? client.findChannel(target) : undefined;
+	const newest = chan?.newestChatAt;
+	const lines =
+		newest === undefined
+			? batch.messages
+			: batch.messages.filter((line) => client.timeOf(line).getTime() > newest);
+
+	if (lines.length > 0) {
+		deliverCatchup(client, target, lines);
 	}
 };
 

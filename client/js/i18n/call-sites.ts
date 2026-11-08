@@ -5,6 +5,7 @@
 // a key assembled at runtime translates unpredictably, even when it
 // happens to resolve.
 export const STATIC_CALL_SITES = new Set<string>([
+	"bouncer.networksAdded",
 	"browse.all",
 	"browse.aria",
 	"browse.ask",

@@ -130,6 +130,13 @@ export class Channel {
 	 * clock, so they never move it.
 	 */
 	newestServerAt: number | undefined = undefined;
+	/**
+	 * Unix ms of the newest message or action shown here, whatever stamped it:
+	 * a bouncer's buffer replay without msgids (ZNC, history.ts
+	 * `zncPlaybackBatch`) skips what is not newer, so an attach that replays
+	 * the same buffer again shows nothing twice.
+	 */
+	newestChatAt: number | undefined = undefined;
 	/** History has been requested at least once (so `newestRef` is a valid catch-up reference). */
 	historyRequested = false;
 	/**
@@ -225,6 +232,7 @@ export class Channel {
 
 		if (msg.type === MessageType.MESSAGE || msg.type === MessageType.ACTION) {
 			ref.reactable = true;
+			this.newestChatAt = Math.max(this.newestChatAt ?? 0, ref.time.getTime());
 		}
 
 		this.msgRefs.set(msg.id, ref);
