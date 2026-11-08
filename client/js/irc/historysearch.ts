@@ -35,7 +35,7 @@ import type {IrcClient} from "./client";
 import type {BatchHandler, OpenBatch} from "./handlers/batch";
 import {formatLine, MAX_LINE_BYTES, utf8ByteLength, type IrcMessage} from "./message";
 import type {Channel} from "./channel";
-import {historyLimit} from "./history";
+import {historyLimit, takesMsgidRefs} from "./history";
 import {applyEdit, applyReaction, applyRedaction} from "../helpers/messageUpdates";
 import {sameAuthor} from "../helpers/pastRows";
 import {ignoreListFor} from "../ignore";
@@ -94,7 +94,7 @@ export function pendingSearches(client: IrcClient): readonly PendingSearch[] {
 
 /**
  * The spec's single parameter: `key=value` joined by `;`, values escaped like
- * message tags. nefarious2 spells it differently (its profile's `searchParams`).
+ * message tags, as soju reads it. nefarious2 reads it too (evilnet/nefarious2#152).
  */
 export function specSearchParams(attrs: SearchAttrs): string[] {
 	const escape = (value: string) =>
@@ -250,7 +250,8 @@ function sendRequest(
 function canAskContext(client: IrcClient): boolean {
 	return (
 		client.caps.hasCapability("draft/chathistory") &&
-		client.caps.hasCapability("labeled-response")
+		client.caps.hasCapability("labeled-response") &&
+		takesMsgidRefs(client) // the window and the parent are asked for by msgid
 	);
 }
 
@@ -261,7 +262,7 @@ export function requestSearch(client: IrcClient, requestId: number, attrs: Searc
 		{kind: "results", requestId},
 		client.caps.hasCapability(SEARCH_CAP) && client.caps.hasCapability("batch"),
 		"SEARCH",
-		client.profile.searchParams?.(attrs) ?? specSearchParams(attrs)
+		specSearchParams(attrs)
 	);
 }
 

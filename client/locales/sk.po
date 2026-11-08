@@ -6,6 +6,534 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);\n"
 
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): the same mask is already on the list.
+#: client/components/BanDialog.vue
+msgctxt "ban.alreadySet"
+msgid "This ban is already set."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): said after it worked, before the dialog closes.
+#: client/components/BanDialog.vue
+msgctxt "ban.banned"
+msgid "Banned."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): button that closes it.
+#: client/components/BanDialog.vue
+msgctxt "ban.cancel"
+msgid "Cancel"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): the mask field is empty.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.check.empty"
+msgid "Enter a mask."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): why a typed mask cannot be sent.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.check.invalid"
+msgid "A mask can't contain spaces or start with a colon."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): a ban on the list already catches this. {mask} is that ban's mask, verbatim.
+#: client/components/BanDialog.vue
+msgctxt "ban.covered"
+msgid "Already covered by {mask}."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): link that switches the dialog to the ban just named.
+#: client/components/BanDialog.vue
+msgctxt "ban.editThat"
+msgid "Edit that ban"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): switch that also kicks whoever the mask catches in the channel.
+#: client/components/BanDialog.vue
+msgctxt "ban.kick"
+msgid "Kick them too"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): note when too many people match to kick from here.
+#: client/components/BanDialog.vue
+msgctxt "ban.kickTooMany"
+msgid "More than {count} person matches, so nobody will be kicked."
+msgid_plural "More than {count} people match, so nobody will be kicked."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): said after a kick with no new ban, before the dialog closes.
+#: client/components/BanDialog.vue
+msgctxt "ban.kicked"
+msgid "Kicked."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): shown while the server is asked for the person's address.
+#: client/components/BanDialog.vue
+msgctxt "ban.lookingUp"
+msgid "Looking them up…"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): label of the mask field.
+#: client/components/BanDialog.vue
+msgctxt "ban.mask"
+msgid "Mask"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): placeholder of the mask field: the shape of a mask. Leave it as it is unless your language writes these differently.
+#: client/components/BanDialog.vue
+msgctxt "ban.maskPlaceholder"
+msgid "nick!user@host"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): nothing could be sent.
+#: client/components/BanDialog.vue
+msgctxt "ban.notConnected"
+msgid "Not sent: the connection is down."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): who in the channel matches the mask, when there are too many to name. {nicks} is a list of nicks; {more} is a number.
+#: client/components/BanDialog.vue
+msgctxt "ban.preview.more"
+msgid "Matches {count} person here now: {nicks} and {more} more"
+msgid_plural "Matches {count} people here now: {nicks} and {more} more"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): nobody in the channel matches the mask.
+#: client/components/BanDialog.vue
+msgctxt "ban.preview.none"
+msgid "Matches nobody here now"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): who in the channel matches the mask. {nicks} is a list of nicks, verbatim.
+#: client/components/BanDialog.vue
+msgctxt "ban.preview.some"
+msgid "Matches {count} person here now: {nicks}"
+msgid_plural "Matches {count} people here now: {nicks}"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): label of the reason field. A ban has no reason of its own; this goes with the kick.
+#: client/components/BanDialog.vue
+msgctxt "ban.reason"
+msgid "Reason for the kick"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): placeholder of the reason field.
+#: client/components/BanDialog.vue
+msgctxt "ban.reasonPlaceholder"
+msgid "Optional"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): button that removes the ban being edited.
+#: client/components/BanDialog.vue
+msgctxt "ban.remove"
+msgid "Remove ban"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): said after the ban went, before the dialog closes.
+#: client/components/BanDialog.vue
+msgctxt "ban.removed"
+msgid "Removed."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): warning that the server will delete bans this wider one covers.
+#: client/components/BanDialog.vue
+msgctxt "ban.replaces"
+msgid "Replaces {count} narrower ban."
+msgid_plural "Replaces {count} narrower bans."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): button that replaces the ban with the edited mask.
+#: client/components/BanDialog.vue
+msgctxt "ban.save"
+msgid "Save"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): said after an edit worked, before the dialog closes.
+#: client/components/BanDialog.vue
+msgctxt "ban.saved"
+msgid "Saved."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): the button's text while the server answers.
+#: client/components/BanDialog.vue
+msgctxt "ban.sending"
+msgid "Sending…"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): no answer in time.
+#: client/components/BanDialog.vue
+msgctxt "ban.silent"
+msgid "The server did not answer."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): button that sets the ban.
+#: client/components/BanDialog.vue
+msgctxt "ban.submit"
+msgid "Ban"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): the same button when the ban is already covered and only the kick is left to do.
+#: client/components/BanDialog.vue
+msgctxt "ban.submitKick"
+msgid "Kick"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): tooltip of a suggested mask matching a logged-in account.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.suggest.account"
+msgid "Their account"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): tooltip of a suggested mask matching anyone on the person's host.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.suggest.host"
+msgid "This address"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): tooltip of a suggested mask matching the person's username on their host.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.suggest.identHost"
+msgid "This username at this address"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): tooltip of a suggested mask an IRC operator can see.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.suggest.ip"
+msgid "Their real IP address"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): tooltip of a suggested mask matching the nick alone.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.suggest.nick"
+msgid "This nick, from anywhere"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): tooltip of the widest suggested mask.
+#: client/js/helpers/channelBans.ts
+msgctxt "ban.suggest.wide"
+msgid "Everyone on this provider"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): title when opened with nobody in mind. {channel} is verbatim.
+#: client/components/BanDialog.vue
+msgctxt "ban.titleAdd"
+msgid "Add a ban to {channel}"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): title when changing a ban already set. {channel} is verbatim.
+#: client/components/BanDialog.vue
+msgctxt "ban.titleEdit"
+msgid "Edit ban in {channel}"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): title when it is about someone. {nick} and {channel} are verbatim.
+#: client/components/BanDialog.vue
+msgctxt "ban.titleNick"
+msgid "Ban {nick} from {channel}"
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): the server accepted the command and did nothing.
+#: client/components/BanDialog.vue
+msgctxt "ban.unchanged"
+msgid "The server changed nothing. It may not take this kind of ban, or a ban already covers it."
+msgstr ""
+
+#. Ban dialog (a form that adds, changes or removes one channel ban; a mask is the pattern such as *!*@host that says who is banned): warning that the mask catches the reader.
+#: client/components/BanDialog.vue
+msgctxt "ban.you"
+msgid "This would ban you too."
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): button that opens the empty ban dialog.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.add"
+msgid "Add ban"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): note at the bottom when the server had nothing to remove.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.alreadyGone"
+msgid "That ban was already gone."
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): accessible name of the window. {channel} is the channel's name, verbatim.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.aria"
+msgid "Bans in {channel}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): how many bans the list shows after filtering.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.count"
+msgid "{count} ban"
+msgid_plural "{count} bans"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): entry on a row's menu: opens the ban in the ban dialog.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.edit"
+msgid "Edit…"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): the channel has no bans. {channel} is the channel's name, verbatim.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.empty"
+msgid "No bans in {channel}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): filter chip showing bans on a logged-in account.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.filter.account"
+msgid "Accounts"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): filter chip showing bans on a nick, user or host.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.filter.address"
+msgid "Addresses"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): filter chip showing every ban.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.filter.all"
+msgid "All"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): filter chip showing the bans the reader set.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.filter.mine"
+msgid "Set by you"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): filter chip showing every other kind of ban (real name, channel, muted…).
+#: client/components/Windows/BanList.vue
+msgctxt "bans.filter.other"
+msgid "Other"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): accessible name of the row of filter chips.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.filters"
+msgid "Filter bans"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that matches a logged-in account.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.account"
+msgid "Account"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that matches people in another channel.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.channel"
+msgid "Other channel"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a kind of extended ban Seance has no name for.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.extended"
+msgid "Extended"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that borrows another channel's ban list.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.linked"
+msgid "Shared list"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that matches a mark the server put on people.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.mark"
+msgid "Marked"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that stops people changing their nick.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.noNick"
+msgid "No nick changes"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that stops people talking but lets them stay.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.quiet"
+msgid "Muted"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): tag on a ban that matches the real name field.
+#: client/js/irc/profiles/nefarious/extbans.ts
+msgctxt "bans.kind.realname"
+msgid "Real name"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): how many of the bans the server allows a channel are taken. {used} and {limit} are numbers.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.limit"
+msgid "{used} of {limit} used"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): shown while the server sends the list.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.loading"
+msgid "Loading…"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): shown when the list never came.
+#: client/js/irc/banList.ts
+msgctxt "bans.noAnswer"
+msgid "The server did not answer."
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): empty result of a search. {query} is what was typed, verbatim.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.noMatches"
+msgid "No ban matches {query}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): the chosen filter has no bans.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.noneHere"
+msgid "Nothing in this view"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): explanation under "Not connected".
+#: client/components/Windows/BanList.vue
+msgctxt "bans.offlineNote"
+msgid "The list comes from the server; it loads once the network is back."
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): note above the list when the reader cannot change bans.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.readOnly"
+msgid "Only channel operators can change these."
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): heading above the server's own words when it refuses the list.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.refused"
+msgid "The server would not show this list"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): note at the bottom after several bans went.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.removedMany"
+msgid "Removed {count} ban"
+msgid_plural "Removed {count} bans"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): note at the bottom after a ban went. {mask} is the ban's mask, verbatim.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.removedOne"
+msgid "Removed {mask}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): accessible name of the search field.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.search"
+msgid "Search bans"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): placeholder of the search field. Pasting someone's user@host finds the bans that catch them.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.searchPlaceholder"
+msgid "Search masks and who set them, or paste an address"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): under a ban's mask when the server gave no time. {who} is a nick, verbatim.
+#: client/js/helpers/banMenu.ts
+msgctxt "bans.setBy"
+msgid "Set by {who}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): under a ban's mask. {who} is a nick, verbatim; {when} is a relative time such as "3 days ago".
+#: client/js/helpers/banMenu.ts
+msgctxt "bans.setByWhen"
+msgid "Set by {who}, {when}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): sort choice, alphabetical by the ban's mask.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.sort.mask"
+msgid "By mask"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): sort choice.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.sort.newest"
+msgid "Newest first"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): sort choice.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.sort.oldest"
+msgid "Oldest first"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): sort choice, alphabetical by who set the ban.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.sort.setter"
+msgid "By who set them"
+msgstr ""
+
+#. Bans window: who a ban was set by, when the server did not name anyone. Fills {who} in "Set by {who}".
+#: client/js/helpers/banMenu.ts
+msgctxt "bans.theServer"
+msgid "the server"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): the window's heading, next to the channel's name.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.title"
+msgid "Bans"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): the button on each row, and the same entry on a row's menu: removes that ban.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.unban"
+msgid "Unban"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): button that removes every ban the list shows, and the title and button of its confirmation.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.unbanAll"
+msgid "Unban {count}"
+msgid_plural "Unban these {count}"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): the confirmation before removing every ban shown. {channel} is the channel's name, verbatim.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.unbanAllText"
+msgid "Remove {count} ban from {channel}?"
+msgid_plural "Remove {count} bans from {channel}?"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): accessible name of a row's Unban button. {mask} is the ban's mask, verbatim.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.unbanMask"
+msgid "Unban {mask}"
+msgstr ""
+
+#. Bans window (a window listing one channel's bans, searched on the device; a ban keeps matching people out of the channel): button next to the note that a ban was removed: puts it back.
+#: client/components/Windows/BanList.vue
+msgctxt "bans.undo"
+msgid "Undo"
+msgstr ""
+
 #. Channel browser (a window listing the channels a network has, from the server's LIST, searched on the device): heading of the full list.
 #: client/components/Windows/ChannelBrowser.vue
 msgctxt "browse.all"
@@ -3402,12 +3930,6 @@ msgctxt "list.isEmpty"
 msgid "{kind} is empty"
 msgstr "{kind} je prázdny"
 
-#. Name of the channel-ban (+b) list, inserted into '{kind} is empty' and '{kind} for {channel}'.
-#: client/js/irc/handlers/lists.ts
-msgctxt "list.kindBans"
-msgid "Ban list"
-msgstr "Zoznam banov"
-
 #. Name of the ban-exception (+e) list, inserted into '{kind} is empty' and '{kind} for {channel}'.
 #: client/js/irc/handlers/lists.ts
 msgctxt "list.kindExcepts"
@@ -3734,6 +4256,18 @@ msgid_plural "{count} unread"
 msgstr[0] "{count} neprečítaná"
 msgstr[1] "{count} neprečítané"
 msgstr[2] "{count} neprečítaných"
+
+#. Menu on a nick in a channel: opens the ban dialog for that person.
+#: client/js/helpers/contextMenu.ts
+msgctxt "menu.ban"
+msgid "Ban…"
+msgstr ""
+
+#. Menu on a user@host address in a join, part or quit line: opens the ban dialog for that address. {channel} is the channel's name, verbatim.
+#: client/js/helpers/banMenu.ts
+msgctxt "menu.banFrom"
+msgid "Ban from {channel}…"
+msgstr ""
 
 #. The word for a group chat room, filling {type} in the context-menu mute items. Lowercase mid-sentence.
 #: client/js/helpers/contextMenu.ts
@@ -14262,24 +14796,6 @@ msgstr[0] "{count} neprečítaná správa"
 msgstr[1] "{count} neprečítané správy"
 msgstr[2] "{count} neprečítaných správ"
 
-#. Column header of the channel-ban list: the banned hostmask, verbatim server data.
-#: client/components/Special/ListBans.vue
-msgctxt "special.bans.banned"
-msgid "Banned"
-msgstr "Zabanované"
-
-#. Column header of the channel-ban list: when the ban was set, locale-formatted.
-#: client/components/Special/ListBans.vue
-msgctxt "special.bans.bannedAt"
-msgid "Banned At"
-msgstr "Dátum banu"
-
-#. Column header of the channel-ban list: the operator who set the ban, verbatim.
-#: client/components/Special/ListBans.vue
-msgctxt "special.bans.bannedBy"
-msgid "Banned By"
-msgstr "Zabanoval"
-
 #. Column header of the ban-exception list: the exempted hostmask, verbatim server data.
 #: client/components/Special/ListExcepts.vue
 msgctxt "special.excepts.exempted"
@@ -14575,6 +15091,12 @@ msgctxt "token.timeout"
 msgid "The server did not answer the token request"
 msgstr "Server neodpovedal na žiadosť o token"
 
+#. Tooltip and aria-label of a translated message's Translate action in its hover toolbar; it opens a menu: show the original, copy, retranslate.
+#: client/components/MessageActions.vue
+msgctxt "translate.action.options"
+msgid "Translation options"
+msgstr ""
+
 #. Tooltip and aria-label of the translate button in a message's hover toolbar when the message's translation was hidden; it brings it back.
 #: client/components/MessageActions.vue
 msgctxt "translate.action.showTranslation"
@@ -14686,11 +15208,11 @@ msgctxt "translate.capability.testLimit"
 msgid "Limited to {size} for testing ({key} in this browser's storage). Delete that entry and reload to use the GPU's own limit."
 msgstr "Na testovanie obmedzené na {size} ({key} v úložisku tohto prehliadača). Odstráňte túto položku a načítajte stránku znova, aby sa použil vlastný limit GPU."
 
-#. Tooltip and aria-label of a translation line's chip, skipped because the line is already in the reading language. {language} is its name in the reading language.
+#. Quiet label under a translated line in the message list, and the button for its translation options. {language} is the language the line was written in (or one or two guesses, or ?). Starts lowercase in English: it reads as a caption.
 #: client/components/TranslationLine.vue
-msgctxt "translate.chip.alreadyIn"
-msgid "Already in {language}, not translated. Translation options"
-msgstr "Už je v jazyku {language}, nepreložené. Možnosti prekladu"
+msgctxt "translate.chip.from"
+msgid "from {language}"
+msgstr ""
 
 #. Tooltip and aria-label of a translation line's chip: the languages it names, then the standard suffix.
 #: client/components/TranslationLine.vue
@@ -14698,41 +15220,43 @@ msgctxt "translate.chip.options"
 msgid "{languages}. Translation options"
 msgstr "{languages}. Možnosti prekladu"
 
-#. Tooltip and aria-label of a translation line's chip, skipped because the detector could not tell the language apart.
+#. Quiet label under the user's own translated line in the message list (its read-back), and the button for its translation options. {language} is the language the line went out in. Starts lowercase in English: it reads as a caption.
 #: client/components/TranslationLine.vue
-msgctxt "translate.chip.unsure"
-msgid "Language not told apart, not translated. Translation options"
-msgstr "Jazyk sa nepodarilo určiť, nepreložené. Možnosti prekladu"
+msgctxt "translate.chip.sentIn"
+msgid "sent in {language}"
+msgstr ""
 
-#. Placeholder of the message composer in a channel or private conversation whose outgoing messages are translated. {name} is the channel or nickname; {language} is the language messages are sent in.
+#. Tooltip and aria-label of the composer's translate button while the channel corrects every message (spelling and grammar) in {language}, the user's own language, before sending; a click opens the language sheet, where it can be changed or turned off. The middle dot is part of the copy.
 #: client/components/ChatInput.vue
-msgctxt "translate.composer.placeholder"
-msgid "Write to {name} · sent in {language}"
-msgstr "Napísať do {name} · odosiela sa v jazyku: {language}"
-
-#. Placeholder of the message input when the channel's write target is the language the user reads: every line is corrected (spelling and grammar) before it is sent. {name} is the channel or user name, verbatim; the middle dot is part of the copy.
-#: client/components/ChatInput.vue
-msgctxt "translate.composer.placeholderCorrected"
-msgid "Write to {name} · sent corrected"
-msgstr "Napísať do {name} · odosiela sa opravené"
-
-#. Tooltip and aria-label of the composer's translate button while the channel corrects every message (spelling and grammar) in {language}, the user's own language, before sending; a click turns that off. The middle dot is part of the copy.
-#: client/components/ChatInput.vue
+#, fuzzy
 msgctxt "translate.composer.sendCorrectedOn"
-msgid "Sending corrected in {language} · click to stop"
+msgid "Sending corrected in {language} · change or turn off"
 msgstr "Odosielanie s opravami, jazyk: {language} · kliknutím vypnete"
 
-#. Tooltip and aria-label of the composer's translate button (the language mark beside the attachment and send buttons) while no send target is set; a click opens a dialog to pick the language every message is sent in, or a correction pass. Ends with an ellipsis.
+#. Tooltip and aria-label of the composer's translate button (the language mark beside the attachment and send buttons) while no send target is set; a click opens the language sheet to pick the language every message is sent in, or a correction pass. Ends with an ellipsis.
 #: client/components/ChatInput.vue
 msgctxt "translate.composer.sendOff"
 msgid "Translate what I send…"
 msgstr "Prekladať, čo odosielam…"
 
-#. Tooltip and aria-label of the composer's translate button while the channel sends every message translated into {language} (a language name in the interface language); a click turns that off. The middle dot is part of the copy.
+#. Tooltip and aria-label of the composer's translate button while the channel sends every message translated into {language} (a language name in the interface language); a click opens the language sheet, where it can be changed or turned off. The middle dot is part of the copy.
 #: client/components/ChatInput.vue
+#, fuzzy
 msgctxt "translate.composer.sendOn"
-msgid "Sending in {language} · click to stop"
+msgid "Sending in {language} · change or turn off"
 msgstr "Odosielanie s prekladom, jazyk: {language} · kliknutím vypnete"
+
+#. The composer's translate button while the channel's send target is the user's own language: lines are corrected, not translated. {language} is the short code, e.g. EN.
+#: client/components/ChatInput.vue
+msgctxt "translate.composer.targetCorrected"
+msgid "{language} ✓"
+msgstr ""
+
+#. The composer's translate button while the channel has a send target: the language the user writes in, an arrow, the language messages are sent in, as short codes ({from} and {to} are e.g. EN and PT). Turn the arrow round for a right-to-left language.
+#: client/components/ChatInput.vue
+msgctxt "translate.composer.targetPair"
+msgid "{from} → {to}"
+msgstr ""
 
 #. Extra line in the dialog asking before a translation model is downloaded, shown only when the browser reports a cellular connection or Data Saver: a warning that the download may cost data.
 #: client/js/translate/index.ts
@@ -14842,8 +15366,26 @@ msgctxt "translate.failed"
 msgid "Couldn't translate"
 msgstr "Nepodarilo sa preložiť"
 
+#. Tooltip and aria-label of the small button before the user's own line, sent translated into {language}; the line shows what the translation reads back as in the user's reading language, and pressing the button shows the text that went out.
+#: client/components/TranslationFlip.vue
+#, fuzzy
+msgctxt "translate.flip.sentIn"
+msgid "Sent in {language}. Show what was sent"
+msgstr ""
+
+#. Tooltip and aria-label of the small button before a chat line while its original is showing; pressing it shows the translation in its place again.
+#: client/components/TranslationFlip.vue
+msgctxt "translate.flip.showTranslation"
+msgid "Show the translation"
+msgstr ""
+
+#. Tooltip and aria-label of the small button before a translated chat line, which stands in the original's place; pressing it shows the original. {language} is the source language's name, or several joined.
+#: client/components/TranslationFlip.vue
+msgctxt "translate.flip.translatedFrom"
+msgid "Translated from {language}. Show the original"
+msgstr ""
+
 #. Choice for how formally a translation addresses people: keep whatever the original message did.
-#: client/components/TranslationPanel.vue
 #: client/components/Settings/Translation.vue
 msgctxt "translate.formality.auto"
 msgid "As the original does"
@@ -14912,66 +15454,36 @@ msgctxt "translate.gpuFallback.title"
 msgid "The GPU stopped"
 msgstr "GPU prestala fungovať"
 
-#. Tooltip of the translate button in a chat window's header while translation is off; clicking it turns reading on. {reading} is a language name.
-#: client/components/Chat.vue
-msgctxt "translate.header.off"
-msgid "Translate messages into {reading}"
-msgstr "Prekladať správy (jazyk: {reading})"
-
-#. Tooltip of the translate button in a chat window's header when translation is off and the engine has paused. {reading} is a language name; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.offPaused"
-msgid "Translate messages into {reading}, paused: {reason}"
-msgstr "Prekladať správy (jazyk: {reading}); pozastavené: {reason}"
-
-#. Tooltip of the translate button in a chat window's header while incoming messages are not translated but outgoing ones are. {reading} and {writing} are language names.
-#: client/components/Chat.vue
-msgctxt "translate.header.offWrite"
-msgid "Translate messages into {reading}, sending in {writing}"
-msgstr "Prekladať prichádzajúce správy (jazyk: {reading}), odchádzajúce — jazyk: {writing}"
-
-#. Tooltip of the translate button in a chat window's header when only outgoing messages are translated and the engine has paused. {reading} and {writing} are language names; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.offWritePaused"
-msgid "Translate messages into {reading}, sending in {writing}, paused: {reason}"
-msgstr "Prekladať prichádzajúce správy (jazyk: {reading}), odchádzajúce — jazyk: {writing}; pozastavené: {reason}"
-
-#. Tooltip of the translate button in a chat window's header while incoming messages are being translated. {reading} is a language name.
-#: client/components/Chat.vue
-msgctxt "translate.header.read"
-msgid "Translating into {reading}"
-msgstr "Preklad (jazyk: {reading})"
-
-#. Tooltip of the translate button in a chat window's header when translation is on but the engine has paused. {reading} is a language name; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.readPaused"
-msgid "Translating into {reading}, paused: {reason}"
-msgstr "Preklad (jazyk: {reading}); pozastavené: {reason}"
-
-#. Tooltip of the translate button in a chat window's header while incoming messages are translated and outgoing ones are too. {reading} and {writing} are language names.
-#: client/components/Chat.vue
-msgctxt "translate.header.readWrite"
-msgid "Translating into {reading}, sending in {writing}"
-msgstr "Preklad prichádzajúcich (jazyk: {reading}), odchádzajúcich — jazyk: {writing}"
-
-#. Tooltip of the translate button in a chat window's header when reading and writing are both translated but the engine has paused. {reading} and {writing} are language names; {reason} is the engine's own untranslated message.
-#: client/components/Chat.vue
-msgctxt "translate.header.readWritePaused"
-msgid "Translating into {reading}, sending in {writing}, paused: {reason}"
-msgstr "Preklad prichádzajúcich (jazyk: {reading}), odchádzajúcich — jazyk: {writing}; pozastavené: {reason}"
-
-#. Tooltip and aria-label of the translate button in a chat window's header on a touch device, where tapping it opens the translation panel.
-#: client/components/Chat.vue
-msgctxt "translate.header.settings"
-msgid "Translation settings"
-msgstr "Nastavenia prekladu"
-
 #. Warning shown under a language choice, in the translation panel and in Settings, when the available models translate that language poorly.
 #: client/components/TranslationPanel.vue
 #: client/components/Settings/Translation.vue
 msgctxt "translate.limitedLanguage"
 msgid "Translations into and out of this language are often wrong."
 msgstr "Preklady do tohto jazyka a z neho sú často nesprávne."
+
+#. Shown once under a translated line in a channel (iPhone and iPad app only), followed by a 'Get it' button: the device's own translator (Apple's Translation framework) can translate this language once its language pack is downloaded from the system's sheet. {language} is a language name, e.g. 'Portuguese'. 'Apple' is the company; keep it recognisable.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.applePack"
+msgid "Apple can translate {language} on this device"
+msgstr ""
+
+#. Button after 'Apple can translate {language} on this device' under a translated line: opens the system's sheet that downloads the language pack.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.applePackGet"
+msgid "Get it"
+msgstr ""
+
+#. Button after 'Needs a {size} download' under a line in a channel: downloads the translation model and translates the line.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.download"
+msgid "Download"
+msgstr ""
+
+#. Shown under a line in a channel whose translation needs a model that is not on this device yet, in place of a failure, followed by a Download button. The app did not download it by itself because it is large. {size} is its download size with its unit, e.g. '620 MiB'.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.needsDownload"
+msgid "Needs a {size} download"
+msgstr ""
 
 #. Note shown in the composer's translation strip or under a message while the model it needs is being fetched for the first time. {model} is the model's name, {percent} a number from 0 to 100.
 #: client/js/helpers/modelLabel.ts
@@ -15020,12 +15532,6 @@ msgstr "Preložiť znova z…"
 msgctxt "translate.menu.showOriginal"
 msgid "Show original only"
 msgstr "Zobraziť len originál"
-
-#. A translation chip's menu item.
-#: client/components/TranslationLine.vue
-msgctxt "translate.menu.translateAnyway"
-msgid "Translate anyway"
-msgstr "Napriek tomu preložiť"
 
 #. Item of the menu the message toolbar's Translate action opens: pick the language this line is in before translating it. Ends in an ellipsis because a dialog follows.
 #: client/components/MessageActions.vue
@@ -15130,21 +15636,16 @@ msgctxt "translate.model.smallBufferBuild"
 msgid "This GPU gets a build of the model made for small graphics buffers: its largest buffer is {size}."
 msgstr "Tento GPU dostane verziu modelu určenú pre malé grafické vyrovnávacie pamäte: jej najväčšia vyrovnávacia pamäť má {size}."
 
-#. Label of the compact equals-icon chip shown in place of a translation that failed because the engine returned the source line as its own answer. Also the chip's tooltip and aria-label; the reason text beside it only appears in development builds.
-#: client/components/TranslationLine.vue
-msgctxt "translate.notTranslated"
-msgid "Not translated"
-msgstr "Nepreložené"
-
-#. Lead sentence when a translation is unavailable for a language pair (the composer's translate dialog, the translation panel's 'Send my messages in'); the reason follows as a sentence of its own. {from} and {to} are language names, already in the interface language.
+#. Lead sentence when a translation is unavailable for a language pair (the composer's language sheet, the retranslate dialog, the translation panel's 'Send my messages in'); the reason follows as a sentence of its own. {from} and {to} are language names, already in the interface language.
 #: client/components/SourceLanguagePicker.vue
 #: client/components/TranslationPanel.vue
+#: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.pair.unavailable"
 msgid "Nothing on this device can translate {from} into {to}."
 msgstr "Nič na tomto zariadení nedokáže preložiť: {from} → {to}."
 
-#. Lead sentence in the composer's translate dialog when the source is 'Detect automatically' and no engine here translates into the chosen language; the reason follows as a sentence of its own. {to} is a language name, already in the interface language.
-#: client/components/SourceLanguagePicker.vue
+#. Lead sentence in the composer's language sheet when the source is 'Detect automatically' and no engine here translates into the chosen language; the reason follows as a sentence of its own. {to} is a language name, already in the interface language.
+#: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.pair.unavailableInto"
 msgid "Nothing on this device can translate into {to}."
 msgstr "Nič na tomto zariadení nedokáže preložiť do jazyka: {to}."
@@ -15190,6 +15691,12 @@ msgstr "Zapnuté"
 msgctxt "translate.panel.ownLanguageNeedsGpu"
 msgid "{language} is greyed out: correcting a message needs the language model."
 msgstr "Jazyk {language} je sivý: oprava správy vyžaduje jazykový model."
+
+#. Status line at the top of the per-channel translation panel while the engine has paused itself after repeated failures; it resumes by itself within a minute. {reason} is the engine's own untranslated message.
+#: client/components/TranslationPanel.vue
+msgctxt "translate.panel.paused"
+msgid "Translation is paused for now: {reason}"
+msgstr ""
 
 #. Explanatory note under the reading switch in the translation panel.
 #: client/components/TranslationPanel.vue
@@ -15275,66 +15782,19 @@ msgctxt "translate.picker.dialog"
 msgid "Retranslate from another language"
 msgstr "Preložiť znova z iného jazyka"
 
-#. First option of the source-language picker in the composer's translate-into dialog: the draft's language is detected rather than named.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.fromAuto"
-msgid "Detect automatically"
-msgstr "Rozpoznať automaticky"
-
-#. Label of the source-language picker in the dialog the composer's translate button opens; preselected to the language the user reads.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.fromLabel"
-msgid "Translate from"
-msgstr "Preložiť z"
-
 #. Label of the language picker in the dialog that translates one message again from a language the user picks.
 #: client/components/SourceLanguagePicker.vue
 msgctxt "translate.picker.label"
 msgid "Translate this line from"
 msgstr "Preložiť tento riadok z"
 
-#. Hint under the selects in the composer's translate-into dialog when the source and the target are the same language: the draft is corrected, not translated.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.sameLanguage"
-msgid "Same language: spelling and grammar are corrected instead."
-msgstr "Rovnaký jazyk: namiesto prekladu sa opraví pravopis a gramatika."
-
-#. Lead sentence in the composer's translate dialog and the translation panel when the same language is picked as source and target (a spelling and grammar cleanup pass), which only the language model (a large AI model) can do and which cannot run now; the reason (no WebGPU, buffer too small, switched off, …) follows as a sentence of its own.
+#. Lead sentence in the composer's language sheet, the retranslate dialog and the translation panel when the same language is picked as source and target (a spelling and grammar cleanup pass), which only the language model (a large AI model) can do and which cannot run now; the reason (no WebGPU, buffer too small, switched off, …) follows as a sentence of its own.
 #: client/components/SourceLanguagePicker.vue
 #: client/components/TranslationPanel.vue
+#: client/components/ComposerLanguageSheet.vue
 msgctxt "translate.picker.sameLanguageNeedsGpu"
 msgid "Correcting a message needs the language model."
 msgstr "Oprava správy vyžaduje jazykový model."
-
-#. Button that translates the draft into the language picked in the composer's translate-into dialog.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetConfirm"
-msgid "Translate"
-msgstr "Preložiť"
-
-#. Button of the composer's translate dialog when the source and the target are the same language: the draft is corrected in that language rather than translated. Imperative verb ('correct this draft'), not the adjective.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetConfirmCorrect"
-msgid "Correct"
-msgstr "Opraviť"
-
-#. aria-label of the small dialog the composer's translate button opens: pick the language the draft is translated into, this once.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetDialog"
-msgid "Translate this message into a language"
-msgstr "Preložiť túto správu do jazyka"
-
-#. Label of the language picker in the dialog the composer's translate button opens; the draft is translated into the picked language.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.targetLabel"
-msgid "Translate into"
-msgstr "Preložiť do"
-
-#. Checkbox in the composer's translate dialog: ticked, the picked language applies to the draft alone (a one-off) rather than becoming the channel's send target.
-#: client/components/SourceLanguagePicker.vue
-msgctxt "translate.picker.thisMessageOnly"
-msgid "This message only"
-msgstr "Len túto správu"
 
 #. Failure reason after 'Couldn't translate': the model replied to a question it found in the message rather than translating the message. Lowercase; reads as the tail of that sentence.
 #: client/components/TranslationLine.vue
@@ -15464,8 +15924,9 @@ msgstr "Jazyk rozhrania"
 
 #. Introductory paragraph of the Translation tab in Settings, explaining that translation runs locally.
 #: client/components/Settings/Translation.vue
+#, fuzzy
 msgctxt "translate.settings.intro"
-msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from the translate button in the channel header."
+msgid "Messages are translated on this device by a model it downloads once; nothing is sent to a translation service. Turn it on per channel from Translation… in the channel's menu."
 msgstr "Správy prekladá priamo toto zariadenie modelom, ktorý sa stiahne iba raz; nič sa neposiela do prekladovej služby. Zapnite preklad pre jednotlivé kanály tlačidlom prekladu v hlavičke kanála."
 
 #. Explanatory note under the language picker in Settings → Translation.
@@ -15552,6 +16013,103 @@ msgctxt "translate.settings.workerError"
 msgid "Could not reach the translation worker: {error}"
 msgstr "Nedá sa spojiť s pracovným procesom prekladu: {error}"
 
+#. Value of the language sheet's 'They read' side before any language is picked.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.choose"
+msgid "Choose…"
+msgstr ""
+
+#. Tooltip and aria-label of the ✕ button that closes the composer's language sheet without changing anything.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.close"
+msgid "Close"
+msgstr ""
+
+#. Status beside the language the user writes in, in the language sheet's 'They read' list: picking it corrects spelling and grammar rather than translating. Short.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.corrects"
+msgid "Corrects spelling"
+msgstr ""
+
+#. Value of the language sheet's 'I write' side, and the first row of its list, when the language of each message is detected rather than named.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.detect"
+msgid "Detect automatically"
+msgstr ""
+
+#. aria-label of the language sheet the composer's translate button opens: pick the language you write in and the one your messages are translated into.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.dialog"
+msgid "Choose the language your messages are sent in"
+msgstr ""
+
+#. Status beside a language in the language sheet whose translation model is not on this device yet. {size} is a file size such as '312.5 MiB'. Short.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.download"
+msgid "{size} download"
+msgstr ""
+
+#. Label of the language sheet's first side: the language the user writes their messages in. Short, shown above the language's name.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.iWrite"
+msgid "I write"
+msgstr ""
+
+#. Shown in the language sheet's list when the search finds nothing. {query} is what the user typed.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.noMatch"
+msgid "No language matches “{query}”."
+msgstr ""
+
+#. Button in the language sheet's header, shown while the user's messages in this channel are being translated: stop translating them.
+#: client/components/ComposerLanguageSheet.vue
+#, fuzzy
+msgctxt "translate.sheet.off"
+msgid "Turn off"
+msgstr ""
+
+#. Heading over shortcut buttons in the language sheet: the languages people wrote in most in this channel recently. {channel} is the channel's name, e.g. #linux.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.recent"
+msgid "Spoken in {channel} lately"
+msgstr ""
+
+#. Placeholder and aria-label of the search field in the language sheet.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.search"
+msgid "Search languages"
+msgstr ""
+
+#. Tooltip and aria-label of the button between the language sheet's two sides: exchanges the language the user writes and the one they send in.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.swap"
+msgid "Swap languages"
+msgstr ""
+
+#. Label of the language sheet's second side: the language the user's messages are sent in, the one the channel reads. Short, shown above the language's name.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.theyRead"
+msgid "They read"
+msgstr ""
+
+#. Checkbox in the language sheet: ticked, the picked language applies to the draft alone (a one-off) rather than to every message the user sends in this channel.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.thisMessageOnly"
+msgid "This message only"
+msgstr ""
+
+#. Heading of the language sheet the composer's translate button opens: the language the user's messages are translated into before they are sent.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.title"
+msgid "Send my messages in"
+msgstr ""
+
+#. Heading over the languages at the end of the language sheet's list that nothing on this device can translate into from the language the user writes. Tapping one shows why.
+#: client/components/ComposerLanguageSheet.vue
+msgctxt "translate.sheet.unavailableHeading"
+msgid "Not available on this device"
+msgstr ""
+
 #. Text of the second row of the composer's translation strip when translating the translation back into the user's own language failed.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.checkFailed"
@@ -15576,17 +16134,18 @@ msgctxt "translate.strip.failed"
 msgid "couldn't translate, send as written?"
 msgstr "nepodarilo sa preložiť, odoslať tak, ako je napísané?"
 
-#. Tooltip and aria-label of the button in the composer's translation strip that dismisses the translation and returns to the draft. Escape is the keyboard key of the same name.
-#: client/components/ChatInput.vue
-msgctxt "translate.strip.keepTyping"
-msgid "Keep typing (Escape)"
-msgstr "Písať ďalej (Escape)"
-
 #. Chip at the start of the composer's translation strip when the draft was corrected in its own language rather than translated. {language} is that language's name, in the interface language.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.polishChip"
 msgid "{language}, corrected"
 msgstr "{language}, opravené"
+
+#. Label before the composer preview's round trip: the translation translated back into the user's language, so they can check it. The text follows it.
+#: client/components/ChatInput.vue
+#, fuzzy
+msgctxt "translate.strip.readsBack"
+msgid "Reads back as:"
+msgstr ""
 
 #. Tooltip of the composer translation strip's direction chip, naming the route a translation took. {from} and {to} are language names (or the word from translate.strip.sourceAuto), {model} is the model's technical id. This one ran on the main processor.
 #: client/components/ChatInput.vue
@@ -15636,11 +16195,47 @@ msgctxt "translate.strip.sendTranslation"
 msgid "Send the translation"
 msgstr "Odoslať preklad"
 
+#. Note under the composer's translation preview after Return was pressed while it was still translating: the message goes as soon as it is done.
+#: client/components/ChatInput.vue
+msgctxt "translate.strip.sendsWhenReady"
+msgid "Sends when the translation is ready"
+msgstr ""
+
 #. Stands in for the source language in the composer translation strip's route tooltip when no source was named and the model was left to work it out. Substituted as {from} in translate.strip.routeGpu and its siblings.
 #: client/components/ChatInput.vue
 msgctxt "translate.strip.sourceAuto"
 msgid "auto"
 msgstr "automaticky"
+
+#. Label over the composer's live translation preview: the line Return will send, and the language it is in.
+#: client/components/ChatInput.vue
+msgctxt "translate.strip.willSendIn"
+msgid "Will send in {language}"
+msgstr ""
+
+#. Button on the suggestion card above the message box: from now on, the user's messages in this channel are translated into {language} (a language name) before they are sent.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.accept"
+msgid "Write in {language}"
+msgstr ""
+
+#. Button on the suggestion card above the message box: dismiss it and do not suggest it again in this channel.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.decline"
+msgid "Not in this channel"
+msgstr ""
+
+#. Note on the suggestion card above the message box. {model} is a translation model's name; {size} is a file size such as '312.5 MiB'.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.download"
+msgid "Uses {model}, a {size} download."
+msgstr ""
+
+#. Card above the message box. {channel} is a channel name such as #linux; {language} is a language name such as Portuguese. Saying yes translates the user's messages into that language before they are sent.
+#: client/components/ChatInput.vue
+msgctxt "translate.suggest.lead"
+msgid "Most of {channel} writes in {language}. Write your messages in {language} here?"
+msgstr ""
 
 #. Status line in the settings → Translation, the section for the device's own translator (Apple's Translation framework, iPhone and iPad app only). "Apple Translation" is the feature's name; keep it recognisable. {from} and {to} are language names. Shown while the system's download sheet is open.
 #: client/components/Settings/TranslationOptions.vue
@@ -15732,18 +16327,11 @@ msgctxt "translate.topic.showTranslation"
 msgid "Show the translated topic"
 msgstr "Zobraziť preloženú tému"
 
-#. Lead sentence of the per-channel translation panel's notice, and the channel header translate button's label, when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
+#. Lead sentence of the per-channel translation panel's notice when no translation engine can run (both switched off, or a device that runs neither); the reason follows as a sentence of its own.
 #: client/components/TranslationPanel.vue
-#: client/components/Chat.vue
 msgctxt "translate.unavailable.lead"
 msgid "Translation can't run here right now."
 msgstr "Preklad tu teraz nemôže bežať."
-
-#. Failure reason shown inside the Not-translated chip in development builds only: the model returned the source line as its own translation, so there is nothing to show. Lowercase; it reads as the reason the chip stands for.
-#: client/components/TranslationLine.vue
-msgctxt "translate.unchangedReason"
-msgid "the line came back unchanged"
-msgstr "riadok sa vrátil nezmenený"
 
 #. Reason nothing can translate: the user turned off the language model and OPUS-MT. Shown wherever a translation action is unavailable (Settings → Translation's model rows, the composer's translate dialog, the per-channel translation panel, the message toolbar's tooltip), as a sentence of its own under a lead sentence such as 'Correcting a message needs the language model.'. 'Settings → Translation' names the settings tab. OPUS-MT is a product name.
 #: client/js/helpers/translateWhy.ts

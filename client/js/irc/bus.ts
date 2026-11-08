@@ -9,9 +9,11 @@ import type {EventBus} from "../socket";
 import type {IrcClient} from "./client";
 import {requestMore} from "./history";
 import {requestReplyParent, requestSearch, requestSearchContext} from "./historysearch";
+import {changeBans} from "./banList";
 import {refreshOper, setSnomask} from "./oper";
 import {request} from "./request";
 import * as saved from "./saved-networks";
+import {forgetLogin} from "./saslTrust";
 import {checkServices, servicesBan} from "./services";
 import type {ConnectOptions} from "./types";
 import type {NetworkMode} from "../helpers/dnd";
@@ -145,9 +147,11 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 		const client = registry.clientForNetwork(network);
 
 		if (client) {
-			client.send(
-				value ? `METADATA * SET ${key} private :${value}` : `METADATA * SET ${key}`
-			);
+			const line = client.metadataSetLine(key, value);
+
+			if (line) {
+				client.send(line);
+			}
 		}
 	});
 
@@ -167,6 +171,25 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 	// answered as `channel:list` (handlers/list.ts).
 	bus.handle("channel:list:ask", ({network, args}) => {
 		registry.clientForNetwork(network)?.requestChannelList(args);
+	});
+
+	// The Bans window and the ban dialog (irc/banList.ts): the list, answered
+	// as `channel:bans`, and every change to it.
+	bus.handle("channel:bans:ask", ({network, channel}) => {
+		registry.clientForNetwork(network)?.requestBanList(channel);
+	});
+
+	bus.handle("channel:bans:change", ({network, id, change}) => {
+		const client = registry.clientForNetwork(network);
+
+		if (!client) {
+			bus.dispatch("channel:bans:changed", {network, id, outcome: "closed"});
+			return;
+		}
+
+		void changeBans(client, change).then((result) => {
+			bus.dispatch("channel:bans:changed", {network, id, ...result});
+		});
 	});
 
 	bus.handle("persistence:sessions:logout", (params) => {
@@ -359,6 +382,12 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 		next.presenceAt = modeChosen ? Date.now() : kept;
 
 		saved.save(next);
+
+		// Edited credentials have not proved themselves (saslTrust.ts); the
+		// client, when there is one, forgets them again in applySettings.
+		if (next.saslAccount !== base?.saslAccount || next.saslPassword !== base?.saslPassword) {
+			forgetLogin(uuid);
+		}
 
 		if (client) {
 			// Host, port, TLS, channels and SASL: applied on the next connect,
