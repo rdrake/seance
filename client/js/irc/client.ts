@@ -29,7 +29,13 @@ import type {
 	SharedServerOptions,
 } from "../../../shared/types/network";
 import type {PushSession, ServerToClientEvents} from "../../../shared/types/socket-events";
-import {bindLine, isBouncerControl, listNetworks, type BouncerNetwork} from "./bouncer";
+import {
+	BOUNCER_NETWORKS_CAP,
+	bindLine,
+	isBouncerControl,
+	listNetworks,
+	type BouncerNetwork,
+} from "./bouncer";
 import {CapNegotiator, SEANCE_CAPS, SOJU_WEBPUSH_CAP, webpushVapidOf, WEBPUSH_CAP} from "./caps";
 import {casefold, namesEqual} from "./casemap";
 import {Channel, MsgRef, SAID_TYPES, countsAsUnread} from "./channel";
@@ -82,7 +88,7 @@ import {
 	setAttended,
 	syncPresence,
 } from "./presence";
-import {abortHistory, retryLostHistory} from "./history";
+import {abortHistory, noteZncLine, retryLostHistory} from "./history";
 import {resetSearches} from "./historysearch";
 import {globalUntil, MUTE_KEY, MUTE_READ_DELAY_MS, type PendingMute, releaseMute} from "./pushMute";
 import {MODE_KEY, PRESENCE_KEY, syncShared, type Stamped} from "./presenceShare";
@@ -512,6 +518,8 @@ export class IrcClient {
 	attachCursor: string | undefined;
 	/** The server took that cursor: it replays the gap, so catchup.ts stands down. */
 	serverReplay = false;
+	/** This connection goes through ZNC (its `znc.in/*` caps): see history.ts `noteZncLine`. */
+	behindZnc = false;
 
 	private saslTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly bus: Pick<EventBus, "dispatch">;
@@ -1750,6 +1758,7 @@ export class IrcClient {
 		}
 
 		this.connected = true;
+		this.behindZnc = [...this.caps.available.keys()].some((name) => name.startsWith("znc.in/"));
 		this._state = "registered";
 
 		const first = this.channels.find((chan) => chan.type === ChanType.CHANNEL);
@@ -1817,10 +1826,6 @@ export class IrcClient {
 			// (bounce_setup_local_alias): it is already on the wire, and the
 			// note extends the wait. Otherwise nothing comes, so a short wait.
 			awaitRestoration(this, RESTORE_QUIET_MS);
-		} else if (this.behindBouncer) {
-			// soju and ZNC send the channels they hold right behind the MOTD:
-			// wait for them before deciding what is left to JOIN (autojoin).
-			awaitRestoration(this, RESTORE_QUIET_MS);
 		} else {
 			this.restorationSettled();
 		}
@@ -1832,17 +1837,11 @@ export class IrcClient {
 	 * caps). What it holds is what the user is in, on every device.
 	 */
 	get behindBouncer(): boolean {
-		if (this.isupport.tokens.has("BOUNCER_NETID")) {
-			return true;
-		}
-
-		for (const name of this.caps.available.keys()) {
-			if (name.startsWith("znc.in/") || name === "soju.im/bouncer-networks") {
-				return true;
-			}
-		}
-
-		return false;
+		return (
+			this.behindZnc ||
+			this.isupport.tokens.has("BOUNCER_NETID") ||
+			this.caps.available.has(BOUNCER_NETWORKS_CAP)
+		);
 	}
 
 	/**
@@ -1883,18 +1882,12 @@ export class IrcClient {
 	 * on the channel the user is looking at.
 	 */
 	autojoin(): void {
-		// A bouncer that gave channels back owns the list: one it did not give
-		// back was left from another client, and stays left here. A bouncer
-		// that gave none back (a new one, or one not on the network yet) is
-		// sent the saved channels, as any server is.
-		// A bouncer's control connection has no channels at all (bouncer.ts).
-		const bouncerHolds =
-			isBouncerControl(this) ||
-			(this.behindBouncer &&
-				this.channels.some(
-					(chan) => chan.type === ChanType.CHANNEL && chan.state === ChanState.JOINED
-				));
-		const joining = bouncerHolds
+		// A bouncer owns the channel list: it JOINs us to what it holds right
+		// after the MOTD, leaves out what was parted or detached from another
+		// client, and sends nothing while it is off the network. Saved channels
+		// it did not give back stay parted here until the user joins them (as
+		// gamja does). A soju control connection has no channels at all.
+		const joining = this.behindBouncer
 			? []
 			: this.channels.filter(
 					(chan) =>
@@ -2058,7 +2051,7 @@ export class IrcClient {
 	}
 
 	/** Send one raw line. Reports an ERROR message in the lobby instead of throwing. */
-	send(line: string): boolean {
+	send(line: string, charge = true): boolean {
 		if (this.transport.state !== "open") {
 			this.pushMessage(this.lobby, {type: MessageType.ERROR, text: t("send.notConnected")});
 			return false;
@@ -2066,7 +2059,11 @@ export class IrcClient {
 
 		try {
 			this.transport.send(line);
-			this.fakeLag.charge(line);
+
+			if (charge) {
+				this.fakeLag.charge(line);
+			}
+
 			return true;
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -2939,6 +2936,15 @@ export class IrcClient {
 
 		if (interceptBatchLine(this, msg)) {
 			return;
+		}
+
+		// Behind ZNC, what we saw live is what its next buffer replay repeats.
+		if (
+			this.behindZnc &&
+			!this.replaying &&
+			(msg.command === "PRIVMSG" || msg.command === "NOTICE")
+		) {
+			noteZncLine(this, msg);
 		}
 
 		// An answer to one of our labeled requests (request.ts): its asker

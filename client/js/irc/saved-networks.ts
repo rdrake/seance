@@ -14,6 +14,7 @@
  * backend with {@link useStorageBackend}.
  */
 
+import {isNetworkId} from "./bouncer";
 import storage from "../localStorage";
 import {collator} from "../i18n/collation";
 import {forgetNetworkLog} from "./querylog";
@@ -276,14 +277,12 @@ export function normalize(raw: Record<string, unknown>): SavedNetwork | undefine
 		net.lastUsed = raw.lastUsed;
 	}
 
-	const netId = asString(raw.bouncerNetId);
-
-	if (netId) {
-		net.bouncerNetId = netId;
+	if (isNetworkId(raw.bouncerNetId)) {
+		net.bouncerNetId = raw.bouncerNetId;
 	}
 
 	if (Array.isArray(raw.bouncerSeen)) {
-		net.bouncerSeen = raw.bouncerSeen.map(asString).filter(Boolean);
+		net.bouncerSeen = raw.bouncerSeen.filter(isNetworkId);
 	}
 
 	const cursor = asCursor(raw.cursor);

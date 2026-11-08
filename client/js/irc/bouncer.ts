@@ -22,23 +22,32 @@ import type {BatchHandler} from "./handlers/batch";
 import {parseTags, type IrcMessage} from "./message";
 
 export const BOUNCER_NETWORKS_CAP = "soju.im/bouncer-networks";
+export const BOUNCER_NOTIFY_CAP = "soju.im/bouncer-networks-notify";
 export const BOUNCER_NETWORKS_BATCH = "soju.im/bouncer-networks";
+
+/** The most networks one list adds: a runaway list must not open hundreds of sockets. */
+export const BOUNCER_NETWORKS_MAX = 20;
+
+/**
+ * A network id Seance will store and send back in `BOUNCER BIND`. soju's
+ * are numbers; anything else that could break the line (a space, a `:`,
+ * a control character) is refused rather than sent.
+ */
+export function isNetworkId(id: unknown): id is string {
+	return typeof id === "string" && /^[A-Za-z0-9._~-]{1,64}$/.test(id);
+}
 
 /** One of a bouncer's networks, as `BOUNCER NETWORK <id> <attributes>` gives it. */
 export interface BouncerNetwork {
 	id: string;
 	/** The `name` attribute, else the `host`, else the id. */
 	name: string;
-	host?: string;
-	/** `connected`, `connecting` or `disconnected`, when the bouncer says. */
-	state?: string;
-	/** The attributes were `*`: the network was removed from the bouncer. */
-	removed?: boolean;
 }
 
 /** The bouncer's control connection: it offers the networks and is bound to none. */
 export function isBouncerControl(client: IrcClient): boolean {
 	return (
+		!client.options.bouncerNetId &&
 		client.caps.hasCapability(BOUNCER_NETWORKS_CAP) &&
 		!client.isupport.tokens.has("BOUNCER_NETID")
 	);
@@ -47,12 +56,18 @@ export function isBouncerControl(client: IrcClient): boolean {
 /** `BOUNCER BIND <id>`, for the registration flush, when this connection is bound to one. */
 export function bindLine(client: IrcClient): string | undefined {
 	const id = client.options.bouncerNetId;
-	return id && client.caps.available.has(BOUNCER_NETWORKS_CAP) ? `BOUNCER BIND ${id}` : undefined;
+	return isNetworkId(id) && client.caps.available.has(BOUNCER_NETWORKS_CAP)
+		? `BOUNCER BIND ${id}`
+		: undefined;
 }
 
-/** Ask the control connection for the account's networks (after 001). */
+/**
+ * Ask the control connection for the account's networks (after 001). With
+ * `-notify` on, soju sends the list by itself at registration, so asking
+ * again would only cost fake lag.
+ */
 export function listNetworks(client: IrcClient): void {
-	if (!isBouncerControl(client)) {
+	if (!isBouncerControl(client) || client.caps.hasCapability(BOUNCER_NOTIFY_CAP)) {
 		return;
 	}
 
@@ -63,25 +78,59 @@ export function listNetworks(client: IrcClient): void {
 	});
 }
 
-/** `BOUNCER NETWORK <id> <attributes>`; undefined for any other `BOUNCER` line. */
+/**
+ * `BOUNCER NETWORK <id> <attributes>`; undefined for any other `BOUNCER`
+ * line, a removal (`*`), or an id that could not be sent back safely.
+ */
 export function parseNetwork(msg: IrcMessage): BouncerNetwork | undefined {
 	const [sub, id, attrs] = msg.params;
 
-	if (sub?.toUpperCase() !== "NETWORK" || !id || attrs === undefined) {
+	if (sub?.toUpperCase() !== "NETWORK" || !isNetworkId(id) || !attrs || attrs === "*") {
 		return undefined;
 	}
 
-	if (attrs === "*") {
-		return {id, name: id, removed: true};
+	const tags = parseTags(attrs);
+	return {id, name: tags.get("name") || tags.get("host") || id};
+}
+
+/**
+ * Which of the listed networks to add: each one not offered before
+ * (`seen`) and not already a saved network (`have`), at most
+ * {@link BOUNCER_NETWORKS_MAX}. Pure, so the manager's rule is tested here.
+ */
+export function networksToAdd(
+	listed: BouncerNetwork[],
+	seen: ReadonlySet<string>,
+	have: (net: BouncerNetwork) => boolean
+): BouncerNetwork[] {
+	const fresh: BouncerNetwork[] = [];
+	const ids = new Set<string>();
+
+	for (const net of listed) {
+		if (seen.has(net.id) || ids.has(net.id) || have(net)) {
+			continue;
+		}
+
+		ids.add(net.id);
+		fresh.push(net);
+
+		if (fresh.length >= BOUNCER_NETWORKS_MAX) {
+			break;
+		}
 	}
 
-	const tags = parseTags(attrs);
-	const host = tags.get("host") || undefined;
-	return {id, name: tags.get("name") || host || id, host, state: tags.get("state") || undefined};
+	return fresh;
 }
 
 /** Give the manager what the bouncer listed, and say in the lobby what was added. */
 function offer(client: IrcClient, networks: BouncerNetwork[]): void {
+	// A bound network logs in the way the control connection did. soju
+	// binds only an account it authenticated with SASL (a PASS login is
+	// answered ACCOUNT_REQUIRED), so without SASL nothing is added.
+	if (networks.length === 0 || !client.saslOk) {
+		return;
+	}
+
 	const added = client.options.onBouncerNetworks?.(networks) ?? [];
 
 	if (added.length > 0) {
@@ -95,7 +144,6 @@ function offer(client: IrcClient, networks: BouncerNetwork[]): void {
 
 /** The answer to `BOUNCER LISTNETWORKS`: every network of the account. */
 export const bouncerNetworksBatch: BatchHandler = (client, batch) => {
-	// A bound connection hears the list too (`-notify`); only the control one adds.
 	if (!isBouncerControl(client)) {
 		return;
 	}
@@ -107,7 +155,7 @@ export const bouncerNetworksBatch: BatchHandler = (client, batch) => {
 
 		if (net) {
 			networks.push(net);
-		} else {
+		} else if (line.command !== "BOUNCER") {
 			client.handleMessage(line);
 		}
 	}

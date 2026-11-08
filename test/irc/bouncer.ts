@@ -1,7 +1,13 @@
 import {expect} from "chai";
 import sinon from "sinon";
 import {RESTORE_MAX_WAIT_MS} from "../../client/js/irc/persistence";
-import {isBouncerControl, type BouncerNetwork} from "../../client/js/irc/bouncer";
+import {
+	BOUNCER_NETWORKS_MAX,
+	isBouncerControl,
+	isNetworkId,
+	networksToAdd,
+	type BouncerNetwork,
+} from "../../client/js/irc/bouncer";
 import {setup, register, Harness} from "./support";
 import type {SharedMsg} from "../../shared/types/msg";
 
@@ -65,6 +71,28 @@ describe("Bouncers: ZNC buffer playback", function () {
 		expect(h.messages(chan.id).filter((m) => m.text === "buffered 3")).to.have.length(1);
 	});
 
+	it("skips a buffered line this connection already saw live", function () {
+		const h = setup();
+		register(h, ZNC_CAPS);
+		attach(h, []);
+		h.transport.line(said(4, "live one"));
+		attach(h, [said(4, "live one"), said(5, "missed")], "#seance", "p3");
+
+		const chan = h.client.findChannel("#seance")!;
+		const texts = h.messages(chan.id).map((m) => m.text);
+		expect(texts.filter((t) => t === "live one")).to.have.length(1);
+		expect(texts).to.include("missed");
+	});
+
+	it("keeps two identical lines in the same second when both are new", function () {
+		const h = setup();
+		register(h, ZNC_CAPS);
+		attach(h, [said(6, "ok"), said(6, "ok")]);
+
+		const chan = h.client.findChannel("#seance")!;
+		expect(h.messages(chan.id).filter((m) => m.text === "ok")).to.have.length(2);
+	});
+
 	it("opens a query from a buffered private message", function () {
 		const h = setup();
 		register(h, ZNC_CAPS);
@@ -103,14 +131,12 @@ describe("Bouncers: the bouncer's channel list", function () {
 		expect(h.client.findChannel("#seance")?.state).to.not.equal(undefined);
 	});
 
-	it("sends the saved channels to a bouncer that holds none yet", function () {
+	it("never JOINs the saved channels behind a bouncer, even one that holds none", function () {
 		const h = setup({join: "#seance,#new"});
 		register(h, ZNC_CAPS);
-		expect(joins(h), "waits for the bouncer's own JOINs first").to.deep.equal([]);
 		clock.tick(RESTORE_MAX_WAIT_MS);
 
-		expect(joins(h)).to.have.length(1);
-		expect(joins(h)[0]).to.match(/^JOIN #seance,#new$|^JOIN #new,#seance$/);
+		expect(joins(h)).to.deep.equal([]);
 	});
 
 	it("knows soju by its BOUNCER_NETID", function () {
@@ -146,7 +172,13 @@ describe("Bouncers: soju's networks (soju.im/bouncer-networks)", function () {
 	});
 
 	const SOJU_CAPS =
-		"batch server-time message-tags echo-message labeled-response soju.im/bouncer-networks soju.im/bouncer-networks-notify";
+		"batch server-time message-tags echo-message soju.im/bouncer-networks soju.im/bouncer-networks-notify";
+
+	/** The control connection, logged in with SASL as soju requires for BIND. */
+	function control(h: Harness, caps = SOJU_CAPS, before: string[] = []): void {
+		register(h, caps, before);
+		h.client.saslOk = true;
+	}
 
 	it("asks the control connection for the networks, and JOINs nothing there", function () {
 		const offered: BouncerNetwork[][] = [];
@@ -157,7 +189,9 @@ describe("Bouncers: soju's networks (soju.im/bouncer-networks)", function () {
 				return networks.map((net) => net.name);
 			},
 		});
-		register(h, SOJU_CAPS, [":irc.test 005 alice CHANTYPES= :are supported by this server"]);
+		control(h, "batch server-time message-tags echo-message soju.im/bouncer-networks", [
+			":irc.test 005 alice CHANTYPES= :are supported by this server",
+		]);
 		clock.tick(RESTORE_MAX_WAIT_MS);
 
 		expect(isBouncerControl(h.client)).to.equal(true);
@@ -168,20 +202,47 @@ describe("Bouncers: soju's networks (soju.im/bouncer-networks)", function () {
 			":irc.test BATCH +n soju.im/bouncer-networks",
 			"@batch=n :irc.test BOUNCER NETWORK 1 name=Libera;host=irc.libera.chat;state=connected",
 			"@batch=n :irc.test BOUNCER NETWORK 2 host=irc.oftc.net",
+			"@batch=n :irc.test BOUNCER NETWORK bad:id name=Evil",
 			":irc.test BATCH -n"
 		);
 
-		expect(offered).to.have.length(1);
-		expect(offered[0]).to.deep.equal([
-			{id: "1", name: "Libera", host: "irc.libera.chat", state: "connected"},
-			{id: "2", name: "irc.oftc.net", host: "irc.oftc.net", state: undefined},
+		expect(offered).to.deep.equal([
+			[
+				{id: "1", name: "Libera"},
+				{id: "2", name: "irc.oftc.net"},
+			],
 		]);
 		expect(h.messages(h.client.lobby.id).map((m) => m.text)).to.include(
 			"Added this bouncer's networks: Libera, irc.oftc.net"
 		);
 	});
 
-	it("offers a network added on the bouncer later (-notify), and knows a removed one", function () {
+	it("does not ask again when -notify sends the list by itself", function () {
+		const h = setup({onBouncerNetworks: () => []});
+		control(h);
+		clock.tick(RESTORE_MAX_WAIT_MS);
+
+		expect(h.transport.sent).to.not.include("BOUNCER LISTNETWORKS");
+	});
+
+	it("offers a network added on the bouncer later (-notify), and ignores a removed one", function () {
+		const offered: BouncerNetwork[] = [];
+		const h = setup({
+			onBouncerNetworks(networks) {
+				offered.push(...networks);
+				return [];
+			},
+		});
+		control(h);
+		h.transport.lines(
+			":irc.test BOUNCER NETWORK 7 name=EFnet;state=connecting",
+			":irc.test BOUNCER NETWORK 1 *"
+		);
+
+		expect(offered).to.deep.equal([{id: "7", name: "EFnet"}]);
+	});
+
+	it("adds nothing for a login without SASL: soju binds only a SASL account", function () {
 		const offered: BouncerNetwork[] = [];
 		const h = setup({
 			onBouncerNetworks(networks) {
@@ -190,15 +251,9 @@ describe("Bouncers: soju's networks (soju.im/bouncer-networks)", function () {
 			},
 		});
 		register(h, SOJU_CAPS);
-		h.transport.lines(
-			":irc.test BOUNCER NETWORK 7 name=EFnet;state=connecting",
-			":irc.test BOUNCER NETWORK 1 *"
-		);
+		h.transport.line(":irc.test BOUNCER NETWORK 7 name=EFnet");
 
-		expect(offered).to.deep.equal([
-			{id: "7", name: "EFnet", host: undefined, state: "connecting"},
-			{id: "1", name: "1", removed: true},
-		]);
+		expect(offered).to.deep.equal([]);
 	});
 
 	it("binds a network added from the bouncer before CAP END", function () {
@@ -224,11 +279,55 @@ describe("Bouncers: soju's networks (soju.im/bouncer-networks)", function () {
 
 	it("is not a control connection once bound (BOUNCER_NETID)", function () {
 		const h = setup({onBouncerNetworks: () => []});
-		register(h, SOJU_CAPS, [
+		control(h, "batch server-time soju.im/bouncer-networks", [
 			":irc.test 005 alice BOUNCER_NETID=1 :are supported by this server",
 		]);
 
 		expect(isBouncerControl(h.client)).to.equal(false);
 		expect(h.transport.sent).to.not.include("BOUNCER LISTNETWORKS");
+	});
+
+	it("is not a control connection when it asked to bind, even if soju refused", function () {
+		const offered: BouncerNetwork[] = [];
+		const h = setup({
+			bouncerNetId: "42",
+			onBouncerNetworks(networks) {
+				offered.push(...networks);
+				return [];
+			},
+		});
+		control(h);
+		h.transport.line(":irc.test BOUNCER NETWORK 7 name=EFnet");
+
+		expect(isBouncerControl(h.client)).to.equal(false);
+		expect(offered).to.deep.equal([]);
+	});
+});
+
+describe("Bouncers: which listed networks to add (networksToAdd)", function () {
+	const net = (id: string, name = `net${id}`): BouncerNetwork => ({id, name});
+
+	it("skips the ones offered before, the ones saved already, and repeats", function () {
+		const picked = networksToAdd(
+			[net("1"), net("2"), net("3"), net("3")],
+			new Set(["1"]),
+			(n) => n.id === "2"
+		);
+		expect(picked.map((n) => n.id)).to.deep.equal(["3"]);
+	});
+
+	it("adds at most BOUNCER_NETWORKS_MAX from one list", function () {
+		const many = Array.from({length: BOUNCER_NETWORKS_MAX + 5}, (_, i) => net(String(i)));
+		expect(networksToAdd(many, new Set(), () => false)).to.have.length(BOUNCER_NETWORKS_MAX);
+	});
+
+	it("takes only ids that are safe to send back in BOUNCER BIND", function () {
+		expect(isNetworkId("42")).to.equal(true);
+		expect(isNetworkId("a.b_c~d-e")).to.equal(true);
+		expect(isNetworkId("")).to.equal(false);
+		expect(isNetworkId("4 2")).to.equal(false);
+		expect(isNetworkId(":42")).to.equal(false);
+		expect(isNetworkId("x".repeat(65))).to.equal(false);
+		expect(isNetworkId(42)).to.equal(false);
 	});
 });

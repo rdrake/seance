@@ -828,7 +828,7 @@ describe("historysearch", function () {
 			);
 		}
 
-		it("asks each joined channel instead, and answers once with the newest, oldest first", function () {
+		it("asks each joined channel in turn, and answers once with the newest, oldest first", function () {
 			const {client, transport} = setup();
 			transport.line("@time=2026-08-25T12:00:00.000Z :alice!alice@host JOIN #linux");
 			transport.sent.length = 0;
@@ -838,23 +838,45 @@ describe("historysearch", function () {
 			expect(transport.sent[0]).to.not.contain("in=");
 			refuse(transport, transport.sent[0]);
 
-			const parts = transport.sent.slice(1);
-			const partFor = (chan: string) => parts.find((line) => line.includes(`in=${chan};`))!;
-			expect(parts.map((line) => line.match(/in=([^;\s]+)/)?.[1])).to.have.members([
-				"#seance",
-				"#linux",
-			]);
+			// One channel at a time: soju 0.7 has no labeled-response to
+			// tell concurrent answers apart.
+			expect(transport.sent).to.have.length(2);
+			expect(transport.sent[1]).to.contain("in=#linux;");
+			batch(transport, "soju.im/search", labelOf(transport.sent[1]), [ROW3]);
 			expect(payloads("search:results")).to.have.length(0);
 
-			batch(transport, "soju.im/search", labelOf(partFor("#seance")), [ROW1, ROW2]);
-			expect(payloads("search:results")).to.have.length(0);
-			batch(transport, "soju.im/search", labelOf(partFor("#linux")), [ROW3]);
+			expect(transport.sent).to.have.length(3);
+			expect(transport.sent[2]).to.contain("in=#seance;");
+			batch(transport, "soju.im/search", labelOf(transport.sent[2]), [ROW1, ROW2]);
 
 			const answers = payloads<ResultsPayload>("search:results");
 			expect(answers).to.have.length(1);
 			expect(answers[0]).to.include({requestId: 7, status: "ok"});
 			expect(answers[0].hits.map((hit) => hit.msg.msgid)).to.deep.equal(["m3", "m2"]);
 			expect(answers[0].hits.map((hit) => hit.target)).to.deep.equal(["#linux", "#seance"]);
+		});
+
+		it("fails the whole search when one channel's part fails", function () {
+			const {client, transport} = setup();
+			transport.line("@time=2026-08-25T12:00:00.000Z :alice!alice@host JOIN #linux");
+			transport.sent.length = 0;
+
+			requestSearch(client, 8, {text: "fake"});
+			refuse(transport, transport.sent[0]);
+			batch(transport, "soju.im/search", labelOf(transport.sent[1]), [ROW3]);
+			transport.line(
+				`@label=${labelOf(
+					transport.sent[2]
+				)} :irc.test FAIL SEARCH INTERNAL_ERROR :Database is down`
+			);
+
+			const answers = payloads<ResultsPayload>("search:results");
+			expect(answers).to.have.length(1);
+			expect(answers[0]).to.include({
+				requestId: 8,
+				status: "fail",
+				error: "Database is down",
+			});
 		});
 
 		it("remembers it: the next search over every channel goes per channel at once", function () {

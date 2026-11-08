@@ -28,7 +28,7 @@ import {leavesAwayToWorker, syncPresence} from "./presence";
 import {claimMute, clearRemoteDnd} from "./pushMute";
 import * as saved from "./saved-networks";
 import type {SavedNetwork} from "./saved-networks";
-import type {BouncerNetwork} from "./bouncer";
+import {networksToAdd, type BouncerNetwork} from "./bouncer";
 import type {ConnectOptions} from "./types";
 import type {GlobalModeState} from "../helpers/dnd";
 
@@ -187,31 +187,31 @@ function addBouncerNetworks(controlUuid: string, networks: BouncerNetwork[]): st
 		return [];
 	}
 
-	const seen = new Set(control.bouncerSeen ?? []);
-	const fresh = networks.filter((net) => !net.removed && !seen.has(net.id));
+	const sameBouncer = (other: SavedNetwork): boolean =>
+		other.host === control.host && other.port === control.port && other.tls === control.tls;
+	// Bound here before, or added by hand the soju way (`alice/libera`).
+	const have = (net: BouncerNetwork): boolean =>
+		saved
+			.list()
+			.some(
+				(other) =>
+					sameBouncer(other) &&
+					((other.bouncerNetId === net.id && other.saslAccount === control.saslAccount) ||
+						other.saslAccount === `${control.saslAccount}/${net.name}`)
+			);
+	const fresh = networksToAdd(networks, new Set(control.bouncerSeen ?? []), have);
 
 	if (fresh.length === 0) {
 		return [];
 	}
 
-	saved.save({...control, bouncerSeen: [...seen, ...fresh.map((net) => net.id)]});
-	const added: string[] = [];
+	// Offered once: a network the user removes here is not added back.
+	saved.save({
+		...control,
+		bouncerSeen: [...(control.bouncerSeen ?? []), ...fresh.map((net) => net.id)],
+	});
 
 	for (const net of fresh) {
-		const already = saved
-			.list()
-			.some(
-				(other) =>
-					other.bouncerNetId === net.id &&
-					other.host === control.host &&
-					other.port === control.port &&
-					other.saslAccount === control.saslAccount
-			);
-
-		if (already) {
-			continue;
-		}
-
 		createNetwork({
 			...saved.toConnectOptions(control),
 			// Kept in memory only, unless the bouncer's entry remembers it.
@@ -225,10 +225,9 @@ function addBouncerNetworks(controlUuid: string, networks: BouncerNetwork[]): st
 			pushEnabled: control.pushEnabled,
 			notifyEnabled: control.notifyEnabled,
 		});
-		added.push(net.name);
 	}
 
-	return added;
+	return fresh.map((net) => net.name);
 }
 
 /**
