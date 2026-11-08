@@ -483,12 +483,12 @@ fn tls_failure(e: std::io::Error) -> (u16, String) {
             use rustls::CertificateError as C;
             // The plain reason, not rustls's debug text (`Other(OtherError(…))`).
             let why = match cert {
-                C::Expired | C::ExpiredContext { .. } => " (it has expired)",
+                C::Expired | C::ExpiredContext { .. } => ": it has expired",
                 C::NotValidForName | C::NotValidForNameContext { .. } => {
-                    " (it is for a different name)"
+                    ": it is for a different name"
                 }
-                C::UnknownIssuer => " (it is signed by an unknown authority)",
-                _ => " (it may be self-signed)",
+                C::UnknownIssuer => ": it is signed by an unknown authority",
+                _ => ": it may be self-signed",
             };
             (
                 FINAL,
