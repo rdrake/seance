@@ -14785,6 +14785,30 @@ msgctxt "translate.limitedLanguage"
 msgid "Translations into and out of this language are often wrong."
 msgstr "이 언어로 또는 이 언어에서 번역하면 자주 틀립니다."
 
+#. Shown once under a translated line in a channel (iPhone and iPad app only), followed by a 'Get it' button: the device's own translator (Apple's Translation framework) can translate this language once its language pack is downloaded from the system's sheet. {language} is a language name, e.g. 'Portuguese'. 'Apple' is the company; keep it recognisable.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.applePack"
+msgid "Apple can translate {language} on this device"
+msgstr ""
+
+#. Button after 'Apple can translate {language} on this device' under a translated line: opens the system's sheet that downloads the language pack.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.applePackGet"
+msgid "Get it"
+msgstr ""
+
+#. Button after 'Needs a {size} download' under a line in a channel: downloads the translation model and translates the line.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.download"
+msgid "Download"
+msgstr ""
+
+#. Shown under a line in a channel whose translation needs a model that is not on this device yet, in place of a failure, followed by a Download button. The app did not download it by itself because it is large. {size} is its download size with its unit, e.g. '620 MiB'.
+#: client/components/TranslationLine.vue
+msgctxt "translate.line.needsDownload"
+msgid "Needs a {size} download"
+msgstr ""
+
 #. Note shown in the composer's translation strip or under a message while the model it needs is being fetched for the first time. {model} is the model's name, {percent} a number from 0 to 100.
 #: client/js/helpers/modelLabel.ts
 msgctxt "translate.load.downloading"

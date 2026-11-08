@@ -26,6 +26,7 @@ import {
 	CACHE_WAIT_MS,
 	CPU_IDLE_UNLOAD_MS,
 	GPU_IDLE_UNLOAD_MS,
+	QUIET_DOWNLOAD_BYTES,
 	TRANSLATION_UNAVAILABLE,
 	TranslateService,
 	downloadBytes,
@@ -142,7 +143,13 @@ function rig(
 	routes: RouteTable = DEFAULT_ROUTES,
 	consent: Pick<
 		ServiceDeps,
-		"askDownload" | "consent" | "askCpuFallback" | "saveLlmDevice" | "apple"
+		| "askDownload"
+		| "consent"
+		| "askCpuFallback"
+		| "saveLlmDevice"
+		| "apple"
+		| "metered"
+		| "onApplePack"
 	> = {},
 	shape: {
 		catalog?: ModelCatalog;
@@ -1792,6 +1799,10 @@ describe("translate/service", () => {
 	});
 
 	describe("download consent", () => {
+		// A metered connection: no download is quiet (QUIET_DOWNLOAD_BYTES),
+		// so OPUS-MT asks like the rest. The quiet ones: "quiet downloads".
+		const consentRig = (...args: Parameters<typeof rig>) =>
+			rig(args[0], args[1], args[2], {metered: () => true, ...args[3]}, ...args.slice(4));
 		/** A dialog the test answers: every question it was asked, and how to answer the next. */
 		function dialog() {
 			const asked: string[] = [];
@@ -1846,7 +1857,7 @@ describe("translate/service", () => {
 			const paused: string[] = [];
 			const queue = new TranslateQueue({
 				route: (from, to, hint) =>
-					service.resolve(from, to, hint).then(({route, refused}) => {
+					service.resolve(from, to, hint, {quiet: true}).then(({route, refused}) => {
 						if (!route && refused) {
 							throw new Error(needsDownloadError(refused));
 						}
@@ -1866,7 +1877,7 @@ describe("translate/service", () => {
 		it("asks once for many requests waiting on the same model, and remembers the yes", async () => {
 			const ask = dialog();
 			const store = memoryConsent();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {
 				askDownload: ask.askDownload,
 				consent: store,
 			});
@@ -1892,7 +1903,7 @@ describe("translate/service", () => {
 		it("a yes the storage cannot keep still routes, with one question", async () => {
 			const ask = dialog();
 			const deaf = {has: () => false, grant() {}, revoke() {}};
-			const r = rig("gpu", true, DEFAULT_ROUTES, {
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {
 				askDownload: ask.askDownload,
 				consent: deaf,
 			});
@@ -1913,7 +1924,7 @@ describe("translate/service", () => {
 
 			store.grant(catalog.opus["en-fr"].id);
 
-			const r = rig("gpu", true, DEFAULT_ROUTES, {
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {
 				askDownload: ask.askDownload,
 				consent: store,
 			});
@@ -1933,7 +1944,7 @@ describe("translate/service", () => {
 
 		it("not now: a cached model takes the request, and no second model is asked about", async () => {
 			const ask = dialog();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
 			clock = r.clock;
 			// Spanish to English: the LLM is a better class than the OPUS pair,
 			// which is the one on the device.
@@ -1954,9 +1965,11 @@ describe("translate/service", () => {
 
 		it("not now with nothing on the device: the request fails naming the model, and nothing loads", async () => {
 			const ask = dialog();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
 			clock = r.clock;
-			const failed = text(r.service.translate(base)).catch((e: Error) => e.message);
+			const failed = text(r.service.translate({...base, purpose: "write"})).catch(
+				(e: Error) => e.message
+			);
 
 			await r.clock.tickAsync(10);
 			ask.answer(false);
@@ -1981,7 +1994,7 @@ describe("translate/service", () => {
 
 		it("names the declined model even where a switch further down blocks the rest", async () => {
 			const ask = dialog();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
 			clock = r.clock;
 			// NLLB-200 off, as it ships: the walk's own last reason is that switch.
 			r.service.setSettings({switches: {llm: true, opus: true, nllb: false}, devices: AUTO});
@@ -1994,9 +2007,9 @@ describe("translate/service", () => {
 			r.service.dispose();
 		});
 
-		it("a reading queue of many lines asks once, fails them all with the reason, and pauses nothing", async () => {
+		it("a reading queue of many lines asks nothing, fails them all with the reason, and pauses nothing", async () => {
 			const ask = dialog();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
 			clock = r.clock;
 			const {queue, updates, paused} = queueOn(r.service);
 
@@ -2005,9 +2018,7 @@ describe("translate/service", () => {
 			}
 
 			await r.clock.tickAsync(10);
-			expect(ask.asked).to.deep.equal([catalog.llm.id]);
-			ask.answer(false);
-			await r.clock.tickAsync(10);
+			expect(ask.asked).to.deep.equal([]);
 
 			const failed = updates.filter(([, u]) => u.status === "failed");
 
@@ -2022,7 +2033,7 @@ describe("translate/service", () => {
 			expect(paused).to.deep.equal([]);
 			expect(queue.paused("llm")).to.equal(false);
 			expect(queue.paused("seq2seq")).to.equal(false);
-			expect(ask.asked).to.have.length(1);
+			expect(ask.asked).to.have.length(0);
 			queue.cancelAll();
 			r.service.dispose();
 		});
@@ -2062,7 +2073,7 @@ describe("translate/service", () => {
 
 		it("asks about one model at a time, and a no answers the one waiting behind it", async () => {
 			const ask = dialog();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
 			clock = r.clock;
 			const llm = r.service.resolve("de", "en");
 			// Swahili is NLLB-first: a second model, asked about after the first.
@@ -2082,7 +2093,7 @@ describe("translate/service", () => {
 		it("a Retry asks again; Settings' Download is a yes, and a delete takes it back", async () => {
 			const ask = dialog();
 			const store = memoryConsent();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {
 				askDownload: ask.askDownload,
 				consent: store,
 			});
@@ -2114,7 +2125,7 @@ describe("translate/service", () => {
 		it("the CPU copy is asked about under <id>@cpu, and its yes does not cover the GPU copy", async () => {
 			const ask = dialog();
 			const store = memoryConsent();
-			const r = rig("gpu", true, DEFAULT_ROUTES, {
+			const r = consentRig("gpu", true, DEFAULT_ROUTES, {
 				askDownload: ask.askDownload,
 				consent: store,
 			});
@@ -2156,7 +2167,7 @@ describe("translate/service", () => {
 			// NLLB-200 downloaded (and agreed to) when it ran on the CPU alone.
 			store.grant(catalog.nllb.id);
 
-			const r = rig(
+			const r = consentRig(
 				"gpu",
 				true,
 				{en: {sw: ["nllb", "llm"]}},
@@ -2187,7 +2198,7 @@ describe("translate/service", () => {
 			const shipped = buildCatalog();
 			// A computer whose GPU binds 1 GiB with f16: either GPU copy would
 			// fit it, were there one (translation-devices.md § Not in this build).
-			const r = rig(
+			const r = consentRig(
 				"gpu",
 				true,
 				{en: {de: ["opus:de-en"], sw: ["nllb"]}},
@@ -2215,10 +2226,75 @@ describe("translate/service", () => {
 		});
 
 		it("without a dialog wired, every download goes ahead unasked", async () => {
-			const r = rig("gpu");
+			const r = consentRig("gpu");
 			clock = r.clock;
 
 			expect(await text(r.service.translate(base))).to.equal("llm:Hallo");
+			r.service.dispose();
+		});
+	});
+
+	describe("quiet downloads", () => {
+		function asker() {
+			const asked: string[] = [];
+			const askDownload = (ref: ModelRef) => {
+				asked.push(ref.id);
+				return Promise.resolve(false);
+			};
+
+			return {asked, askDownload};
+		}
+
+		it("downloads a small copy unasked", async () => {
+			expect(catalog.opus["de-en"].copies.cpu!.sizeBytes).to.be.at.most(QUIET_DOWNLOAD_BYTES);
+
+			const ask = asker();
+			const r = rig("cpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			clock = r.clock;
+
+			expect((await r.service.route("de", "en"))?.ref.engine).to.equal("seq2seq");
+			expect(ask.asked).to.deep.equal([]);
+			r.service.dispose();
+		});
+
+		it("asks before a small copy on a metered connection", async () => {
+			const metered = asker();
+			const m = rig("cpu", true, DEFAULT_ROUTES, {
+				askDownload: metered.askDownload,
+				metered: () => true,
+			});
+			clock = m.clock;
+
+			await m.service.route("de", "en");
+			expect(metered.asked).to.have.length.above(0);
+			m.service.dispose();
+		});
+
+		it("never asks for a line read: it fails naming the model, and the line's yes routes it", async () => {
+			const ask = asker();
+			const r = rig("gpu", true, DEFAULT_ROUTES, {askDownload: ask.askDownload});
+			clock = r.clock;
+
+			const quiet = await r.service.resolve("de", "en", null, {quiet: true});
+
+			expect(quiet.route?.ref.engine ?? null).to.not.equal("llm");
+			expect(ask.asked).to.deep.equal([]);
+
+			// Every quiet route refused: the line names the language model.
+			r.service.setSettings({switches: {llm: true, opus: false, nllb: false}, devices: AUTO});
+
+			const refused = await r.service.resolve("de", "en", null, {quiet: true});
+
+			expect(refused.route).to.equal(null);
+			expect(refused.refused?.id).to.equal(catalog.llm.id);
+			expect(ask.asked).to.deep.equal([]);
+
+			// The line's Download is the yes.
+			r.service.allowDownload(catalog.llm.id, refused.refusedDevice ?? undefined);
+			expect(
+				(await r.service.resolve("de", "en", null, {quiet: true})).route?.ref.id
+			).to.equal(catalog.llm.id);
+			expect(ask.asked).to.deep.equal([]);
 			r.service.dispose();
 		});
 	});
@@ -3212,10 +3288,12 @@ describe("translate/service", () => {
 			r.service.dispose();
 		});
 
+		const write = {...base, purpose: "write" as const};
+
 		it("offers a missing pack once: downloaded, the pair is Apple's", async () => {
 			const r = appleRig({"de>en": "supported"});
 
-			expect(await text(r.service.translate(base))).to.equal("[Hallo]");
+			expect(await text(r.service.translate(write))).to.equal("[Hallo]");
 			expect(r.bridge.calls.filter((c) => c.method === "prepare")).to.have.length(1);
 			r.service.dispose();
 		});
@@ -3224,10 +3302,25 @@ describe("translate/service", () => {
 			const r = appleRig({"de>en": "supported", "en>en": "installed"});
 
 			r.bridge.sheet = "decline";
-			expect(await text(r.service.translate(base))).to.equal("llm:Hallo");
-			expect(await text(r.service.translate(base))).to.equal("llm:Hallo");
+			expect(await text(r.service.translate(write))).to.equal("llm:Hallo");
+			expect(await text(r.service.translate(write))).to.equal("llm:Hallo");
 			expect(r.bridge.calls.filter((c) => c.method === "prepare")).to.have.length(1);
 			expect((await r.service.route("en", "en"))?.candidate).to.equal("llm");
+			r.service.dispose();
+		});
+
+		it("never opens the sheet for a line read: the table translates it, and the pair is reported", async () => {
+			const bridge = fakeBridge({"de>en": "supported"});
+			const noted: string[] = [];
+			const r = rig("gpu", true, DEFAULT_ROUTES, {
+				apple: new AppleTranslator(bridge.deps),
+				onApplePack: (from, to) => noted.push(`${from}>${to}`),
+			});
+
+			clock = r.clock;
+			expect(await text(r.service.translate(base))).to.equal("llm:Hallo");
+			expect(bridge.calls.filter((c) => c.method === "prepare")).to.have.length(0);
+			expect(noted).to.deep.equal(["de>en"]);
 			r.service.dispose();
 		});
 

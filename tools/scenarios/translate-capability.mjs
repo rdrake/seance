@@ -50,11 +50,12 @@
 // dialog with "This needs NLLB-200, which is switched off …" until the switch
 // is turned on. The GPU model select greys a model this GPU cannot bind
 // (binds128, binds160: the 4B, with a hint naming it and the buffer numbers) and no
-// other. Last, on the desktop device, the download question: a channel with
-// several German lines switched to reading asks once ("Download <model>?",
-// its size, Download / Not now), Not now fails every line with "Needs
-// <model>, a <size> download: …" and pauses nothing, nothing is remembered,
-// a Retry asks once more, and every copy line still says "Not downloaded".
+// other. Last, on the desktop device on a connection that saves data (so no
+// download is a quiet one, service.ts QUIET_DOWNLOAD_BYTES): a channel with
+// several German lines switched to reading asks nothing -- reading never
+// interrupts -- and every line offers the download instead, "Needs a <size>
+// download · Download", its title naming the model; nothing pauses, nothing
+// is remembered, and every copy line still says "Not downloaded".
 //
 // Not on the fake engine: ?fakeTranslate replaces the probe with its own
 // answer. A production build is fine; no model is ever downloaded.
@@ -1122,12 +1123,16 @@ export default async function run(page) {
 	);
 
 	/**
-	 * The download question, on the desktop device: nothing is downloaded,
-	 * so the first route of a channel's lines asks; Not now must fail them
-	 * all with the model named, once, and pause nothing.
+	 * Downloads on the desktop device: nothing is downloaded, and the
+	 * connection saves data, so reading's first route of a channel's lines
+	 * needs a download nobody agreed to. It must ask nothing, offer it on
+	 * every line with the model named, and pause nothing.
 	 */
 	async function consentStage(index) {
 		page.check("--- consent", true);
+		await page.addInitScript(
+			`Object.defineProperty(Navigator.prototype, "connection", {configurable: true, get: () => ({saveData: true, type: "wifi"})});`
+		);
 		await coldLoad("desktop", index);
 
 		const lines = [
@@ -1162,75 +1167,37 @@ export default async function run(page) {
 			}).observe(overlay, {attributes: true, attributeFilter: ["class"], childList: true, subtree: true});
 		})()`);
 
-		// Reading on: the panel's On. The question comes up over the panel the
-		// switch was thrown in, so the panel is put away only once it has been
-		// answered.
+		// Reading on: the panel's On.
 		await openPanel();
 		await page.evaluate(`${readOnSegment}.click()`);
+		await closePanel();
 
-		await page.waitFor(`!!document.querySelector("#confirm-dialog-overlay.opened")`, {
-			label: "the download question",
-			timeout: 30000,
-		});
-		// Every line is waiting on it by now: still one question.
-		await page.sleep(2000);
-
-		const question = await page.evaluate(`(() => {
-			const d = document.querySelector("#confirm-dialog");
-			return {
-				count: window.__questions.length,
-				title: d.querySelector(".confirm-text-title").textContent.trim(),
-				text: d.querySelector(".confirm-text p").textContent.trim(),
-				download: d.querySelector(".btn-confirm").textContent.trim(),
-				notNow: d.querySelector(".btn-cancel").textContent.trim(),
-			};
-		})()`);
+		// The language model's copy is the GPU's (a reason names its device).
 		// Which GPU model the device default picked: the 4B on a desktop with
-		// the memory for it, the 1.7B on a phone.
-		const model = /^Download (.+)\?$/.exec(question.title)?.[1] ?? "";
+		// the memory for it.
 		const sizeOf = {
 			[EN["translate.model.llm"].replace("{name}", "Qwen3 1.7B")]: 984_000_000,
 			[EN["translate.model.llm"].replace("{name}", "Qwen3 4B")]: 2_280_000_000,
 		};
-
-		page.check(
-			`consent: one question for ${lines.length} lines, naming the model and its size (${question.count}: ${question.title} / ${question.text})`,
-			question.count === 1 &&
-				model in sizeOf &&
-				question.title === EN["translate.consent.title"].replace("{model}", model) &&
-				question.text ===
-					EN["translate.consent.text"]
-						.replace("{model}", model)
-						.replace("{size}", size(sizeOf[model])) &&
-				question.download === EN["translate.model.download"] &&
-				question.notNow === EN["translate.consent.notNow"]
-		);
-		await page.screenshot("consent-question");
-		// Past the overlay's fade-in before the click.
-		await page.sleep(500);
-		// The download question opened by itself: no answer before it is armed (ConfirmDialog.vue ARM_MS).
-		await page.waitFor(`!!document.querySelector("#confirm-dialog[data-armed]")`, {
-			label: "the download question armed",
-		});
-		await page.click("#confirm-dialog .btn-cancel");
-		await page.sleep(300);
-		await closePanel();
-
-		// The language model's copy is the GPU's (a reason names its device).
-		const reason = EN["translate.why.downloadGpu"]
-			.replace("{model}", model)
-			.replace("{size}", size(sizeOf[model]));
-		const FAILED = `${JSON.stringify(
+		const OFFERS = `${JSON.stringify(
 			lines
-		)}.map((line) => [...document.querySelectorAll("#chat .msg:not(.self)")].find((m) => m.textContent.includes(line))).map((m) => { const r = m && m.querySelector('.msg-translation[data-status="failed"] .msg-translation-reason'); return r ? {text: r.textContent.trim(), title: r.title} : null; })`;
+		)}.map((line) => [...document.querySelectorAll("#chat .msg:not(.self)")].find((m) => m.textContent.includes(line))).map((m) => { const r = m && m.querySelector('.msg-translation[data-status="failed"] .msg-translation-offer'); return r ? {text: r.textContent.replace(/\\s+/g, " ").trim(), title: r.title} : null; })`;
 
-		await page.waitFor(`${FAILED}.every((r) => r)`, {
-			label: "every line failed",
-			timeout: 20000,
+		await page.waitFor(`${OFFERS}.every((r) => r)`, {
+			label: "every line offers its download",
+			timeout: 30000,
 		});
 		await page.sleep(1500);
 
-		const failed = await page.evaluate(FAILED);
+		const offers = await page.evaluate(OFFERS);
+		const reasons = Object.entries(sizeOf).map(([model, bytes]) => ({
+			text: `${EN["translate.line.needsDownload"].replace("{size}", size(bytes))} ${
+				EN["translate.line.download"]
+			}`,
+			title: EN["translate.why.downloadGpu"]
+				.replace("{model}", model)
+				.replace("{size}", size(bytes)),
+		}));
 		const after = await page.evaluate(`(() => ({
 			count: window.__questions.length,
 			open: !!document.querySelector("#confirm-dialog-overlay.opened"),
@@ -1239,43 +1206,17 @@ export default async function run(page) {
 		}))()`);
 
 		page.check(
-			`consent: Not now fails every line naming the model (${failed[0]?.text})`,
-			failed.every((r) => r && r.text === reason && r.title === reason)
+			`consent: every line offers the language model's download (${offers[0]?.text} / ${offers[0]?.title})`,
+			offers.every(
+				(r) => r && reasons.some((want) => want.text === r.text && want.title === r.title)
+			)
 		);
 		page.check(
-			`consent: still one question, none open, nothing remembered (${after.count}, ${after.consent})`,
-			after.count === 1 && !after.open && after.consent === null
+			`consent: nothing asked, nothing remembered (${after.count}, ${after.consent})`,
+			after.count === 0 && !after.open && after.consent === null
 		);
 		page.check(`consent: no pause (${after.paused})`, !after.paused);
-		await page.screenshot("consent-not-now");
-
-		// A Retry is someone asking: one more question.
-		await page.evaluate(`(() => {
-			const line = ${JSON.stringify(lines[0])};
-			const m = [...document.querySelectorAll("#chat .msg:not(.self)")].find((el) => el.textContent.includes(line));
-			m.setAttribute("data-consent-retry", "1");
-		})()`);
-		await page.evaluate(
-			`document.querySelector("[data-consent-retry] .msg-translation-retry").click()`
-		);
-		await page.waitFor(`!!document.querySelector("#confirm-dialog-overlay.opened")`, {
-			label: "the question again after a Retry",
-		});
-
-		const again = await page.evaluate(`window.__questions.length`);
-
-		page.check(`consent: a Retry asks once more (${again})`, again === 2);
-		// Past the overlay's fade-in before the click.
-		await page.sleep(500);
-		// The download question opened by itself: no answer before it is armed (ConfirmDialog.vue ARM_MS).
-		await page.waitFor(`!!document.querySelector("#confirm-dialog[data-armed]")`, {
-			label: "the download question armed",
-		});
-		await page.click("#confirm-dialog .btn-cancel");
-		await page.waitFor(
-			`!!document.querySelector('[data-consent-retry] .msg-translation[data-status="failed"]')`,
-			{label: "the retried line failed again"}
-		);
+		await page.screenshot("consent-offers");
 
 		// Nothing was downloaded, or is: every model row still says so.
 		await openSettings();

@@ -374,7 +374,8 @@ held by the service): the app's confirm dialog (`ConfirmDialog.vue`, its
 `note`/`cancel`/`primary` options) titled "Download <model>?", the size from
 `ModelRef.sizeBytes` through `friendlysize`, a line about the connection
 when `navigator.connection` reports Save-Data or a cellular link, and
-Download / Not now. The question is asked **when the route is resolved**
+Download / Not now -- for anything but reading, which never asks (below).
+The question is asked **when the route is resolved**
 (`service.ts` `resolve`, which `route()` and `translate()`'s own walk go
 through), before the reading queue or the composer arms a request
 deadline, so a dialog left open times nothing out and the queue's engine
@@ -399,6 +400,30 @@ and marker form are chosen with the answer known.
   `translate()` report it, through `fail()`, which counts it toward no
   pause (`PAUSE_AFTER_FAILURES` never trips on a declined download). A
   Retry on a line is a new question (`service.forgetDeclines`).
+- **Reading never asks** (`ResolveOptions.quiet`, which the reading queue
+  and every `purpose: "read"` request pass): a line nobody translated by
+  hand must not pop a dialog. Its route takes what needs no yes, and where
+  nothing does the line fails with `needsDownloadError` like a Not now --
+  without recording one, so the composer still asks -- and
+  `TranslationLine.vue` offers it on the line instead of a failure: "Needs a
+  <size> download · **Download**", the reason above as its title. The
+  Download is the yes (`service.allowDownload` for the copy the reason
+  named) and retries the line, whose download's progress then shows on it.
+  The composer, which the user is waiting on, still asks in the dialog.
+- **A small copy is no question at all**: one of `QUIET_DOWNLOAD_BYTES`
+  (128 MB) or less -- an OPUS-MT pair's CPU copy, a deploy's per-language
+  models -- downloads unasked, from reading and the composer alike, unless
+  `navigator.connection` reports Save-Data or a cellular link
+  (`ServiceDeps.metered`; iOS reports neither, so there it is always quiet).
+- **The system translator's pack is offered on the line, never in its
+  sheet by itself** (iOS shell, `engines/apple.ts`): reading takes an
+  installed pack only; a pack that could be downloaded is reported
+  (`ServiceDeps.onApplePack` → `applePacks.ts`), the line is translated by
+  the table now, and the first line translated from that pair shows "Apple
+  can translate <language> on this device · **Get it**" under it, once per
+  pair per page load. Get it opens the system's sheet (`offer`); once the
+  pack lands, the pair is Apple's. The composer still offers the sheet the
+  first time it needs a pack; Settings keeps its own pack button.
 - The UI's availability questions (`pairVerdict`) do not read declines:
   the actions stay offered, and a line or strip says why it did not run.
 - Without a dialog wired (`ServiceDeps.askDownload` absent) every download
@@ -407,9 +432,11 @@ and marker form are chosen with the answer known.
 
 Tests: `test/translate/consent.ts`, `test/translate/service.ts` "download
 consent"; browser check `tools/scenarios/translate-capability.mjs` (one
-question for a channel's lines, Not now naming the model on each line, no
-pause) and `tools/scenarios/translate-consent.mjs` (the fake: Not now
-falling back to a downloaded OPUS pair).
+reading asks nothing and offers the download on each line, no pause) and
+`tools/scenarios/translate-consent.mjs` (the fake: reading falls back to a
+downloaded OPUS pair unasked, then a line's Download is remembered and
+runs the language model). Until 2026-11 reading asked in the dialog too,
+and the iOS sheet opened by itself on the first line of a new language.
 
 ### Phones and small GPUs
 
