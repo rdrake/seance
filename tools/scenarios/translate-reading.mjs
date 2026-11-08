@@ -96,12 +96,12 @@ const BASE = process.env.SEANCE_HTTP ?? "http://localhost:8021/";
 export const url = `${BASE}?host=127.0.0.1&port=8067&tls=false&nick=${NICK}&join=%23seance-translate&fakeTranslate`;
 
 const PAUSED = `!!document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translation.paused`;
-const LINES = `document.querySelectorAll('.msg-translation[data-status="done"]').length`;
+const LINES = `document.querySelectorAll('.msg-translated').length`;
 const MOBILE = process.argv.includes("--mobile");
 const REQUESTS = `(window.__seanceTranslateFake && window.__seanceTranslateFake.requests) || []`;
 const STORE_TRANSLATIONS = `document.getElementById("app").__vue_app__.config.globalProperties.$store.state.translations`;
 const REDACTION_FEATURE = "CAP_draft_message_redaction";
-const PENDING = `document.querySelectorAll('.msg-translation[data-status="pending"]').length`;
+const PENDING = `Object.values(${STORE_TRANSLATIONS}).filter((e) => e.status === "pending").length`;
 
 /** The newest row whose text includes `text`, as an expression. */
 const newestRow = (text) =>
@@ -228,11 +228,32 @@ async function expectLeftAlone(page, row, text, label) {
 	);
 }
 
-async function openChipMenu(page, chip, label) {
+/**
+ * What a translated row says of its source, as the flipper before it tells
+ * it (TranslationFlip.vue's title, English interface): "from German",
+ * "from German?", "sent in German", or "" with no flipper.
+ */
+function chipOf(row) {
+	return `(() => { const r = ${row}; const f = r && r.querySelector(".msg-translate-flip"); const m = f && /^(?:Translated from (.+)\\. Show the original|Sent in (.+)\\. Show what was sent)$/.exec(f.title); return m ? (m[1] ? "from " + m[1] : "sent in " + m[2]) : ""; })()`;
+}
+
+/** A translated row's menu, from the Translate action in its toolbar. */
+async function openChipMenu(page, row, label) {
 	await page.evaluate(
-		`document.querySelector(${JSON.stringify(chip)}).scrollIntoView({block: "center"})`
+		`document.querySelector(${JSON.stringify(row)}).scrollIntoView({block: "center"})`
 	);
-	await page.click(chip);
+
+	if (MOBILE) {
+		await page.evaluate(`document.querySelector(${JSON.stringify(row)}).click()`);
+	} else {
+		await page.hover(row);
+	}
+
+	await page.evaluate(
+		`document.querySelector(${JSON.stringify(
+			row
+		)}).querySelector(".msg-action-translate").click()`
+	);
 	await page.waitFor(`!!document.querySelector(".context-menu-translate-retry-pick")`, {
 		label,
 	});
@@ -417,22 +438,19 @@ async function scenario(page) {
 	await page.waitFor(READING_ON, {label: "reading on"});
 	await page.waitFor(
 		preSwitch
-			.map(
-				(line) =>
-					`!!(${newestRow(line)})?.querySelector('.msg-translation[data-status="done"]')`
-			)
+			.map((line) => `!!(${newestRow(line)})?.querySelector('.msg-translated')`)
 			.join(" && "),
 		{timeout: 90000, label: "the two lines said before the switch are translated once it is on"}
 	);
-	await page.waitFor(
-		`!!(${ownBeforeRow})?.querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 90000, label: "the page's own line said before the switch is translated too"}
-	);
+	await page.waitFor(`!!(${ownBeforeRow})?.querySelector('.msg-translated')`, {
+		timeout: 90000,
+		label: "the page's own line said before the switch is translated too",
+	});
 	await page.check(
 		"the own line's translation is the fake's English echo",
 		String(
 			await page.evaluate(
-				`((${ownBeforeRow}).querySelector(".msg-translation-text") || {}).textContent`
+				`((${ownBeforeRow}).querySelector(".msg-translated") || {}).textContent`
 			)
 		).includes("[English] Ich schreibe selbst")
 	);
@@ -509,16 +527,14 @@ async function scenario(page) {
 	// backlog's translations sit above it.
 	const translatedRow = newestRow("Ich schicke dir gleich das Log");
 	const translatedRowId = String(await page.evaluate(`(${translatedRow}).id`));
-	const CHIP = `#${translatedRowId} .msg-translation-chip`;
-	const TEXT = `#${translatedRowId} .msg-translation-text`;
+	const LINE_FLIP = `#${translatedRowId} .msg-translate-flip`;
+	const TEXT = `#${translatedRowId} .msg-translated`;
 
 	// Every label names its languages in the reader's language: this
 	// channel is read in English, so the German line's chip is in English.
 	await page.check(
 		"a chip reads German → English in a channel read in English",
-		(await page.evaluate(
-			`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim()`
-		)) === "from German"
+		(await page.evaluate(chipOf(translatedRow))) === "from German"
 	);
 	await page.check(
 		"the fake's English echo is shown",
@@ -528,22 +544,13 @@ async function scenario(page) {
 	);
 	await page.screenshot("translated-line");
 
-	// Once a translation is shown and done, it is the bright line and the
-	// original dims (docs/resources/translation.md § Reading a channel):
-	// read both reference colours rather than hard-coding hex.
+	// A done translation stands in the original's place, at the body colour
+	// (docs/resources/translation.md § Reading a channel): read the
+	// reference colour rather than hard-coding hex.
 	const bodyColor = String(await page.evaluate(`getComputedStyle(document.body).color`));
-	const mutedColor = String(
-		await page.evaluate(`getComputedStyle(document.querySelector(".time")).color`)
-	);
 	await page.check(
 		"the translated row carries the translated class",
 		await page.evaluate(`(${translatedRow}).classList.contains("translated")`)
-	);
-	await page.check(
-		"the original text is muted",
-		(await page.evaluate(
-			`getComputedStyle((${translatedRow}).querySelector(".content")).color`
-		)) === mutedColor
 	);
 	await page.check(
 		"the translation text is the bright body colour",
@@ -556,7 +563,7 @@ async function scenario(page) {
 	// runners-up are one click each; the line's own source is not among them
 	// (that item would only repeat Retranslate), and "Retranslate from…"
 	// opens the picker for any supported language.
-	await openChipMenu(page, CHIP, "the chip menu offers the source items");
+	await openChipMenu(page, `#${translatedRowId}`, "the chip menu offers the source items");
 
 	const sourceItems = await page.evaluate(
 		`[...document.querySelectorAll(".context-menu-translate-retry-from")].map((i) => i.textContent.trim())`
@@ -633,7 +640,7 @@ async function scenario(page) {
 	);
 
 	// Chosen: French. The chip says so and the request carries it.
-	await openChipMenu(page, CHIP, "the chip menu opened again");
+	await openChipMenu(page, `#${translatedRowId}`, "the chip menu opened again");
 	await page.click(".context-menu-translate-retry-pick");
 	await page.waitFor(`!!document.querySelector(".source-language-picker")`, {
 		label: "the source picker opened again",
@@ -658,12 +665,11 @@ async function scenario(page) {
 		}, to: ${frenchRequest && frenchRequest.to})`,
 		!!frenchRequest && frenchRequest.from === "fr" && frenchRequest.to === "en"
 	);
-	await page.check(
-		"the chip now reads from French",
-		(await page.evaluate(
-			`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim()`
-		)) === "from French"
-	);
+	// Nothing shows while the retranslation runs; it swaps in when done.
+	await page.waitFor(`${chipOf(translatedRow)} === "from French"`, {
+		timeout: 15000,
+		label: "the flipper now reads from French",
+	});
 	await page.waitFor(`${LINES} === ${base + 1}`, {
 		timeout: 15000,
 		label: "the retranslation from French is in",
@@ -671,7 +677,7 @@ async function scenario(page) {
 
 	// The candidates survived the explicit source, so the detector's own
 	// guess is one click away again.
-	await openChipMenu(page, CHIP, "the chip menu opened a third time");
+	await openChipMenu(page, `#${translatedRowId}`, "the chip menu opened a third time");
 
 	const afterItems = await page.evaluate(
 		`[...document.querySelectorAll(".context-menu-translate-retry-from")].map((i) => i.textContent.trim())`
@@ -687,10 +693,10 @@ async function scenario(page) {
 	await page.evaluate(
 		`[...document.querySelectorAll(".context-menu-translate-retry-from")].find((i) => i.textContent.includes("German")).click()`
 	);
-	await page.waitFor(
-		`document.querySelector(${JSON.stringify(CHIP)}).textContent.trim() === "from German"`,
-		{timeout: 15000, label: "the one-click candidate put it back on German"}
-	);
+	await page.waitFor(`${chipOf(translatedRow)} === "from German"`, {
+		timeout: 15000,
+		label: "the one-click candidate put it back on German",
+	});
 	await page.waitFor(`${LINES} === ${base + 1}`, {
 		timeout: 15000,
 		label: "the German line is translated",
@@ -756,16 +762,14 @@ async function scenario(page) {
 	});
 	await page.click(".context-menu-translate-now");
 	await page.waitFor(
-		`!!document.querySelector(${JSON.stringify(
-			`#${englishRowId} .msg-translation[data-status="done"]`
-		)})`,
+		`!!document.querySelector(${JSON.stringify(`#${englishRowId} .msg-translated`)})`,
 		{timeout: 20000, label: "the toolbar's Translate produced a translation"}
 	);
 	await page.check(
 		"the translation is there",
 		await page.evaluate(
 			`document.querySelector(${JSON.stringify(
-				`#${englishRowId} .msg-translation-text`
+				`#${englishRowId} .msg-translated`
 			)}).textContent.includes("[English] this one is already")`
 		)
 	);
@@ -787,13 +791,7 @@ async function scenario(page) {
 	// The chip names the detector's contenders instead of dropping the source
 	// (labels.ts): "from Spanish / Portuguese", in whichever order franc
 	// ranked them this run -- never a bare "from".
-	const spanishChip = String(
-		await page.evaluate(
-			`((${newestRow(
-				spanish
-			)}).querySelector(".msg-translation-chip") || {}).textContent || ""`
-		)
-	).trim();
+	const spanishChip = String(await page.evaluate(chipOf(newestRow(spanish)))).trim();
 	const CONTENDER = "(Spanish|Portuguese|Galician)";
 
 	await page.check(
@@ -840,17 +838,13 @@ async function scenario(page) {
 
 	// The engine places it and the line translates.
 	await page.waitFor(
-		`!!document.querySelector(${JSON.stringify(
-			`#${unsureRowId} .msg-translation[data-status="done"]`
-		)})`,
+		`!!document.querySelector(${JSON.stringify(`#${unsureRowId} .msg-translated`)})`,
 		{timeout: 20000, label: "the short German line translated"}
 	);
 	await page.check(
 		"the short line's chip names German (the prior settled the lookup's tie)",
 		(
-			await page.evaluate(
-				`document.querySelector('#${unsureRowId} .msg-translation-chip').textContent`
-			)
+			await page.evaluate(chipOf(`document.getElementById(${JSON.stringify(unsureRowId)})`))
 		).trim() === "from German"
 	);
 	const unsureRequests = await page.evaluate(
@@ -950,34 +944,50 @@ async function scenario(page) {
 		label: "the declined card is gone",
 	});
 
-	// The chip's menu: copy one translation, hide one translation.
-	await page.evaluate(
-		`document.querySelector(${JSON.stringify(CHIP)}).scrollIntoView({block: "center"})`
-	);
-	await page.click(CHIP);
-	await page.waitFor(`!!document.querySelector(".context-menu-translate-hide")`, {
-		label: "chip menu open",
-	});
+	// The translated row's menu (its toolbar's Translate): swap first, then
+	// Copy translation.
+	await openChipMenu(page, `#${translatedRowId}`, "the translation menu open");
 	await page.check(
-		"the chip's menu offers Copy translation first",
+		"the menu offers the original first and Copy translation second",
 		await page.evaluate(
-			`!!document.querySelector("#context-menu-item-0.context-menu-translate-copy")`
+			`!!document.querySelector("#context-menu-item-0.context-menu-translate-flip") && !!document.querySelector("#context-menu-item-1.context-menu-translate-copy")`
 		)
 	);
+	// Copy closes the menu (and copies; nothing here reads the clipboard).
+	await page.click(".context-menu-translate-copy");
+	await page.waitFor(`!document.querySelector("#context-menu-container")`, {
+		label: "the menu closed",
+	});
 	await page.check(
 		"the translated line is selectable",
 		(await page.evaluate(
 			`getComputedStyle(document.querySelector(${JSON.stringify(TEXT)})).userSelect`
 		)) === "text"
 	);
-	await page.click(".context-menu-translate-hide");
-	await page.waitFor(`${LINES} === ${base + 5}`, {label: "one translation hidden"});
 	await page.check(
-		"Show original only drops the translated class and the original's colour",
+		"the translation stands in the original's place",
+		await page.evaluate(
+			`(${translatedRow}).querySelector(".content .msg-translated").textContent.trim().startsWith("[English]") && !!(${translatedRow}).querySelector(".content > .msg-translated")`
+		)
+	);
+	// The flipper swaps the original back, one tap.
+	await page.click(LINE_FLIP);
+	await page.waitFor(`${LINES} === ${base + 5}`, {label: "one translation swapped back"});
+	await page.check(
+		"the flipper shows the original, at the line's own colour",
 		(await page.evaluate(`(${translatedRow}).classList.contains("translated")`)) === false &&
+			(await page.evaluate(
+				`!(${translatedRow}).querySelector(".msg-translated") && !(${translatedRow}).querySelector(".content").textContent.includes("[English]")`
+			)) &&
 			(await page.evaluate(
 				`getComputedStyle((${translatedRow}).querySelector(".content")).color`
 			)) === bodyColor
+	);
+	await page.check(
+		"the flipper stays, to swap the translation back in",
+		(await page.evaluate(
+			`document.querySelector(${JSON.stringify(LINE_FLIP)}).getAttribute("aria-pressed")`
+		)) === "false"
 	);
 
 	// No word floor: a two-word line the classifier places ("ist" is a German
@@ -1002,17 +1012,13 @@ async function scenario(page) {
 	const shortRowId = String(await page.evaluate(`${shortRows}.pop().id`));
 
 	await page.waitFor(
-		`!!document.querySelector(${JSON.stringify(
-			`#${shortRowId} .msg-translation[data-status="done"]`
-		)})`,
+		`!!document.querySelector(${JSON.stringify(`#${shortRowId} .msg-translated`)})`,
 		{timeout: 20000, label: "the two-word line is translated by itself"}
 	);
 	await page.check(
 		"the two-word line's chip offers the guess (German? → English)",
 		(
-			await page.evaluate(
-				`document.querySelector('#${shortRowId} .msg-translation-chip').textContent`
-			)
+			await page.evaluate(chipOf(`document.getElementById(${JSON.stringify(shortRowId)})`))
 		).trim() === "from German?"
 	);
 
@@ -1083,19 +1089,17 @@ async function scenario(page) {
 		ownMarker
 	)})).pop()`;
 
-	await page.waitFor(
-		`!!(${ownRow}) && !!(${ownRow}).querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 15000, label: "the own line is translated"}
-	);
+	await page.waitFor(`!!(${ownRow}) && !!(${ownRow}).querySelector('.msg-translated')`, {
+		timeout: 15000,
+		label: "the own line is translated",
+	});
 	await page.check(
 		"the own line added exactly one done line",
 		(await page.evaluate(LINES)) === base + 8
 	);
 	await page.check(
 		"the own row's chip reads sent in German",
-		(await page.evaluate(
-			`((${ownRow}).querySelector(".msg-translation-chip") || {}).textContent.trim()`
-		)) === "sent in German"
+		(await page.evaluate(chipOf(ownRow))) === "sent in German"
 	);
 
 	// The panel: opened from the channel menu, full language names, closes
@@ -1215,14 +1219,14 @@ async function scenario(page) {
 	);
 	await page.screenshot("failed-retry");
 	await page.click(`#${await page.evaluate(`(${failRow}).id`)} .msg-translation-retry`);
-	await page.waitFor(
-		`!!(${failRow}) && !!(${failRow}).querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 15000, label: "the retry succeeds"}
-	);
+	await page.waitFor(`!!(${failRow}) && !!(${failRow}).querySelector('.msg-translated')`, {
+		timeout: 15000,
+		label: "the retry succeeds",
+	});
 	await page.check(
 		"the retried translation carries the English echo",
 		await page.evaluate(
-			`(${failRow}).querySelector(".msg-translation-text").textContent.includes("[English]")`
+			`(${failRow}).querySelector(".msg-translated").textContent.includes("[English]")`
 		)
 	);
 	await page.check(
@@ -1248,19 +1252,19 @@ async function scenario(page) {
 	)})).pop()`;
 
 	await page.waitFor(
-		`!!(${emphasisRow}) && !!(${emphasisRow}).querySelector('.msg-translation[data-status="done"]')`,
+		`!!(${emphasisRow}) && !!(${emphasisRow}).querySelector('.msg-translated')`,
 		{timeout: 15000, label: "the emphasised line is translated"}
 	);
 	await page.check(
 		"the emphasis survived and renders as emphasis in the translation",
 		(await page.evaluate(
-			`((${emphasisRow}).querySelector(".msg-translation-text .irc-italic") || {}).textContent`
+			`((${emphasisRow}).querySelector(".msg-translated .irc-italic") || {}).textContent`
 		)) === "Betonung"
 	);
 	await page.check(
 		"the page's own nick came back untouched",
 		await page.evaluate(
-			`(${emphasisRow}).querySelector(".msg-translation-text").textContent.includes(${JSON.stringify(
+			`(${emphasisRow}).querySelector(".msg-translated").textContent.includes(${JSON.stringify(
 				NICK
 			)})`
 		)
@@ -1296,13 +1300,13 @@ async function scenario(page) {
 
 	const nameRow = newestRow(nameMarker);
 
-	await page.waitFor(
-		`!!(${nameRow}) && !!(${nameRow}).querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 20000, label: "the line naming a departed nick and a channel is translated"}
-	);
+	await page.waitFor(`!!(${nameRow}) && !!(${nameRow}).querySelector('.msg-translated')`, {
+		timeout: 20000,
+		label: "the line naming a departed nick and a channel is translated",
+	});
 
 	const nameTranslation = await page.evaluate(
-		`(${nameRow}).querySelector(".msg-translation-text").textContent`
+		`(${nameRow}).querySelector(".msg-translated").textContent`
 	);
 
 	await page.check(
@@ -1358,16 +1362,16 @@ async function scenario(page) {
 				.join(" && ")
 		)
 	);
-	await page.waitFor(
-		`!!(${multiRow}) && !!(${multiRow}).querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 25000, label: "the multi-line message is translated"}
-	);
+	await page.waitFor(`!!(${multiRow}) && !!(${multiRow}).querySelector('.msg-translated')`, {
+		timeout: 25000,
+		label: "the multi-line message is translated",
+	});
 
 	for (const line of multiLines) {
 		await page.check(
 			`the multi-line translation carries "${line.slice(0, 24)}…"`,
 			await page.evaluate(
-				`(${multiRow}).querySelector(".msg-translation-text").textContent.includes(${JSON.stringify(
+				`(${multiRow}).querySelector(".msg-translated").textContent.includes(${JSON.stringify(
 					`[English] ${line}`
 				)})`
 			)
@@ -1403,10 +1407,10 @@ async function scenario(page) {
 		timeout: 15000,
 		label: "the math-block message arrived",
 	});
-	await page.waitFor(
-		`!!(${mathRow}) && !!(${mathRow}).querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 25000, label: "the math-block message is translated"}
-	);
+	await page.waitFor(`!!(${mathRow}) && !!(${mathRow}).querySelector('.msg-translated')`, {
+		timeout: 25000,
+		label: "the math-block message is translated",
+	});
 
 	// The `$$…$$` fences are markdown syntax, stripped by the renderer like
 	// any other marker (`*bold*` doesn't show its asterisks either): the
@@ -1418,12 +1422,12 @@ async function scenario(page) {
 	// are proved by the ordinary translated-line check.
 	await page.check(
 		"the display math survived as its own span, not mangled into prose",
-		await page.evaluate(`!!(${mathRow}).querySelector(".msg-translation-text .md-math-block")`)
+		await page.evaluate(`!!(${mathRow}).querySelector(".msg-translated .md-math-block")`)
 	);
 	await page.check(
 		"the prose around the math block was translated",
 		await page.evaluate(
-			`(${mathRow}).querySelector(".msg-translation-text").textContent.includes("[English]") && (${mathRow}).querySelector(".msg-translation-text").textContent.includes(${JSON.stringify(
+			`(${mathRow}).querySelector(".msg-translated").textContent.includes("[English]") && (${mathRow}).querySelector(".msg-translated").textContent.includes(${JSON.stringify(
 				mathMarker
 			)})`
 		)
@@ -1471,7 +1475,7 @@ async function scenario(page) {
 
 	await page.check(
 		`the burst line's row was found (${burstRowId || "none"}) with its translation`,
-		await page.evaluate(`!!(${burstRow}) && !!(${burstRow}).querySelector(".msg-translation")`)
+		await page.evaluate(`!!(${burstRow}) && !!(${burstRow}).querySelector(".msg-translated")`)
 	);
 
 	other.redact(burstMsgid);
@@ -1481,7 +1485,9 @@ async function scenario(page) {
 	});
 	await page.check(
 		"the deleted row keeps no translation",
-		await page.evaluate(`!(${burstRow}).querySelector(".msg-translation")`)
+		await page.evaluate(
+			`!(${burstRow}).querySelector(".msg-translation, .msg-translated, .msg-translate-flip")`
+		)
 	);
 	const afterRedact = await page.evaluate(LINES);
 
@@ -1545,9 +1551,7 @@ async function scenario(page) {
 
 	await page.check(
 		"the short line's chip offers the guess (German? → English)",
-		(await page.evaluate(
-			`((${shortRow}).querySelector(".msg-translation-chip") || {}).textContent.trim()`
-		)) === "from German?"
+		(await page.evaluate(chipOf(shortRow))) === "from German?"
 	);
 
 	// History the reader asks for: a "load more" is translated, newest line
@@ -1562,31 +1566,24 @@ async function scenario(page) {
 		)) !== "none"
 	);
 
-	// The order the rows gain a translation line in is the order the reader
+	// The order the rows gain a translation entry in is the order the reader
 	// queued them in: an entry is committed per line as it is queued. Watched
 	// from before the load, so nothing is missed by looking too late.
 	await page.evaluate(
 		`(() => {
 			window.__seanceTranslationOrder = [];
-			const seen = new Set(
-				[...document.querySelectorAll(".msg-translation")]
-					.map((el) => (el.closest(".msg") || {}).id)
-					.filter(Boolean)
-			);
-			const scan = () => {
-				for (const el of document.querySelectorAll(".msg-translation")) {
-					const row = el.closest(".msg");
+			const store = document.getElementById("app").__vue_app__.config.globalProperties.$store;
+			const seen = new Set(Object.keys(store.state.translations).map((id) => "msg-" + id));
 
-					if (row && row.id && !seen.has(row.id)) {
-						seen.add(row.id);
-						window.__seanceTranslationOrder.push(row.id);
-					}
+			// A line is queued as its entry is committed; nothing renders
+			// until it is done, so the commits are what tells the order.
+			store.subscribe((mutation) => {
+				const id = mutation.type === "translationEntry" && mutation.payload && "msg-" + mutation.payload.id;
+
+				if (id && !seen.has(id)) {
+					seen.add(id);
+					window.__seanceTranslationOrder.push(id);
 				}
-			};
-
-			new MutationObserver(scan).observe(document.querySelector("#chat .messages"), {
-				childList: true,
-				subtree: true,
 			});
 		})()`
 	);
@@ -1625,7 +1622,7 @@ async function scenario(page) {
 			return {
 				count: ids.length,
 				order,
-				done: document.querySelectorAll('.msg-translation[data-status="done"]').length,
+				done: document.querySelectorAll('.msg-translated').length,
 			};
 		})()`
 	);
@@ -1695,7 +1692,7 @@ async function scenario(page) {
 	)})).pop()`;
 
 	await page.waitFor(
-		`!!(${afterEchoRow}) && !!(${afterEchoRow}).querySelector('.msg-translation[data-status="done"]')`,
+		`!!(${afterEchoRow}) && !!(${afterEchoRow}).querySelector('.msg-translated')`,
 		{timeout: 20000, label: "the next line is translated: the engine was not paused"}
 	);
 
@@ -1741,13 +1738,9 @@ async function scenario(page) {
 	// -- for what arrives next, and for what is already on screen: the move
 	// requeues every reading channel (reader.ts `requeueReading`), so the
 	// finished English translations go and come back in French.
-	const afterEchoText = `((${afterEchoRow}).querySelector('.msg-translation[data-status="done"] .msg-translation-text') || {}).textContent || ""`;
+	const afterEchoText = `((${afterEchoRow}).querySelector('.msg-translated') || {}).textContent || ""`;
 
 	await setReadOverride(page, "fr");
-
-	const frenchName = String(
-		await page.evaluate(`new Intl.DisplayNames(["fr"], {type: "language"}).of("fr")`)
-	);
 
 	await page.waitFor(`(${afterEchoText}).includes("[French] ")`, {
 		timeout: 90000,
@@ -1758,20 +1751,20 @@ async function scenario(page) {
 	// whole direction, target included.
 	const afterEchoChip = String(
 		await page.evaluate(
-			`((${afterEchoRow}).querySelector(".msg-translation-chip") || {title: ""}).title || ""`
+			`((${afterEchoRow}).querySelector(".msg-translated") || {lang: ""}).lang`
 		)
 	).trim();
 
 	await page.check(
 		`the requeued translation's chip names the new target (${afterEchoChip})`,
-		afterEchoChip.includes(`→ ${frenchName}`)
+		afterEchoChip === "fr"
 	);
 	// Nothing on screen still reads as English: a line the requeue's cap left
 	// behind has no translation at all, never a stale one.
 	await page.check(
 		"no finished translation on screen is still in the old language",
 		await page.evaluate(
-			`[...document.querySelectorAll('.msg-translation[data-status="done"] .msg-translation-text')].every((n) => !n.textContent.includes("[English] "))`
+			`[...document.querySelectorAll('.msg-translated')].every((n) => !n.textContent.includes("[English] "))`
 		)
 	);
 
@@ -1792,7 +1785,7 @@ async function scenario(page) {
 
 	const frenchText = `((${newestRow(
 		frenchMarker
-	)}).querySelector('.msg-translation[data-status="done"] .msg-translation-text') || {}).textContent || ""`;
+	)}).querySelector('.msg-translated') || {}).textContent || ""`;
 
 	await page.waitFor(`(${frenchText}).includes("[French]")`, {
 		timeout: 30000,
@@ -1801,15 +1794,13 @@ async function scenario(page) {
 
 	const frenchChip = String(
 		await page.evaluate(
-			`((${newestRow(
-				frenchMarker
-			)}).querySelector(".msg-translation-chip") || {title: ""}).title || ""`
+			`((${newestRow(frenchMarker)}).querySelector(".msg-translated") || {lang: ""}).lang`
 		)
 	).trim();
 
 	await page.check(
 		`the new line's chip names the new target (${frenchChip})`,
-		frenchChip.includes(`→ ${frenchName}`)
+		frenchChip === "fr"
 	);
 	await page.screenshot("reading-language-changed");
 
@@ -1820,7 +1811,7 @@ async function scenario(page) {
 	const ownPartRow = `[...document.querySelectorAll(".msg.self:not(.pending)")].filter((m) => m.textContent.includes(${JSON.stringify(
 		ownPartMarker
 	)})).pop()`;
-	const ownPartText = `((((${ownPartRow}) || document).querySelector('.msg-translation[data-status="done"] .msg-translation-text') || {}).textContent || "")`;
+	const ownPartText = `((((${ownPartRow}) || document).querySelector('.msg-translated') || {}).textContent || "")`;
 
 	await page.fill("#input", ownPart);
 	await page.evaluate(`document.querySelector("#form").requestSubmit()`);
@@ -1914,14 +1905,14 @@ async function scenario(page) {
 		)) !== "none"
 	);
 	await page.click(".source-language-picker-confirm");
-	await page.waitFor(
-		`!!(${adhocRow}) && !!(${adhocRow}).querySelector('.msg-translation[data-status="done"]')`,
-		{timeout: 30000, label: "the ad-hoc translation arrived"}
-	);
+	await page.waitFor(`!!(${adhocRow}) && !!(${adhocRow}).querySelector('.msg-translated')`, {
+		timeout: 30000,
+		label: "the ad-hoc translation arrived",
+	});
 
 	const adhocChip = String(
 		await page.evaluate(
-			`((${adhocRow}).querySelector(".msg-translation-chip") || {title: ""}).title || ""`
+			`(() => { const e = ${STORE_TRANSLATIONS}[(${adhocRow}).id.replace(/^msg-/, "")]; return e.from + " → " + (${adhocRow}).querySelector(".msg-translated").lang; })()`
 		)
 	).trim();
 
@@ -1931,8 +1922,8 @@ async function scenario(page) {
 	);
 
 	await page.check(
-		`the ad-hoc chip names the picked source and the reading language (${adhocChip})`,
-		adhocChip.startsWith(`${germanInFrench} → ${frenchName}`)
+		`the ad-hoc translation is from the picked source into the reading language (${adhocChip}, ${germanInFrench})`,
+		adhocChip === "de → fr"
 	);
 
 	const adhocRequest = await page.evaluate(

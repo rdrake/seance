@@ -119,7 +119,7 @@ const SURFACES = `(() => ({
 	composer: !!document.querySelector("#translate-once"),
 	strip: !!document.querySelector(".translate-bar"),
 	panel: !!document.querySelector(".translation-panel"),
-	lines: document.querySelectorAll("#chat .msg-translation, #chat [class*='msg-translation']").length,
+	lines: document.querySelectorAll("#chat .msg-translation, #chat [class*='msg-translat']").length,
 	topicFlip: !!document.querySelector("#chat .topic-flip"),
 	placeholder: document.querySelector("#input")?.getAttribute("placeholder") ?? "",
 	target: document.querySelector("#translate-once .translate-once-target")?.textContent.trim() ?? "",
@@ -462,7 +462,7 @@ export default async function run(page) {
 		)}, self: false, time: new Date(), users: [], msgid: "seance-fake-31"},
 	})`);
 	await page.waitFor(
-		`!!document.querySelector("#msg-31 .msg-translation, #msg-31 [class*='msg-translation']")`,
+		`!!document.querySelector("#msg-31 .msg-translation, #msg-31 [class*='msg-translat']")`,
 		{
 			label: "the German line is read",
 			timeout: 15000,
@@ -522,7 +522,7 @@ export default async function run(page) {
 	page.check(
 		"fake, switched off: a new line is not read and the engine is asked nothing",
 		(await page.evaluate(
-			`document.querySelectorAll("#msg-32 [class*='msg-translation']").length`
+			`document.querySelectorAll("#msg-32 [class*='msg-translat']").length`
 		)) === 0 &&
 			(await page.evaluate(`(window.__seanceTranslateFake?.requests ?? []).length`)) ===
 				requestsOff

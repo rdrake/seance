@@ -1,15 +1,16 @@
 <template>
-	<!-- Nothing at all for a line the reader left alone (a detection skip)
-	     or one the engine handed back as it was (UNCHANGED): in a channel
-	     that writes the reading language a mark on every line is noise. The
-	     toolbar's Translate still translates either. -->
+	<!-- A done translation stands in the original's place (Message.vue
+	     `replaced`, TranslationFlip.vue swaps it back), so this row is only
+	     for what is not one: a failure with its retry, or a line waiting on a
+	     model download. Nothing at all for a line the reader left alone (a
+	     detection skip), one the engine handed back as it was (UNCHANGED), or
+	     one still being translated: it swaps in when done. The toolbar's
+	     Translate still translates any of them. -->
 	<div
 		v-if="
 			entry &&
 			!entry.hidden &&
-			entry.status !== 'dropped' &&
-			entry.status !== 'skipped' &&
-			!(entry.status === 'failed' && entry.error === UNCHANGED)
+			(entry.status === 'failed' ? entry.error !== UNCHANGED : !!download)
 		"
 		class="msg-translation"
 		:data-status="entry.status"

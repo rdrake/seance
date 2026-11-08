@@ -67,7 +67,7 @@
 					:network="network"
 					:channel="channel"
 					dir="auto"
-				/>&#32;<button
+				/>&#32;<TranslationFlip v-if="hasTranslationEntry" :message="message" /><button
 					v-if="message.redacted && !revealed"
 					type="button"
 					class="msg-redacted"
@@ -82,6 +82,8 @@
 					@click="hideRevealed"
 					><ParsedMessage :message="message" />
 					<span class="msg-redacted-note">{{ redactedLabel }}</span></span
+				><span v-else-if="replaced" class="msg-translated" :lang="replaced.to"
+					><ParsedMessage :message="message" :text="replaced.text" /></span
 				><ParsedMessage v-else :message="message" />
 				<span
 					v-if="message.editOf || message.editedAt"
@@ -163,6 +165,7 @@
 					<span v-else class="msg-reply-text">{{ t("message.replyUnknown") }}</span>
 				</button>
 				<StatusmsgMarker :group="message.statusmsgGroup" />
+				<TranslationFlip v-if="hasTranslationEntry" :message="message" />
 				<button
 					v-if="message.redacted && !revealed"
 					type="button"
@@ -178,6 +181,11 @@
 					@click="hideRevealed"
 					><ParsedMessage :network="network" :message="message" />
 					<span class="msg-redacted-note">{{ redactedLabel }}</span></span
+				><span v-else-if="replaced" class="msg-translated" :lang="replaced.to"
+					><ParsedMessage
+						:network="network"
+						:message="message"
+						:text="replaced.text" /></span
 				><ParsedMessage v-else :network="network" :message="message" />
 				<span
 					v-if="message.editOf || message.editedAt"
@@ -226,6 +234,7 @@ import MessageTypes from "./MessageTypes";
 import StatusmsgMarker from "./StatusmsgMarker.vue";
 import MessageActions from "./MessageActions.vue";
 import MessageReactions from "./MessageReactions.vue";
+import TranslationFlip from "./TranslationFlip.vue";
 import TranslationLine from "./TranslationLine.vue";
 import QuotePreview from "./QuotePreview.vue";
 import {replyQuote} from "../js/helpers/messageUpdates";
@@ -292,6 +301,7 @@ export default defineComponent({
 		StatusmsgMarker,
 		MessageActions,
 		MessageReactions,
+		TranslationFlip,
 		TranslationLine,
 		QuotePreview,
 	},
@@ -522,15 +532,16 @@ export default defineComponent({
 		// one (each of its states, the skipped chip included, is an entry).
 		const hasTranslationEntry = computed(() => !!store.state.translations[props.message.id]);
 
-		// A finished, shown translation is the bright line; the original dims
-		// (docs/resources/translation.md § Reading a channel). Pending,
-		// failed, dropped or hidden ("Show original only") keep the original
-		// at its normal colour.
-		const translated = computed(() => {
+		// A finished, shown translation stands in the original's place
+		// (docs/resources/translation.md § Reading a channel); the flipper
+		// before it (TranslationFlip.vue) swaps the original back. Pending,
+		// failed, dropped or hidden translations leave the original as it is.
+		const replaced = computed(() => {
 			const entry = store.state.translations[props.message.id];
 
-			return !!entry && entry.status === "done" && !entry.hidden;
+			return entry && entry.status === "done" && !entry.hidden && entry.text ? entry : null;
 		});
+		const translated = computed(() => replaced.value !== null);
 
 		const isAction = () => {
 			if (!props.message.type) {
@@ -682,6 +693,7 @@ export default defineComponent({
 			hideRevealed,
 			canAct,
 			translated,
+			replaced,
 			hasTranslationEntry,
 		};
 	},

@@ -8603,25 +8603,35 @@ html[data-shell="native"] #image-viewer .next-image-btn {
 	animation: msg-translation-blink 1s steps(2) infinite;
 }
 
-/* Once a translation is shown and done, it is the bright line and the
- * original above it dims (docs/resources/translation.md § Reading a
- * channel): `.content` carries the original's text, so muting it there is
- * enough — links, mentions and inline code set their own colour rather than
- * inheriting, and the translation chip keeps its accent. Pending, failed,
- * dropped or hidden ("Show original only") translations do not add the
- * `translated` class (Message.vue), so the original stays at full ink and
- * the streaming text keeps today's muted treatment above. */
-#chat .msg.translated .content {
+/* A translated line stands in the original's place (Message.vue
+ * `replaced`). The flipper before it swaps the two (TranslationFlip.vue),
+ * wearing the translation chips' accent look, and dimmed while the
+ * original is the one showing -- the header topic's flipper, in a row. */
+#chat .msg-translate-flip {
+	display: inline-flex;
+	align-items: center;
+	vertical-align: 0.05em;
+	margin-inline-end: 0.35em;
+	padding: 0 0.3em;
+	border: 1px solid var(--chat-accent-rule, var(--link-color));
+	border-radius: 0.2rem;
+	background: transparent;
+	color: var(--chat-accent, var(--link-color));
+	font: inherit;
+	font-size: 0.75em;
+	line-height: 1.5;
+	cursor: pointer;
+}
+
+#chat .msg-translate-flip.original {
+	border-color: currentcolor;
 	color: var(--body-color-muted);
 }
 
-#chat .msg.translated .msg-translation {
-	color: var(--body-color);
-	font-size: 1em;
-}
-
-#chat .msg.translated .msg-translation-text {
-	color: var(--body-color);
+#chat .msg-translate-flip:hover,
+#chat .msg-translate-flip:focus-visible {
+	background: var(--accent-tint-20, rgb(128 128 128 / 15%));
+	outline: 0;
 }
 
 @keyframes msg-translation-blink {

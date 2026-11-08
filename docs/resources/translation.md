@@ -836,22 +836,32 @@ channel's terms and the deploy's glossary behind them) and queued
 (`queue.ts`: the active channel first, one request per engine, LLM lines
 of one channel and pair batched, items that fell two hundred messages
 behind dropped, an engine paused after three failures in a row). The
-result lives in `store.state.translations` keyed by the message id and
-renders as `TranslationLine.vue` under the original: a "German → English"
-chip (source → target; where the engine placed the source itself, the
-detector's contenders stand in for it -- "Norwegian / Danish → English",
-"French? → English", "? → English" with none -- `labels.ts`), the text streaming with a caret, a retry when it failed (an icon
-button, "Retry the translation" its tooltip and accessible name, with the
-translated reason beside "Couldn't translate" when there is one -- a model
-that would not load says so rather than leaving the tier looking broken;
-the one `unchanged` failure renders as the compact chip below instead); the chip's
-menu copies, retranslates or hides the line ("Copy translation" puts the
-translated text on the clipboard through `js/clipboard.ts`, the helper the
-message toolbar's Copy uses, and says nothing when the browser refuses),
-and the toolbar's Translate does one
-message on request in a channel that is off -- and brings a hidden
-translation back, at no cost, once the chip's "Show original only" has
-taken it away.
+result lives in `store.state.translations` keyed by the message id. **A
+done translation stands in the original's place** (`Message.vue`
+`replaced`, the `.msg-translated` span inside `.content`, `lang` the
+target): no row of its own, and the flipper before it
+(`TranslationFlip.vue`, the fa-language glyph in the chips' accent box,
+"Translated from German. Show the original" its tooltip and accessible
+name, "Sent in Polish. Show what was sent" on an own line's read-back)
+swaps the original back in one tap and the translation in again with the
+next (`showOriginal`, the entry's `hidden`; the header topic's flipper is
+the same control). Until 2026-11 the translation was a second row under
+the original with a "from German" label; a channel reader asked for the
+original to be replaced instead. Nothing renders while a line is pending:
+it swaps in when done, rather than streaming into a row that then
+disappears (`TranslationLine.vue` still shows a line waiting on a model
+download, with the note). A failure keeps its row under the original: the
+"from …" chip, "Couldn't translate" with the translated reason when there
+is one -- a model that would not load says so rather than leaving the tier
+looking broken -- and a retry icon button ("Retry the translation" its
+tooltip and accessible name); the chip's menu retranslates. A translated
+line's menu is its toolbar's Translate ("Translation options",
+`MessageActions.vue` `openMenu`): Show original / Show translation first,
+then "Copy translation" (through `js/clipboard.ts`, the helper the
+message toolbar's Copy uses, silent when the browser refuses),
+Retranslate, "Retranslate from `<Language>`" per detector runner-up, and
+"Retranslate from…" with the picker. On an untranslated line the same
+action translates on request.
 
 **The toolbar's Translate asks before it guesses.** A line nobody asked
 about has not been detected, so an ad-hoc translation of it would be the
@@ -1161,10 +1171,9 @@ skips detection altogether: the entry's `from` becomes that language (so
 the label reads "from French"), the runners-up it inherited stay on the menu
 (the detector's own guess among them), and nothing is noted into the
 channel's language prior -- one reader's correction of one line is not the
-channel's language. A retry keeps whatever source the failed line had. The translated line is `user-select: text` like the
-original above it -- `body` is `user-select: none`, so a block that is
-meant to be read and quoted has to say so. Once a translation is in, it is
-the bright line; the original dims to the muted colour.
+channel's language. A retry keeps whatever source the failed line had. The translated text is `user-select: text` like the
+original it stands in for -- `body` is `user-select: none`, so text that is
+meant to be read and quoted has to say so.
 
 A message that arrived as `draft/multiline` is one message whose text
 carries newlines, and it goes through the composer's own `translateDraft`
