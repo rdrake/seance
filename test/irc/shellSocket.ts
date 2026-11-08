@@ -1,5 +1,10 @@
 import {expect} from "chai";
-import {ShellSocket, SocketBridge, shellSocketCtor} from "../../client/js/irc/shellSocket";
+import {
+	FINAL_CLOSE,
+	ShellSocket,
+	SocketBridge,
+	shellSocketCtor,
+} from "../../client/js/irc/shellSocket";
 import {WsTransport, TransportEvent} from "../../client/js/irc/transport";
 
 /** A stand-in for `window.seanceShell`'s Socket plugin, driven by the tests. */
@@ -218,6 +223,17 @@ describe("ShellSocket", function () {
 		expect(log).to.deep.equal(["open:1", "close:1000::true"]);
 	});
 
+	it("marks a failure the shell calls final", function () {
+		const bridge = new FakeBridge();
+		const socket = new ShellSocket(bridge, endpoint, "fin");
+		const closes: unknown[] = [];
+		socket.addEventListener("close", (ev) => closes.push(ev));
+		bridge.emit("close", {id: "fin", code: FINAL_CLOSE, reason: "certificate"});
+		expect(closes).to.deep.equal([
+			{code: FINAL_CLOSE, reason: "certificate", wasClean: false, final: true},
+		]);
+	});
+
 	it("turns a refused open into error then close", async function () {
 		const bridge = new FakeBridge();
 		bridge.refuse.set("open", "port 25 is not allowed");
@@ -298,6 +314,35 @@ describe("ShellSocket", function () {
 			expect(events.map((e) => e.type)).to.include.members(["open", "line", "close"]);
 			const close = events.find((e) => e.type === "close") as {willReconnect: boolean};
 			expect(close.willReconnect).to.equal(false);
+		});
+
+		it("retries a lost dial but not a final one", async function () {
+			for (const [code, retries] of [
+				[1006, true],
+				[FINAL_CLOSE, false],
+			] as const) {
+				const bridge = new FakeBridge();
+				const transport = new WsTransport({
+					url: "ircs://irc.example.org:6697",
+					WebSocketImpl: shellSocketCtor(bridge, endpoint),
+					reconnect: {
+						enabled: true,
+						initialDelayMs: 60000,
+						maxDelayMs: 60000,
+						factor: 1,
+						jitter: false,
+					},
+				});
+				const events: TransportEvent[] = [];
+				transport.on((ev) => events.push(ev));
+				transport.connect();
+				await tick();
+				bridge.emit("close", {id: bridge.calls[0].options.id, code, reason: "x"});
+				const close = events.find((e) => e.type === "close") as {willReconnect: boolean};
+				expect(close.willReconnect, String(code)).to.equal(retries);
+				expect(transport.state).to.equal(retries ? "reconnect-wait" : "closed");
+				transport.close();
+			}
 		});
 
 		it("abandons a dial: the old socket is closed in the shell, its late open ignored", async function () {

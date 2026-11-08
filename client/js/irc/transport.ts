@@ -46,7 +46,9 @@ export interface LineSocket {
 	addEventListener(type: "error", listener: (ev: unknown) => void): void;
 	addEventListener(
 		type: "close",
-		listener: (ev: {code: number; reason: string; wasClean: boolean}) => void
+		// `final`: a failure the next dial would repeat (ShellSocket's
+		// untrusted certificate); no retry. A WebSocket never sets it.
+		listener: (ev: {code: number; reason: string; wasClean: boolean; final?: boolean}) => void
 	): void;
 	send(data: string): void;
 	close(code?: number, reason?: string): void;
@@ -258,7 +260,7 @@ export class WsTransport {
 		ws.addEventListener("close", (ev) => {
 			if (ws === this.ws) {
 				this.ws = null;
-				this.handleClosed(ev.code, ev.reason, ev.wasClean);
+				this.handleClosed(ev.code, ev.reason, ev.wasClean, undefined, ev.final === true);
 			}
 		});
 	}
@@ -419,7 +421,8 @@ export class WsTransport {
 		code: number,
 		reason: string,
 		wasClean: boolean,
-		cause?: "timeout" | "probe"
+		cause?: "timeout" | "probe",
+		final = false
 	): void {
 		// A socket that dies while we are probing it (the foreground poke
 		// asked "are you alive?" and the OS answered with the close, or
@@ -461,7 +464,7 @@ export class WsTransport {
 		}
 
 		this.openedAt = null;
-		const retry = !this.closedByUs && this.opts.reconnect.enabled;
+		const retry = !this.closedByUs && !final && this.opts.reconnect.enabled;
 		let delayMs: number | undefined;
 		let why: RetryReason | undefined;
 

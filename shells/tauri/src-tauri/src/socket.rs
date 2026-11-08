@@ -15,7 +15,9 @@
 //
 // `Socket.open {id, page, host, port, tls}` → events `open {id}`, `lines
 // {id, lines}` (one per read), `close {id, code, reason}`: 1000 when the
-// server ended the connection, 1006 for any failure. `Socket.send {id,
+// server ended the connection, FINAL (4001) for a failure a retry cannot
+// mend (an untrusted certificate, a server that is not IRC), 1006 for any
+// other. `Socket.send {id,
 // lines}`, once open. `Socket.close {id}`: the queued lines are written (a
 // QUIT gets out), the socket shut, and no event follows. A page load closes
 // every socket, and an open from the page before it (`page`, a token per
@@ -325,7 +327,7 @@ impl Task {
         let stream = tokio::select! {
             result = dial => match result {
                 Ok(Ok(stream)) => stream,
-                Ok(Err(reason)) => return self.end(1006, &reason),
+                Ok(Err((code, reason))) => return self.end(code, &reason),
                 Err(_) => return self.end(1006, "connect timed out"),
             },
             // Closed by the page while dialling (`send` refuses lines until
@@ -351,7 +353,7 @@ impl Task {
                             Ok(lines) => {
                                 if !self.greeted.load(Ordering::SeqCst) {
                                     if !looks_like_irc(&lines[0]) {
-                                        return self.end(1006, "the server does not speak IRC");
+                                        return self.end(FINAL, "the server does not speak IRC");
                                     }
 
                                     self.greeted.store(true, Ordering::SeqCst);
@@ -425,10 +427,15 @@ async fn drain<W: AsyncWrite + Unpin>(writer: &mut W, lines: Vec<String>) {
     .await;
 }
 
-async fn dial(host: &str, port: u16, tls: bool) -> Result<Box<dyn Stream>, String> {
+/// A close code of the application range (as WebSocket's 4000–4999): the
+/// page does not retry it, since the next dial would fail the same way.
+const FINAL: u16 = 4001;
+
+/// Dial `host`; a failure is its close code and reason.
+async fn dial(host: &str, port: u16, tls: bool) -> Result<Box<dyn Stream>, (u16, String)> {
     let addrs: Vec<_> = tokio::net::lookup_host((host, port))
         .await
-        .map_err(|e| format!("cannot resolve {host}: {e}"))?
+        .map_err(|e| (1006, format!("cannot resolve {host}: {e}")))?
         .collect();
     let mut last = format!("{host} has no address");
     let mut tcp = None;
@@ -446,7 +453,7 @@ async fn dial(host: &str, port: u16, tls: bool) -> Result<Box<dyn Stream>, Strin
         }
     }
 
-    let tcp = tcp.ok_or(last)?;
+    let tcp = tcp.ok_or((1006, last))?;
     let _ = tcp.set_nodelay(true);
 
     if !tls {
@@ -454,16 +461,18 @@ async fn dial(host: &str, port: u16, tls: bool) -> Result<Box<dyn Stream>, Strin
     }
 
     let name = rustls::pki_types::ServerName::try_from(host.to_owned())
-        .map_err(|_| format!("{host} is not a valid TLS server name"))?;
-    let stream = tls_connector()?
+        .map_err(|_| (FINAL, format!("{host} is not a valid TLS server name")))?;
+    let stream = tls_connector()
+        .map_err(|reason| (1006, reason))?
         .connect(name, tcp)
         .await
         .map_err(tls_failure)?;
     Ok(Box::new(stream))
 }
 
-/// A failed handshake, in words a user can act on; rustls's own text after.
-fn tls_failure(e: std::io::Error) -> String {
+/// A failed handshake, in words a user can act on. A certificate that is
+/// not trusted now will not be on the next dial: final.
+fn tls_failure(e: std::io::Error) -> (u16, String) {
     let detail = e.to_string();
 
     match e
@@ -481,9 +490,12 @@ fn tls_failure(e: std::io::Error) -> String {
                 C::UnknownIssuer => " (it is signed by an unknown authority)",
                 _ => " (it may be self-signed)",
             };
-            format!("the server's certificate is not trusted{why}")
+            (
+                FINAL,
+                format!("the server's certificate is not trusted{why}"),
+            )
         }
-        _ => format!("TLS failed: {detail}"),
+        _ => (1006, format!("TLS failed: {detail}")),
     }
 }
 

@@ -13,7 +13,8 @@
  * - calls to the shell run in order per socket (open, sends, close): each
  *   bridge call is its own IPC request and two may otherwise overtake each
  *   other, which would reorder a pipelined registration or QUIT-then-close;
- * - a failure fires `error` (carrying the shell's reason) then one `close`;
+ * - a failure fires `error` (carrying the shell's reason) then one `close`,
+ *   marked `final` when the shell says a retry cannot mend it;
  * - `close()` from the page fires its own `close` event, once: the shell
  *   says nothing about a socket the page closed.
  */
@@ -34,6 +35,9 @@ export interface TcpEndpoint {
 }
 
 const PLUGIN = "Socket";
+
+/** The shell's close code for a failure a retry cannot mend (socket.rs `FINAL`). */
+export const FINAL_CLOSE = 4001;
 
 type Listeners = Record<"open" | "message" | "error" | "close", Array<(ev: any) => void>>;
 
@@ -140,7 +144,7 @@ export class ShellSocket implements LineSocket {
 	addEventListener(type: "error", listener: (ev: unknown) => void): void;
 	addEventListener(
 		type: "close",
-		listener: (ev: {code: number; reason: string; wasClean: boolean}) => void
+		listener: (ev: {code: number; reason: string; wasClean: boolean; final?: boolean}) => void
 	): void;
 	addEventListener(type: keyof Listeners, listener: (ev: any) => void): void {
 		this.listeners[type].push(listener);
@@ -237,7 +241,12 @@ export class ShellSocket implements LineSocket {
 
 		this.state = this.CLOSED;
 		this.sockets.delete(this.id);
-		this.fire("close", {code, reason, wasClean: code === 1000});
+		this.fire("close", {
+			code,
+			reason,
+			wasClean: code === 1000,
+			...(code === FINAL_CLOSE ? {final: true} : {}),
+		});
 	}
 
 	private fire<K extends keyof Listeners>(type: K, ev: unknown): void {
