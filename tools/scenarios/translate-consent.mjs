@@ -208,7 +208,7 @@ export default async function run(page) {
 	await page.waitFor(
 		`${JSON.stringify(
 			italian
-		)}.every((line) => { const m = [...document.querySelectorAll("#chat .msg")].filter((el) => el.textContent.includes(line)).pop(); return m && m.querySelector('.msg-translation[data-status="done"]'); })`,
+		)}.every((line) => { const m = [...document.querySelectorAll("#chat .msg")].filter((el) => el.textContent.includes(line)).pop(); return m && m.querySelector('.msg-translated'); })`,
 		{label: "the Italian lines translated", timeout: 20000}
 	);
 
@@ -276,9 +276,7 @@ export default async function run(page) {
 	});
 	await page.click("#confirm-dialog .btn-confirm");
 	await page.waitFor(
-		`(() => { const m = ${rowOf(
-			german
-		)}; return m && m.querySelector('.msg-translation[data-status="done"]'); })()`,
+		`(() => { const m = ${rowOf(german)}; return m && m.querySelector('.msg-translated'); })()`,
 		{label: "the German line translated", timeout: 20000}
 	);
 

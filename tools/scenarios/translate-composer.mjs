@@ -880,7 +880,7 @@ export default async function run(page) {
 			const row = [...document.querySelectorAll(${JSON.stringify(
 				settled ? ".msg.self:not(.pending)" : ".msg.self"
 			)})].find((m) => m.textContent.includes(${JSON.stringify(text)}));
-			const line = row && row.querySelector(".msg-translation-text");
+			const line = row && row.querySelector(".msg-translated");
 			return line ? line.textContent.trim() : "";
 		})()`;
 
@@ -903,8 +903,8 @@ export default async function run(page) {
 				const row = [...document.querySelectorAll(".msg.self:not(.pending)")].find((m) =>
 					m.textContent.includes(${JSON.stringify(`[German] ${draft} edited`)})
 				);
-				const chip = row && row.querySelector(".msg-translation-chip");
-				return !!chip && chip.textContent.trim() === "sent in German";
+				const flip = row && row.querySelector(".msg-translate-flip");
+				return !!flip && flip.title === "Sent in German. Show what was sent";
 			})()`
 		)
 	);

@@ -14496,6 +14496,12 @@ msgctxt "token.timeout"
 msgid "The server did not answer the token request"
 msgstr "De server heeft de tokenaanvraag niet beantwoord"
 
+#. Tooltip and aria-label of a translated message's Translate action in its hover toolbar; it opens a menu: show the original, copy, retranslate.
+#: client/components/MessageActions.vue
+msgctxt "translate.action.options"
+msgid "Translation options"
+msgstr ""
+
 #. Tooltip and aria-label of the translate button in a message's hover toolbar when the message's translation was hidden; it brings it back.
 #: client/components/MessageActions.vue
 msgctxt "translate.action.showTranslation"
@@ -14763,6 +14769,25 @@ msgstr "vertaalworker beëindigd"
 msgctxt "translate.failed"
 msgid "Couldn't translate"
 msgstr "Vertalen mislukt"
+
+#. Tooltip and aria-label of the small button before the user's own line, sent translated into {language}; the line shows what the translation reads back as in the user's reading language, and pressing the button shows the text that went out.
+#: client/components/TranslationFlip.vue
+#, fuzzy
+msgctxt "translate.flip.sentIn"
+msgid "Sent in {language}. Show what was sent"
+msgstr ""
+
+#. Tooltip and aria-label of the small button before a chat line while its original is showing; pressing it shows the translation in its place again.
+#: client/components/TranslationFlip.vue
+msgctxt "translate.flip.showTranslation"
+msgid "Show the translation"
+msgstr ""
+
+#. Tooltip and aria-label of the small button before a translated chat line, which stands in the original's place; pressing it shows the original. {language} is the source language's name, or several joined.
+#: client/components/TranslationFlip.vue
+msgctxt "translate.flip.translatedFrom"
+msgid "Translated from {language}. Show the original"
+msgstr ""
 
 #. Choice for how formally a translation addresses people: keep whatever the original message did.
 #: client/components/Settings/Translation.vue

@@ -4,8 +4,8 @@
 // (outgoing.ts UNCHANGED) render no row, no chip and no mark under the
 // message, on anyone's line or the page's own -- in a channel full of
 // them a tag on each was noise. The toolbar's Translate still translates
-// any of them. A translated line's own label (.msg-translation-chip,
-// "from …") is quiet: muted and unboxed.
+// any of them. A translated line shows its translation in the original's
+// place, with a flipper before it that swaps the two.
 //
 // Alongside it, the icon split: fa-language marks the translation surfaces
 // (the message action's ::before glyph, \\f1ab) while the globe stays the
@@ -196,23 +196,50 @@ export default async function run(page) {
 	);
 	await page.screenshot("translation-chips-bare");
 
-	// A translated line keeps its label, and the label is the quiet one.
+	// A translated line shows the translation in the original's place, no
+	// row of its own, with the flipper before it; one tap swaps them.
 	await page.evaluate(
 		commit(UNCHANGED_MSG, {status: "done", text: "a translated line", engine: "llm"})
 	);
-	await page.waitFor(`!!document.querySelector("#msg-${UNCHANGED_MSG} .msg-translation-chip")`, {
-		label: "the translated line's label",
+	await page.waitFor(`!!document.querySelector("#msg-${UNCHANGED_MSG} .msg-translate-flip")`, {
+		label: "the translated line's flipper",
 	});
 
-	const chip = await page.evaluate(`(() => {
-		const c = getComputedStyle(document.querySelector("#msg-${UNCHANGED_MSG} .msg-translation-chip"));
-		return {color: c.color, borderWidth: c.borderTopWidth, count: document.querySelectorAll("#chat .msg-translation-chip").length};
+	const row = `document.getElementById("msg-${UNCHANGED_MSG}")`;
+	const replaced = await page.evaluate(`(() => {
+		const r = ${row};
+		return {
+			text: r.querySelector(".content .msg-translated").textContent.trim(),
+			rows: r.querySelectorAll(".msg-translation").length,
+			title: r.querySelector(".msg-translate-flip").title,
+			flips: document.querySelectorAll("#chat .msg-translate-flip").length,
+		};
 	})()`);
-	console.log("chip", JSON.stringify(chip));
-	page.check("exactly one label on the page", chip.count === 1);
+	console.log("replaced", JSON.stringify(replaced));
 	page.check(
-		"the translated line's label is quiet: muted, no box",
-		chip.color === muted && chip.borderWidth === "0px"
+		"the translation stands in the original's place",
+		replaced.text === "a translated line"
+	);
+	page.check("no translation row under the line", replaced.rows === 0);
+	page.check("exactly one flipper on the page", replaced.flips === 1);
+	page.check(
+		'the flipper says where it came from ("Translated from German. Show the original")',
+		replaced.title === "Translated from German. Show the original"
+	);
+	await page.screenshot("translation-chips-replaced");
+
+	await page.evaluate(`${row}.querySelector(".msg-translate-flip").click()`);
+	await page.waitFor(`!${row}.querySelector(".msg-translated")`, {
+		label: "the flipper swapped the original back",
+	});
+	page.check(
+		"the original is back, the flipper kept to swap again",
+		(await page.evaluate(
+			`${row}.querySelector(".content").textContent.includes("a much longer line")`
+		)) &&
+			(await page.evaluate(
+				`${row}.querySelector(".msg-translate-flip").getAttribute("aria-pressed")`
+			)) === "false"
 	);
 
 	const icons = await page.evaluate(ICONS);
