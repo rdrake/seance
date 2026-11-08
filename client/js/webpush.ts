@@ -1552,7 +1552,7 @@ if (typeof indexedDB !== "undefined") {
  * that announced a key or holds an entry, its uuid, connection details and
  * the key its subscription was made against — that is how a worker
  * deep-links a notification, relays a reply to this page, and renews its
- * subscription. The SASL password rides along ONLY for networks that
+ * subscription. The SASL password (and a server password) rides along ONLY for networks that
  * remember it (it never hits IndexedDB otherwise); that is what lets a
  * worker send a reply, mute, or renew over its own connection when no page
  * is alive. Rewritten on every connect so a password remembered later, or
@@ -1572,6 +1572,7 @@ async function writeStash(): Promise<void> {
 			tls: net.tls,
 			saslAccount: net.saslAccount,
 			saslPassword: net.rememberPassword === true ? net.saslPassword : undefined,
+			serverPassword: net.rememberPassword === true ? net.serverPassword : undefined,
 			vapid: subs[net.uuid]?.vapid ?? announcedKey(net.uuid) ?? null,
 		}));
 

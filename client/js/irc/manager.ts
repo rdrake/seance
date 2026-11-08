@@ -54,6 +54,7 @@ export type CreateNetworkOptions = ConnectOptions &
 			| "pushEnabled"
 			| "notifyEnabled"
 			| "commands"
+			| "hasServerPassword"
 		>
 	>;
 
@@ -101,6 +102,15 @@ function rememberNetwork(options: CreateNetworkOptions): SavedNetwork {
 	return entry;
 }
 
+/** A refused login: the saved entry stops connecting at page load (see createNetwork). */
+function stopAutoconnect(uuid: string): void {
+	const current = saved.get(uuid);
+
+	if (current?.autoconnect) {
+		saved.save({...current, autoconnect: false});
+	}
+}
+
 /** Create (or reuse) the client for these options, save the config and connect. */
 export function createNetwork(options: CreateNetworkOptions): IrcClient {
 	const entry = rememberNetwork(options);
@@ -125,13 +135,8 @@ export function createNetwork(options: CreateNetworkOptions): IrcClient {
 			// credentials would be refused again at every page load, and a
 			// network that never registers is not one the user can get back
 			// to the connect screen from.
-			onSaslRejected() {
-				const current = saved.get(entry.uuid);
-
-				if (current?.autoconnect) {
-					saved.save({...current, autoconnect: false});
-				}
-			},
+			onSaslRejected: () => stopAutoconnect(entry.uuid),
+			onServerPasswordRejected: () => stopAutoconnect(entry.uuid),
 		});
 		clients.set(entry.uuid, client);
 		// Load the network's ignore list now, which mirrors it for the push
@@ -193,7 +198,8 @@ export function autoconnectSavedNetworks(): IrcClient[] {
 			continue;
 		}
 
-		if (entry.sasl === "plain" && !entry.saslPassword) {
+		// A password it needs was not kept: it waits for the connect form.
+		if (saved.needsPassword(entry)) {
 			continue;
 		}
 
