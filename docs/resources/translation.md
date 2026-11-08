@@ -1036,26 +1036,45 @@ stays in the store as `failed`, so the toolbar's Translate still offers the
 line. Browser check: `tools/scenarios/translation-chips.mjs`, which puts the
 verdict on someone else's line and on the page's own.
 
-**A line the detector cannot place, or only guesses at, is left alone.**
+**A line in doubt that might already be readable is left alone.**
 `detect.ts` `detectionSkip` decides, given what the channel is known to
-write (`reader.ts` `knownLanguages`: its declared languages and its prior):
-a line placed in the reading language is skipped (`same`); a line it could
-not place at all is skipped (`unsure`); and so is a line placed only on a
-hint (`weak`) or on thin evidence (`thin`: the short-line word lookup, or
-franc on fewer than `THIN_WORDS` (5) words) in a language the channel is
-not known to write. Everything else is queued. Until 2026-11 an unplaced
-line was translated with its source left to the engine, which measured
-well on one Spanish-heavy channel's history but on an English channel
-handed every "lol", "brb" and "mmm tweaking" to the model, which came back
-"from Polish" or "from Tagalog" as often as not; and a channel declaring
-English and Polish, read in English, placed every line under ten
-characters as Polish by declaration alone (that shortcut now needs exactly
-one declared language, not the reading language). A thin verdict is never
-noted into the prior, so a few misplaced short lines cannot talk the
-channel into a language. The toolbar's Translate translates any skipped
-line on request. A queued line's source still follows `sourceFor`
-(above): a weak verdict in a known language is queued with `from: null`
-and the prior as a routing hint only.
+write (`reader.ts` `knownLanguages`: its declared languages and its prior).
+A line placed in the reading language is skipped (`same`). Skipped as
+`unsure`:
+
+- a line it could not place that is too short to judge (`short`, or
+  `thin`: fewer than `THIN_WORDS` (5) words), or whose contenders include
+  the reading language (or name none);
+- a line placed on thin evidence (the short-line word lookup, or franc on
+  fewer than five words) in a language the channel is not known to write;
+- a line placed on a hint (`weak`) in such a language with the reading
+  language among the contenders ("that is so weird man", a hint at
+  Afrikaans);
+- a near tie the prior broke (`settled`) against the reading language,
+  which ranked ahead of the prior's pick ("I know what to do tho", English
+  ahead of Polish by a hair, a Polish prior).
+
+Everything else is queued, including a long line franc cannot place whose
+contenders leave the reading language out (Spanish, Galician and
+Portuguese within a hundredth of each other: measured on a real channel's
+history, skipping those left 13 of one user's 15 Spanish lines
+untranslated), with `from: null`. Until 2026-11 every short unplaced line
+was handed to the engine too, and on an English channel "lol", "uncanny"
+and "mmm tweaking" came back "from Polish" or "from Tagalog".
+
+**The prior learns only from what measured something.** `detectLanguage`
+notes a verdict into the channel's prior only when it is neither `weak`,
+`thin`, `settled` nor `short`, the line is at least `DETECT_MIN_LENGTH`
+characters, and it is not the user's own line (`learn: false` from
+`reader.ts`): own lines say what the user writes, not what the channel
+does. Until 2026-11 only franc's verdicts were noted, so a channel's
+English, which the function-word classifier places, never counted, and a
+handful of the user's own Polish sends made an English channel's prior
+Polish. The declared-language shortcut for lines under ten characters now
+needs exactly one declared language, not the reading one: a channel
+declaring English and Polish, read in English, placed every short line as
+Polish. The toolbar's Translate translates any skipped line on request. A
+queued line's source still follows `sourceFor` (above).
 
 **The topic is read too.** A channel's topic is the line everyone in it
 is looking at, so a reading channel reads it like its lines: `reader.ts`

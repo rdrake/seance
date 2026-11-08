@@ -11,9 +11,10 @@
 // count is taken against it); a German
 // line gets a translated line labelled "from German" with the fake's "[English] …" echo; an
 // English line gets no translation and no mark, and the toolbar's Translate
-// translates it; a Spanish line franc cannot tell from Galician, a "lol"
-// nothing can place and a "hola" only the word list places are left alone,
-// with nothing under them and no request; a short German line the channel's
+// translates it; a Spanish line franc cannot tell from Galician is
+// translated with no source named and no "probably" guess in its request; a
+// "lol" nothing can place and a "hola" only the word list places are left
+// alone, with nothing under them and no request; a short German line the channel's
 // prior settles is translated from German; the chip's menu retranslates from another source
 // (the detector's runners-up one click each, never the line's own source;
 // "Retranslate from…" opens the picker, Escape asks for nothing, French
@@ -772,13 +773,47 @@ async function scenario(page) {
 	base += 1;
 	await page.check("one more done line", (await page.evaluate(LINES)) === base + 1);
 
-	// A line the detector cannot place (franc ranks Spanish, Portuguese and
-	// Galician within a hundredth of each other here) is left alone: no row,
-	// no request. The toolbar's Translate is there for it.
+	// A line the detector cannot place, with no English among its candidates
+	// (franc ranks Spanish, Portuguese and Galician within a hundredth of each
+	// other here), is translated: its source left to the engine, and the
+	// request told no guess -- not "probably German" from this channel's prior.
 	const spanish = "claude es muy lento estos días";
 
 	other.say(spanish);
-	await expectLeftAlone(page, newestRow(spanish), spanish, "the Spanish line nobody could place");
+	await page.waitFor(`${LINES} === ${base + 2}`, {
+		timeout: 20000,
+		label: "the Spanish line the detector could not place is translated",
+	});
+	// The chip names the detector's contenders instead of dropping the source
+	// (labels.ts): "from Spanish / Portuguese", in whichever order franc
+	// ranked them this run -- never a bare "from".
+	const spanishChip = String(
+		await page.evaluate(
+			`((${newestRow(
+				spanish
+			)}).querySelector(".msg-translation-chip") || {}).textContent || ""`
+		)
+	).trim();
+	const CONTENDER = "(Spanish|Portuguese|Galician)";
+
+	await page.check(
+		`its chip names the detector's contenders (${JSON.stringify(spanishChip)})`,
+		new RegExp(`^from ${CONTENDER}( / ${CONTENDER}|\\?)$`).test(spanishChip)
+	);
+
+	const spanishRequests = await page.evaluate(
+		`(${REQUESTS}).filter((r) => r.text.indexOf(${JSON.stringify(
+			spanish
+		)}) !== -1).map((r) => ({from: r.from, sourceHint: r.sourceHint}))`
+	);
+
+	await page.check(
+		`its request named no source and no probable one (${JSON.stringify(spanishRequests)})`,
+		Array.isArray(spanishRequests) &&
+			spanishRequests.length > 0 &&
+			spanishRequests.every((r) => r.from === null && r.sourceHint === null)
+	);
+	base += 1;
 
 	// A short line with no function words ("ja so gut": nine characters, three
 	// words, under DETECT_MIN_LENGTH so franc is never asked): the classifier

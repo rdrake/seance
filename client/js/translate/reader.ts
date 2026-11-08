@@ -214,6 +214,20 @@ export function translationAvailable(): boolean {
 }
 
 /**
+ * `translationAvailable`, with a probe still running counted as yes: for
+ * what must not pop into place once the probe lands (the composer's
+ * translate button, which shifted the input on every app load). Only a
+ * device the probe rules out takes it away again.
+ */
+export function translationMayRun(): boolean {
+	if (!translationOn()) {
+		return false;
+	}
+
+	return translateService().enabled && store.state.translation.capability?.tier !== "none";
+}
+
+/**
  * The catalog as the service runs it: the language model the setting, the
  * probe and its device setting resolve to. Read from the running service
  * when there is one and from the configuration otherwise, so naming a model
@@ -1023,6 +1037,8 @@ export async function translateMessage(
 				// switch is re-read after the await below; this is the target as
 				// it stands now, which is the one the reader is looking at.
 				exclude: readingLanguage(),
+				// The user's own lines say what they write, not the channel.
+				learn: !message.self,
 		  });
 
 	// Detection (the first call also awaits the franc chunk download) can

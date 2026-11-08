@@ -51,14 +51,21 @@ export interface Detection {
 	 */
 	weak?: boolean;
 	/**
-	 * Placed on thin evidence: by the short-line word lookup
-	 * (`wordlookup.ts`), or by franc on a line of fewer than `THIN_WORDS`
-	 * words, where trigrams guess (franc reads "kernel panic again lol" as
+	 * Judged on thin evidence: placed by the short-line word lookup
+	 * (`wordlookup.ts`), or judged by franc, placed or not, on a line of
+	 * fewer than `THIN_WORDS` words, where trigrams guess (franc reads "kernel panic again lol" as
 	 * Tagalog). `detectionSkip` leaves such a line alone unless its language
 	 * is one the channel is known to write, and the prior never learns from
 	 * it.
 	 */
 	thin?: true;
+	/**
+	 * A near tie the channel's prior broke. When the reading language is one
+	 * of the tied contenders, `detectionSkip` leaves the line alone: a coin
+	 * toss between English and Polish, broken by a prior that leans Polish,
+	 * read "I know what to do tho" as Polish.
+	 */
+	settled?: true;
 }
 
 /** `francAll`'s shape: `[iso639-3, weight]`, best first, best weight 1. */
@@ -206,7 +213,7 @@ export function detectWith(
 		// than one chosen by a coin toss (the reader then leaves the source
 		// to the engine, `detectionSkip`).
 		if (prior && ours.some((entry) => entry.lang === prior)) {
-			return {lang: prior, confidence: DETECT_MIN_GAP, candidates};
+			return {lang: prior, confidence: DETECT_MIN_GAP, candidates, settled: true};
 		}
 
 		return {lang: null, confidence: round(own), candidates};
@@ -221,7 +228,7 @@ export function detectWith(
 		prior &&
 		known.some((entry) => entry.lang === prior && best.weight - entry.weight < DETECT_MIN_GAP)
 	) {
-		return {lang: prior, confidence: DETECT_MIN_GAP, candidates};
+		return {lang: prior, confidence: DETECT_MIN_GAP, candidates, settled: true};
 	}
 
 	return {lang: null, confidence, candidates};
@@ -229,13 +236,24 @@ export function detectWith(
 
 /**
  * Why the reading pipeline leaves a detected line alone, or null when it
- * translates it: `same` when the detector placed it in the reading language
- * `to`, `unsure` when it could not place it at all, or placed it only on a
- * hint (`weak`) or on thin evidence (`thin`) in a language the channel is
- * not known to write. `known` is that list: the channel's declared
- * languages and its prior. Translation is opt-in for doubt: a short "lol"
- * or "brb" handed to the engine came back "from Polish" more often than
- * not, so an unplaced line waits for the toolbar's Translate instead.
+ * translates it. `same`: placed in the reading language `to`. `unsure`, the
+ * line is in doubt and might be readable as it is:
+ *
+ * - not placed, and too short to judge (`short`, or fewer than
+ *   `THIN_WORDS` words), or with the reading language among its contenders
+ *   (or no contenders at all);
+ * - placed on thin evidence (`thin`) in a language the channel is not
+ *   known to write (`known`: its declared languages and prior);
+ * - placed on a hint (`weak`) in such a language, with the reading
+ *   language among the contenders;
+ * - a tie the prior broke (`settled`) against the reading language, which
+ *   ranked ahead of the prior's pick.
+ *
+ * A long line in doubt whose contenders leave the reading language out is
+ * still translated, its source left to the engine: franc ranks Spanish,
+ * Galician and Portuguese within a hundredth of each other. A short "lol"
+ * or "brb" handed to the engine came back "from Polish", so those wait for
+ * the toolbar's Translate.
  */
 export type DetectionSkip = "same" | "unsure" | null;
 
@@ -244,15 +262,31 @@ export function detectionSkip(
 	to: string,
 	known: readonly string[] = []
 ): DetectionSkip {
+	const couldBeReadable = detection.candidates.length === 0 || detection.candidates.includes(to);
+
 	if (detection.lang === to) {
 		return "same";
 	}
 
 	if (detection.lang === null) {
+		return detection.short || detection.thin || couldBeReadable ? "unsure" : null;
+	}
+
+	// A tie the prior broke against the reading language: the reading
+	// language ranked ahead of the prior's pick.
+	if (
+		detection.settled &&
+		detection.candidates.includes(to) &&
+		detection.candidates.indexOf(to) < detection.candidates.indexOf(detection.lang)
+	) {
 		return "unsure";
 	}
 
-	if ((detection.weak || detection.thin) && !known.includes(detection.lang)) {
+	if (known.includes(detection.lang)) {
+		return null;
+	}
+
+	if (detection.thin || (detection.weak && couldBeReadable)) {
 		return "unsure";
 	}
 
@@ -386,7 +420,40 @@ export async function detectLanguage(
 	text: string,
 	prior: LanguagePrior | null,
 	declared: string[] = [],
-	options: {exclude?: string} = {}
+	options: {exclude?: string; learn?: boolean} = {}
+): Promise<Detection> {
+	const result = await place(text, prior, declared, options);
+
+	// The prior learns only from a verdict that measured something: not a
+	// hint, not thin evidence, not a tie it broke itself, not a line too
+	// short to judge -- and not the user's own lines (`learn: false`), which
+	// say what the user writes, not what the channel does. Before, only
+	// franc's verdicts were noted, so a channel's English (which the
+	// function-word classifier places) never counted and a few Polish lines
+	// made it a Polish channel.
+	if (
+		options.learn !== false &&
+		prior &&
+		result.lang &&
+		isSupported(result.lang) &&
+		!result.weak &&
+		!result.thin &&
+		!result.settled &&
+		!result.short &&
+		result.confidence > 0 &&
+		text.length >= DETECT_MIN_LENGTH
+	) {
+		prior.note(result.lang);
+	}
+
+	return result;
+}
+
+async function place(
+	text: string,
+	prior: LanguagePrior | null,
+	declared: string[],
+	options: {exclude?: string}
 ): Promise<Detection> {
 	// Function-word classification first (chatdetect.ts): its own decisive
 	// verdict — a clear multi-hit lead, or a single hit on a line of at most
@@ -479,12 +546,8 @@ export async function detectLanguage(
 	const detect = await loadDetector();
 	const result = detectWith(detect(text, {only: ONLY}), prior?.top() ?? null, declared);
 
-	if (result.lang && words.length < THIN_WORDS) {
+	if (words.length < THIN_WORDS) {
 		return {...result, thin: true};
-	}
-
-	if (result.lang && prior && isSupported(result.lang)) {
-		prior.note(result.lang);
 	}
 
 	return result;
