@@ -1,0 +1,17 @@
+Delivery Base pass
+Delivery BaseFallback pass
+Delivery BaseDeferred pass
+Delivery NoTimeout pass
+Delivery LossyTimeout pass
+Delivery W_LossyNoTimeout fail
+Delivery W_Other fail
+Delivery W_LateFallback fail
+Delivery CoverBatchOpen fail
+Delivery CoverLateQueued fail
+Delivery CoverTimedOut fail
+Delivery CoverOtherSaid fail
+Delivery CoverEchoInOpenBatch fail
+DM_IgnoreEcho NoTimeout fail
+DM_WrongLabel Base fail
+DM_Early BaseDeferred fail
+DM_Flip LossyTimeout fail

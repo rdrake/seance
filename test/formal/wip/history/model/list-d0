@@ -1,0 +1,11 @@
+Delivery Base pass
+Delivery BaseDeferred pass
+Delivery NoTimeout pass
+Delivery LossyTimeout pass
+Delivery W_LossyNoTimeout fail
+Delivery W_Other fail
+Delivery W_LateFallback fail
+Delivery CoverBatchOpen fail
+Delivery CoverLateQueued fail
+Delivery CoverTimedOut fail
+Delivery CoverOtherSaid fail
