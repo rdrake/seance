@@ -125,24 +125,30 @@ FIXTURES = [
     dict(name="liveStop", limit=2, held=[["h", "10"]], gap=["a", "b"],
          pages=[[["b", "16"], ["l", "31"]], [["h", "10"], ["a", "12"]]],
          live=["l", "31"], liveWhen="beforePage",
-         expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"]),
+         expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"],
+         wire="Q S R C A C Q A C"),
     # control: the same store, the live line relayed only after the walk.
     dict(name="liveStopControl", limit=2, held=[["h", "10"]], gap=["a", "b"],
          pages=[[["b", "16"], ["l", "31"]], [["h", "10"], ["a", "12"]]],
          live=["l", "31"], liveWhen="afterWalk",
-         expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"]),
+         expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"],
+         wire="Q S A C Q A C R C"),
     # #281: a live line relayed during the walk, not in any page; the gap
     # must sort above it.
     dict(name="gapOrder", limit=3, held=[["h", "10"]], gap=["a", "b"],
          pages=[[["h", "10"], ["a", "12"], ["b", "16"]]],
          live=["l", "31"], liveWhen="beforePage",
-         expect=["CHATHISTORY LATEST #seance * 3"]),
+         expect=["CHATHISTORY LATEST #seance * 3"],
+         # the page leaves out the live line it was stored before: only a
+         # server without Contiguous can answer that (a lagging store)
+         wire="Q S R C A C", model=dict(Contiguous="FALSE")),
     # #280: our clock ahead: a local line at 12:40 is the newest row; the
     # floor must stay at h (12:10), so the 12:16 page does not end the walk.
     dict(name="clockFloor", limit=2, held=[["h", "10"]], gap=["a", "b", "c"],
          pages=[[["b", "16"], ["c", "17"]], [["h", "10"], ["a", "15"]]],
          typedWhileDown=True,
-         expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"]),
+         expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"],
+         wire="Q A C Q A C"),
 ]
 
 def check(fx, obs):
@@ -170,7 +176,7 @@ def main():
     out = sys.argv[2] if len(sys.argv) > 2 else None
     src = open(os.path.join(co, "test/irc/history.ts")).read()
     harness = src[:src.index("\ndescribe(")]
-    fxs = [{k: f[k] for k in f if k not in ("gap", "expect")} for f in FIXTURES]
+    fxs = [{k: f[k] for k in f if k not in ("gap", "expect", "wire", "model")} for f in FIXTURES]
     body = FIXTURE.replace("__FIXTURES__", json.dumps(fxs))
     # the fixture's import goes after the harness's own imports
     imp, body = body.split("\n", 2)[1], body.split("\n", 2)[2]
@@ -203,4 +209,5 @@ def main():
     if out:
         open(out, "w").write("".join(json.dumps(r) + "\n" for r in lines))
 
-main()
+if __name__ == "__main__":
+    main()

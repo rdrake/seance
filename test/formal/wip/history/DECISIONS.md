@@ -599,3 +599,24 @@ This decision states scope and restrictions only. It builds nothing yet. Review 
   - IdsRise is a UI invariant.
   - Whole pages only (D22).
 - **Cost:** about 45 minutes, no gpu05 jobs. Results are in `test/formal/history/results/catchup-*.jsonl`.
+
+## D31. History TLC trace harness for the catch-up fixtures (option B)
+
+- **What it does.** `test/formal/history/history_trace.py` turns one catch-up fixture observation into a module `HT_<fixture>` that EXTENDS History.
+  - Init is pinned: ids are in time order, times are the ranks of the fixture's minutes, `ord` is the store order, and `Fuzz = 0`.
+  - The fixture's wire template and the observed requests give a step sequence W:
+    - `Q`: the client's observed request, which must be CQuery's;
+    - `A`: SrvAnswer with the fixture's page pinned;
+    - `S`: StoreLive;
+    - `R`: RelayLive;
+    - `C`: CRecv.
+  - **NotStuck:** every step is enabled.
+  - **SnapOK:** at the end the model's client is done, and its buffer equals Seance's store, in order.
+- **Configs.** reconnect mode, pages(5), ExactCount, Contiguous, TimeOrdered, BatchAgrees, StableAcrossReconnect, Dedupe, MsgidAnchor, StopOnHeld and InsertMerge, with the fixture's Limit.
+- **gapOrder runs with `Contiguous = FALSE`.** Its page leaves out a live line already stored and relayed, which only a lagging store gives.
+- **Not expressible:** clockFloor's local line, since the model has only server times. The trace checks that the walk pages back to the server-stamped floor.
+- **Validated on gpu05 (job 10574, history-trace/):**
+  - develop 4f5a4bd12 fails all four fixtures on SnapOK;
+  - the mix of #278 to #281 (a55da75b4) passes all four.
+  - Each passing trace takes every step: Len(W) + 1 states, 7 or 10.
+- **The final sweep** (all PRs mixed at their final heads) runs this together with the Python properties and the delivery dcheck, labelled and nolabel with `--errfallback`.
