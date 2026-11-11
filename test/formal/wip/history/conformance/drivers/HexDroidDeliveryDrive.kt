@@ -40,6 +40,7 @@ private const val CONFORMANCE = "/Users/rdrake/workspace/afternet/seance/tmp/for
 private const val CHAN = "#chan"
 private const val ME = "dex"
 private const val CAPS = "echo-message labeled-response batch"
+private const val CAPS_NOLABEL = "echo-message batch"
 private const val WAIT_MS = 8_000L
 
 // ---------------------------------------------------------------- minimal JSON
@@ -125,7 +126,7 @@ private fun jsonOf(v: Any?): String = when (v) {
 // ---------------------------------------------------------------- fake server
 
 /** A one-connection IRC server: offers [CAPS], welcomes [ME], answers PING, can drop the connection. */
-private class DriveServer {
+private class DriveServer(private val caps: String) {
     private val listener = ServerSocket(0)
     val port: Int get() = listener.localPort
     @Volatile private var conn: Socket? = null
@@ -147,7 +148,7 @@ private class DriveServer {
     private fun handle(line: String) {
         val cmd = line.split(' ').dropWhile { it.startsWith("@") || it.startsWith(":") }.firstOrNull()
         when {
-            line.startsWith("CAP LS") -> send(":srv CAP * LS :$CAPS")
+            line.startsWith("CAP LS") -> send(":srv CAP * LS :$caps")
             line.startsWith("CAP REQ") -> send(":srv CAP * ACK :${line.substringAfter(':')}")
             line == "CAP END" -> {
                 send(":srv 001 $ME :Welcome")
@@ -212,7 +213,7 @@ class HexDroidDeliveryDrive {
             .replace("{chan}", CHAN)
 
     @Suppress("UNCHECKED_CAST")
-    private fun runScenario(sc: Map<String, Any?>, sha: String): Map<String, Any?> {
+    private fun runScenario(sc: Map<String, Any?>, sha: String, labelled: Boolean): Map<String, Any?> {
         val name = sc["name"] as String
         val labelsRequired = sc["labels"] as Boolean
         val steps = sc["steps"] as List<Map<String, Any?>>
@@ -221,7 +222,7 @@ class HexDroidDeliveryDrive {
         val snap = mutableListOf<Map<String, Any?>>()
         var skipped: String? = null
 
-        val server = DriveServer()
+        val server = DriveServer(if (labelled) CAPS else CAPS_NOLABEL)
         val client = IrcClient(
             IrcConfig(
                 host = "127.0.0.1", port = server.port, useTls = false, allowInvalidCerts = false,
@@ -241,7 +242,7 @@ class HexDroidDeliveryDrive {
         }
 
         try {
-            check(waitFor { client.hasCap("echo-message") && client.hasCap("labeled-response") && client.hasCap("batch") &&
+            check(waitFor { client.hasCap("echo-message") && client.hasCap("labeled-response") == labelled && client.hasCap("batch") &&
                 events.any { it is IrcEvent.ISupport } }) { "$name: caps not negotiated" }
             server.send(":$ME!u@h JOIN $CHAN")
             server.send(":srv 353 $ME = $CHAN :@$ME bob")
@@ -358,7 +359,7 @@ class HexDroidDeliveryDrive {
 
             return linkedMapOf(
                 "name" to name,
-                "client" to "hexdroid",
+                "client" to if (labelled) "hexdroid" else "hexdroid-nolabel",
                 "sha" to sha,
                 "labels" to reqs.values.associate { it.i.toString() to it.label },
                 "snap" to if (skipped != null) emptyList() else snap,
@@ -374,13 +375,19 @@ class HexDroidDeliveryDrive {
     }
 
     @Test
+    fun drive() = driveAll(labelled = true)
+
+    /** echo-message and batch only: HexDroid then sends no labels (IrcCore.kt privmsg). */
+    @Test
+    fun driveNoLabel() = driveAll(labelled = false)
+
     @Suppress("UNCHECKED_CAST")
-    fun drive() {
+    private fun driveAll(labelled: Boolean) {
         val sha = gitSha()
         val scenarios = File("$CONFORMANCE/scenarios.jsonl").readLines().filter { it.isNotBlank() }
             .map { JsonReader(it).parse() as Map<String, Any?> }
-        val results = scenarios.map { runScenario(it, sha) }
-        val out = File("$CONFORMANCE/results/hexdroid-${sha.take(7)}.jsonl")
+        val results = scenarios.map { runScenario(it, sha, labelled) }
+        val out = File("$CONFORMANCE/results/hexdroid-${sha.take(7)}${if (labelled) "" else "-nolabel"}.jsonl")
         out.parentFile.mkdirs()
         out.writeText(results.joinToString("\n", postfix = "\n") { jsonOf(it) })
         println("wrote $out (${results.size} scenarios)")
@@ -388,6 +395,7 @@ class HexDroidDeliveryDrive {
             val last = (r["snap"] as List<Map<String, Any?>>).lastOrNull()?.get("out") ?: emptyMap<String, Any?>()
             println("ROW ${(r["name"] as String).padEnd(17)} ${jsonOf(last).padEnd(36)} shown=${jsonOf(r["shown"])} ${r["skipped"] ?: ""} | ${r["notes"]}")
         }
+        if (!labelled) return
         val want = mapOf("echo1" to "confirmed", "err1" to "failed", "ack1" to "accepted", "fail1" to "failed")
         for ((n, w) in want) {
             val r = results.first { it["name"] == n }
