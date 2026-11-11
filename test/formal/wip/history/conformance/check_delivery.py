@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check delivery-client observations against Delivery.tla (v2.2).
 
-Usage: check_delivery.py OBS.jsonl WORKDIR [-j N] [--module M] [--configs FD,..]
+Usage: check_delivery.py OBS.jsonl WORKDIR [-j N] [--module M] [--configs FD,..] [--errfallback]
 
 For each observed scenario run (SCHEMA.md) two checks:
 
@@ -112,6 +112,8 @@ CONSTANTS
   Lossy = TRUE
   Deferred = %s
   Fallback = %s
+  ErrFallback = %s
+  LateErr = FALSE
   OtherSession = TRUE
   SelfMsg = TRUE
   TimeoutOn = TRUE
@@ -122,7 +124,8 @@ CONSTANTS
   Modify = TRUE
 INVARIANTS SnapOK NotStuck
 CHECK_DEADLOCK FALSE
-""" % (max(nsend, (nref + 1) // 2), "TRUE" if D else "FALSE", "TRUE" if F else "FALSE")
+""" % (max(nsend, (nref + 1) // 2), "TRUE" if D else "FALSE", "TRUE" if F else "FALSE",
+       "TRUE" if ERRFALLBACK else "FALSE")
 
 def run_tlc(wd, name):
     p = subprocess.run(JAVA + ["-XX:+UseParallelGC", "-cp", JAR, "tlc2.TLC", "-workers", "1",
@@ -212,6 +215,10 @@ def properties(sc, obs):
         if left:
             viol.append("Resolved: %s still pending at the end" % ",".join(left))
     return viol
+
+# D28: --errfallback checks a client that fails the one waiting non-NOTICE copy
+# for the target on an unlabeled error (Seance and Textual-NG without labels).
+ERRFALLBACK = "--errfallback" in sys.argv
 
 def main():
     obsf, wd = sys.argv[1], sys.argv[2]

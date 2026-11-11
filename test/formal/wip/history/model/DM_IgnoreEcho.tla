@@ -26,6 +26,8 @@ CONSTANTS
     Lossy,         \* D1, adversarial
     Deferred,      \* D2: process a batch at its outermost end (BA:55, BA:63)
     Fallback,      \* D15: an unlabeled echo settles the oldest copy with the same text
+    ErrFallback,   \* D28: an unlabeled error fails the one waiting non-NOTICE copy for its target
+    LateErr,       \* D28, adversarial: a late unlabeled reply may be an error, not an echo
     OtherSession,  \* D15: another session may send the same text
     SelfMsg,       \* LR-5: the client may message its own nick
     TimeoutOn,     \* D13: the client's timeout exists
@@ -210,8 +212,10 @@ SEmit(l) ==
 SLate(l) ==
     /\ ~closed /\ l \in late
     /\ late' = late \ {l}
-    /\ \E et \in (IF Modify THEN {pendTxt[l], ModText} ELSE {pendTxt[l]}) :     \* EM-2, D20
-         s2c' = Append(s2c, Ln("echo", NoLabel, et, pendTgt[l], pendCmd[l], 0, 0, "none", l, "late"))
+    /\ \/ \E et \in (IF Modify THEN {pendTxt[l], ModText} ELSE {pendTxt[l]}) :     \* EM-2, D20
+            s2c' = Append(s2c, Ln("echo", NoLabel, et, pendTgt[l], pendCmd[l], 0, 0, "none", l, "late"))
+       \/ /\ LateErr /\ pendCmd[l] # "NOTICE"                                     \* D28
+          /\ s2c' = Append(s2c, Ln("err", NoLabel, pendTxt[l], pendTgt[l], pendCmd[l], 0, 0, "none", l, "late"))
     /\ UNCHANGED <<sent, pendTxt, pendTgt, pendCmd, order, ob, buf, closed, owed, out, lateUsed,
                    nextRef, otherDone, histDone, labeledN, firstK, compet>>
     /\ UNCHANGED client
@@ -271,6 +275,13 @@ Oldest(p, t, g, c) ==
                                     /\ pendTgt[order[i]] = g /\ pendCmd[order[i]] = c}
     IN IF I = {} THEN NoLabel ELSE order[CHOOSE i \in I : \A j \in I : i <= j]
 
+\* D28: the only pending non-NOTICE copy for target g, or NoLabel when there
+\* are none or several.
+OnlyFor(p, g) ==
+    LET I == {i \in 1..Len(order) : Pending(p, order[i]) /\ pendTgt[order[i]] = g
+                                    /\ pendCmd[order[i]] # "NOTICE"}
+    IN IF Cardinality(I) = 1 THEN order[CHOOSE i \in I : TRUE] ELSE NoLabel
+
 \* The most recently opened batch (used only by the mutant DM_LastOpened).
 LastOpen == CHOOSE r \in RefIds : ob[r].on /\ \A q \in RefIds : ob[q].on => q <= r
 
@@ -307,6 +318,7 @@ Handle(m, lab, hist, oa, s) ==
     ELSE CASE m.k = "echo" /\ lab # NoLabel -> s
            [] m.k = "echo" /\ Fallback -> Settle(s, Oldest(s.p, m.txt, m.tgt, m.cmd), "confirmed", m, oa)
            [] m.k = "ack" -> Settle(s, lab, "accepted", m, oa)
+           [] m.k = "err" /\ lab = NoLabel /\ ErrFallback -> Settle(s, OnlyFor(s.p, m.tgt), "failed", m, oa)
            [] m.k \in {"fail", "err"} -> Settle(s, lab, "failed", m, oa)
            [] OTHER -> s
 
@@ -414,6 +426,12 @@ LabelOnce == \A l \in Labels : labeledN[l] <= 1
 
 \* D15: a copy is confirmed only by a line answering its own request.
 ConfirmedByOwn == \A l \in LabelsUsed : pend[l] = "confirmed" => by[l] = "own"
+
+\* D28: a copy is failed by a FAIL or error line only when that line answers its own request.
+FailedByOwn == \A l \in LabelsUsed : (pend[l] = "failed" /\ cause[l] \in {"fail", "err"}) => by[l] = "own"
+
+\* D28: the error fallback fails a copy by its own unlabeled error.
+CoverErrFallback == ~\E l \in LabelsUsed : pend[l] = "failed" /\ cause[l] = "err" /\ by[l] = "own" /\ role[l] = "late"
 
 \* Each outcome matches the kind of line or event that settled it (D18: close).
 OutcomeMatchesCause ==

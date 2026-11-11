@@ -1,0 +1,52 @@
+# Verdict: useful restricted replay, not yet a refinement claim
+
+D27 can expose the recorded stop bug, but its switch assignment and observation relation are incomplete. Do not turn known client failures into accepted model behavior and call that conformance. Static review only; no TLC or tests run. References below use H = Seance `client/js/irc/history.ts`, C = `catchup.ts`, CL = `client.ts`, CH = `channel.ts`, T = `test/irc/history.ts`, all under `/Users/rdrake/workspace/afternet/seance-delivery-fix`. (DECISIONS.md:491, DECISIONS.md:505, DECISIONS.md:519.)
+
+## 1. Every switch-table row
+
+| Row | Checked result |
+|---|---|
+| reconnect | Request shape and condition correct; pre-handler capture is CL:3099, not CL:3101. `before` is a remembered reference, not proof that the buffer covers everything through it. (H:285, H:596; CL:3099; CH:119.) |
+| join | One prepend page is correct. “Nothing held” really means no `before` reference; the channel need not be empty, whereas model join initializes an empty buffer. (H:285, H:295; model/History.tla:107.) |
+| more | BEFORE/ref and empty-buffer LATEST fallback correct. “One request per channel” is false: the guard excludes only another prepend request. Model more always starts with BEFORE oldest-held, so the fallback is outside that mapping. The Vue claim is outside the permitted sources. (H:240, H:244, H:255; model/History.tla:199, model/History.tla:207.) |
+| MsgidAnchor | Per-request rule correct; “TRUE when every anchor has a msgid” omits server support. Timestamp-only MSGREFTYPES forces timestamps even with ids; mixed anchors cannot be represented by one constant. (H:157, H:163; model/History.tla:200.) |
+| Budget | Correct as an upper bound: LATEST plus **up to** four BEFOREs. (H:65, H:290, H:590, H:601.) |
+| Limit | Capped sizes correct; D27's “Limit = CHATHISTORY” is false above 100 or for absent/zero cap. Reconnect is min(100, positive cap), otherwise 100. (H:143, H:288; DECISIONS.md:508.) |
+| Floor | Client description correct, model equivalence false for arbitrary batches: client tests **any** timed member; model tests only ms[1]. Five-second units give exact Fuzz=1; Fuzz=0 is only equivalent on a chosen coarse time grid preserving all threshold comparisons. (H:566, H:576; model/History.tla:92, model/History.tla:232.) |
+| StopOnHeld | Current shown ids at close is correct, but “includes our JOIN” is conditional on that JOIN being shown/remembered. It excludes previously gathered, undelivered pages, so it is not the model's evolving buffer either. The unconditional event-playback JOIN speculation is unsupported by these files. (H:561, H:571, H:587, H:643; CH:282; SWITCH-TABLE.md:51.) |
+| Empty | Truly empty/ACK stops, yes. Nonempty pages without valid timestamps also stop; those are not model empty pages. (H:575, H:590, H:761; model/History.tla:230.) |
+| End | Correct: tag existence stops regardless of size. Distinguish client handling from whether the server's tag is truthful. (H:590, H:687; model/History.tla:140.) |
+| Dedupe | Batch-close description correct. TRUE is not a faithful model value: no within-batch dedupe, no dedupe against gathered pages, no final delivery check. A later live relay can duplicate an already gathered replay. CoverLiveBoth alone does not demand that causal order. (H:398, H:426, H:515, H:587; model/History.tla:188, model/History.tla:325.) |
+| InsertMerge | Individual reconnect delivery appends, but pages are reversed into oldest-page-first order before delivery. Model FALSE appends each page immediately, newest-page-first: unequal even without live traffic. Prepend equals time insertion only with an internally ordered page entirely older than held rows; equal-time stable insertion differs too. UI-file claims remain unchecked. (H:458, H:587, H:643; CL:3632, CL:3689; model/History.tla:183, model/History.tla:217.) |
+| live | Normal push remembers and dispatches immediately; the cited batch-router assertion cannot be checked from allowed files. Do not suppress this interleaving. (CL:3633, CL:3689; SWITCH-TABLE.md:34, SWITCH-TABLE.md:63.) |
+| FAIL | Stop and partial delivery correct; it does not set historyFilled here (rather than guaranteeing false). Timeout shares that path, but History has no timeout action; it must be excluded or explicitly abstracted. Labeled-response does not eliminate target/oldest fallback on mismatching labels. (H:352, H:360, H:380, H:546, H:639, H:643, H:744; model/History.tla:158.) |
+| reversed anchor | Oldest valid timestamp, first encountered tie, correct. “Same only when BatchAgrees” is false: coincidental agreement is possible without it, and BatchAgrees alone is insufficient without time ordering. (H:575, H:580; model/History.tla:98, model/History.tla:151, model/History.tla:237.) |
+
+Ancillary claims: one channel bypasses TARGETS, and the test harness supports custom ISUPPORT/reconnect. But `h.payloads` and `h.messages` do not exist: payloads/mores/msgs are file-local helpers; reconstruct seeded rows plus dispatch events, respecting spy resets. Default setup advertises event-playback, so explicitly remove it for D27. Claims about support.ts, persistence.ts and UI consumers cannot be certified within the requested read set. (C:501, C:518; T:108, T:130, T:138, T:175, T:188, T:238, T:968; SWITCH-TABLE.md:54, SWITCH-TABLE.md:73.)
+
+## 2. Scope and missing correspondence
+
+Enough for a **bounded, restricted trace result**, after defining the abstraction; insufficient as written for reconnect refinement. Fix initial historyRequested/reference/held seeding, capabilities, legal server choices and time scaling. Define completion from observed quiescence after draining scheduled work, not from historyFilled: that flag stays false on ordinary budget/empty completion. History has no historyFilled variable or oracle. Unobserved stop reason must remain constrained by the actual inputs; existentially choosing FAIL would vacate NoLoss. (H:219, H:285, H:628, H:639; model/History.tla:68, model/History.tla:225, model/History.tla:262; DECISIONS.md:489, DECISIONS.md:491.)
+
+Deferred pages cannot simply stutter against immediate model buffer updates while simultaneously preserving request progression and exact delivered order. Specify a pending-page abstraction or report the mismatch. D27 also omits timestamps from its recorded rows, although floor/anchor and Order depend on them. Excluding store/display order is inconsistent with comparing row order. (H:587, H:596, H:643; model/History.tla:217, model/History.tla:237, model/History.tla:279; DECISIONS.md:488, DECISIONS.md:525.)
+
+Restrictions can hide full-client failures: no event-playback excludes replayed JOIN overlap; one channel excludes TARGETS arbitration; no persistence excludes the alternate replay path; inactive-only excludes prefetch before JOIN. Whole pages exclude parser/batch races. These are valid coverage limits, not evidence of absence. Most urgently, the table's optional LiveOn=FALSE/post-walk relay hides the already recorded bug, despite D27 allowing the necessary whole-page schedule. (C:155, C:177, C:518; CL:3125; H:678; SWITCH-TABLE.md:63; DECISIONS.md:499, DECISIONS.md:520.)
+
+D27's fixed-branch claim is not verified here: the supplied checkout still reads chan.msgids at close; its Channel history fields contain no heldAtJoin snapshot. Do not claim the fix passes without replaying the actual revision. (DECISIONS.md:522; H:561; CH:133.)
+
+## 3. The three unmapped behaviors
+
+- **Dynamic held stop: client finding first.** A newly relayed id proves no coverage of older missing messages. Keep initial Held as the normative policy; optionally add a diagnostic faulty-stop switch to generate its witness, never to bless it. (H:571; model/History.tla:54, model/History.tla:233, model/History.tla:262.)
+- **Oldest-time anchor: model switch.** This is a meaningful alternate pagination algorithm, not automatically a client defect. Pair it with an any-member floor policy; retain first-member behavior for comparison and test ties/reordered batches. (H:576, H:580; model/History.tla:232, model/History.tla:237.)
+- **Deferred delivery: model policy switch/state.** Gathering pages is intentional and fixes page ordering; represent pending pages, close-time dedupe and final flush. Report the resulting live-after-gather duplicate as a client finding, rather than merely turning Dedupe off. (H:398, H:587, H:643; model/History.tla:188, model/History.tla:217.)
+
+## 4. Minimal live-stop fixtures
+
+One failing fixture suffices; use a paired control to establish causality. Seed held h at 12:10, missing a at 12:12 and b at 12:16; store live l at 12:31, Limit=2. Model actions: CQuery(LATEST), StoreLive, RelayLive, CRecv(live), SrvAnswer([b,l], no end), CRecv(page). Wire: unbatched l, then complete labeled history batch [b,l]. Require BEFORE msgid=b 2; answer [h,a] to finish. Broken client instead sends no BEFORE, omits a and sets historyFilled. Control: store l identically but defer its relay until completion; the older page must be requested and a recovered. No intra-batch interleaving is needed. (model/History.tla:144, model/History.tla:166, model/History.tla:173, model/History.tla:233; H:571, H:590, H:639; T:215; SWITCH-TABLE.md:40.)
+
+Existing **HTiny2** permits this shape with two held rows (use the newest at 12:10); **HTiny** already permits a smaller Limit=1 version. Both should continue under the model's initial-Held semantics. A suitably selected existing run can therefore expose client divergence without a new switch. CoverLiveBoth alone does not guarantee omitted older content or relay-before-page; select that schedule explicitly. No existing config models the faulty dynamic-held stop itself: reproducing the client loss *inside History* needs that new diagnostic policy/mutant. (model/mkhist.py:8, model/mkhist.py:20, model/mkhist.py:53; model/History.tla:233, model/History.tla:325.)
+
+## 5. Cut from the first result
+
+Defer the generic TLC observation checker, the entire six-witness seed catalogue, minted-id plumbing and three new policy implementations. Start with the explicit live-stop fixture/control, actual requests and final content assertions; report a client counterexample, then establish broader trace correspondence. Cross-branch absence claims require the fix source and execution, neither available in this review. Keep opaque ids, preserved times, real parsing and live-before-page delivery. (DECISIONS.md:491, DECISIONS.md:493, DECISIONS.md:519, DECISIONS.md:523, DECISIONS.md:524; HISTORY-REVIEW-4.md:36.)
+

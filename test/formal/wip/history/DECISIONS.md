@@ -478,3 +478,93 @@ This decision states restrictions only. It settles no reading of the text.
   - **The minted-anchor chain.** The `unkEmpty` ghost records an empty page answering a BEFORE whose msgid is unknown. CoverUnknownLoss, on the minting mutant (HS_NewIdChain), reaches that page, the "empty" stop and a missing gap message together in one state.
   - **EndNext's limits.** It is independent of EndOK's position test, but not of Elig. Its empty-page branch trusts the recorded `el`.
   - Result: all 63 checks as expected (history-v1.1, job 10505).
+
+## D27. Replaying Seance's catch-up against History (adapter v0): scope
+
+This decision states scope and restrictions only. It builds nothing yet. Review it first (PROMPT-H5).
+- **What is compared.** The adapter feeds Seance's real `IrcClient` a fixture made from one model run, over FakeTransport. It records what the client does:
+  - each `CHATHISTORY` request: subcommand, selector form and value, limit;
+  - the number of requests;
+  - the rows delivered: content, msgid and order;
+  - `chan.historyFilled`.
+
+  The model's choices are never fed back as expectations. A checker turns the observation into a TLC trace check against History.tla, as `check_delivery.py` does for Delivery. The stop reason can't be observed, so it is not compared.
+- **Fixtures** follow HISTORY-REVIEW-4 §5.
+  - Opaque string ids, with minted ids kept distinct.
+  - Fixed UTC times, with ties kept.
+  - One target, `#seance`, and a fresh batch reference per reply.
+  - SrvAnswer is one whole `chathistory` batch. SrvFail is `FAIL CHATHISTORY MESSAGE_ERROR`. RelayLive is an unbatched PRIVMSG. StoreLive emits nothing.
+- **Restrictions for v0:**
+  - Only Seance, only reconnect mode, one channel.
+  - Whole-page schedules only (D22). A live line between a batch's lines is recorded as an observation only and never checked.
+  - `labeled-response` on.
+  - No `draft/read-marker`, no persistence, no `draft/event-playback`.
+  - `NO_FAKE_LAG`, and every answer within 15 s of fake time.
+
+  These pin a path around TARGETS, marker fetches and step costs, none of which the model has.
+- **Seance's switch values** (SWITCH-TABLE.md, read from 4f5a4bd12; still to be checked by hand):
+  - MsgidAnchor TRUE;
+  - pages(5);
+  - Limit = `CHATHISTORY=` from ISUPPORT;
+  - floor `<` with a 5 s allowance;
+  - Dedupe TRUE;
+  - StopOnHeld TRUE;
+  - InsertMerge FALSE on reconnect, so the gap lands after live lines (W_Append's Order break).
+
+  Three behaviours have no model value:
+  - the held set is wider than `Held`;
+  - the next anchor after a reversed batch is the oldest line by time, not `ms[1]`;
+  - pages are deduped at batch close but delivered once at the end.
+
+  Each gets a switch, or a finding. The model is not tuned to fit.
+- **A finding already, from the switch table.** On develop, a line relayed live while LATEST is in flight is also in that page. It ends the walk after one page and sets historyFilled, so the rest of a longer gap is never fetched. A mocha probe confirmed it.
+  - That is StopOnHeld with the held set taken at batch close instead of at the JOIN.
+  - The fix is on fix/catchup-live-stop (12a66b6): `Channel.heldAtJoin`.
+  - The adapter should reproduce the bug on develop and its absence on the fix.
+- **Seeds.** Use the witnesses (W_TsTie, W_TieReconnect, W_Budget, W_EmptyPage, W_Append, HS_NewIdChain) and the positives' covers. Their TLC traces (`*_TTrace_*.tla`, history-v1.1) are kept as the fixtures' source.
+- **Not in v0:** JOIN and `more` modes; Textual-NG and HexDroid; line-level batch interleaving; the ordering of the gap against live lines in the store (the unread marker assumes ids rise with row order).
+- **After HISTORY-REVIEW-5.** The review's verdict: a useful restricted replay, not yet a refinement claim.
+  - **First result, cut down.** One live-stop fixture and its control, nothing more.
+    - Held h at 12:10; missing a at 12:12 and b at 12:16; live l at 12:31; Limit = 2; event-playback off.
+    - The live line l is relayed before LATEST's page [b, l], which has no end tag. The client must ask `BEFORE msgid=b 2`, and [h, a] finishes the walk.
+    - The control relays l only after the walk.
+    - The fixture runs against develop and fix/catchup-live-stop. The result is the requests and the final content, not a TLC trace check. HTiny and HTiny2 already allow this schedule under initial-Held semantics.
+    - Deferred until there is a first result: the generic observation checker, the witness seed catalogue, minted ids, and the three new policies.
+  - **The three unmapped behaviours.**
+    - The held set taken at batch close is a client finding, not a switch: Held stays the normative policy. A diagnostic mutant may reproduce the loss inside History.
+    - The oldest-by-time anchor becomes a model switch, paired with an any-member floor test (Seance tests every timed line on the page, the model only `ms[1]`).
+    - Deferred delivery becomes a model policy with pending pages, close-time dedupe and a final flush. Its live-after-gather duplicate is a client finding.
+  - **Corrections to SWITCH-TABLE.**
+    - Limit is min(100, a positive cap), else 100.
+    - MsgidAnchor also depends on MSGREFTYPES.
+    - Gathered pages are reversed into oldest-page-first order before delivery, which differs from InsertMerge FALSE even without live lines.
+    - A non-empty page with no valid timestamps also stops the walk, and that is not the model's empty page.
+    - historyFilled stays false on budget and empty stops, so completion is observed as quiescence.
+    - The harness helpers `payloads`, `mores` and `msgs` are file-local to test/irc/history.ts.
+    - The default harness advertises event-playback; D27 turns it off.
+
+## D28. Unlabeled errors without labeled-response (Delivery v2.3)
+
+- **Client switch `ErrFallback`.** An unlabeled error fails the only pending non-NOTICE copy for its target (`OnlyFor`), and fails nothing when there are none or several. This is the rule Seance (#278 at 99f1298) and Textual-NG now use without labels. Before, the model's client failed a copy only on a labelled error, so U_err could match no config.
+- **Server switch `LateErr`** (adversarial, with Lossy): a lost reply may come back late as an unlabeled error instead of an echo. Without it the model's server never sends an unlabeled error, and the client switch could not be checked on its own.
+- **`FailedByOwn`:** a copy failed by a FAIL or error line was failed by its own request's line.
+  - The witness W_ErrFallback expects the rule to break it: copy 1 times out, then copy 1's late error fails copy 2, the only copy still pending.
+  - The cover V3CoverErrFallback shows the rule failing a copy by its own late error.
+  - V3ErrLateOff (LateErr without the rule) and V3ErrOnly (the rule on a server with no unlabeled errors) are positives.
+- **Unchanged results.** Every v2.2 config sets both switches FALSE, and both changes are guarded by them, so the v2.2 results stand. The v2.3 run re-checks Base and LossyTimeout for equal distinct-state counts.
+- **Conformance.** `check_delivery.py --errfallback` sets the client switch in the trace configs; LateErr stays off there, since the trace supplies the lines.
+
+## D29. First History replay result: the live-stop fixture (2026-11-11)
+
+- **The driver.** `test/formal/history/livestop.py` (wip/formal-models) builds a mocha file from the target checkout's own `test/irc/history.ts` harness, runs the fixture and its control from D27's review-5 bullet, and records:
+  - the CHATHISTORY requests sent;
+  - the replayed rows;
+  - the live rows;
+  - historyFilled.
+
+  Results are in `test/formal/history/results/livestop-<sha>.jsonl`.
+- **develop 4f5a4bd12, the fixture:** only `LATEST * 2` is sent. The gap delivered is [b] alone, `a` is never fetched, and historyFilled is true. This is the bug, reproduced from the model's schedule.
+- **fix/catchup-live-stop 12a66b6fa, the fixture:** `LATEST`, then `BEFORE msgid=b 2`. The gap is [a, b], `l` is shown once (live), and historyFilled is true. The bug is gone on this schedule.
+- **The control, on both revisions:** the walk completes and recovers [a, b, l], but `l` is shown twice: once in the gap, once when relayed after the walk. This is the live-after-gather duplicate review 5 predicted, a client finding.
+  - #278's repeated-msgid check (handlers/privmsg.ts) should drop the second copy. Not yet run on #278 combined with the fix.
+- **Not a refinement claim.** This is two whole-page schedules, compared by requests and content only.
