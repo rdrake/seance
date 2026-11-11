@@ -620,3 +620,22 @@ This decision states scope and restrictions only. It builds nothing yet. Review 
   - the mix of #278 to #281 (a55da75b4) passes all four.
   - Each passing trace takes every step: Len(W) + 1 states, 7 or 10.
 - **The final sweep** (all PRs mixed at their final heads) runs this together with the Python properties and the delivery dcheck, labelled and nolabel with `--errfallback`.
+
+## D32 Combined sweep before sign-off (2026-11-11)
+
+One mix (tools/mix.mjs sweep1 → e91eb65e8) of #278 5ef148143, #279 f13bd682a,
+#280 1ed36f61c, #281 e0d7917eb. Conflicts were doc-only between #279 and #280
+in history.ts; between #279 and #281, catchup.ts/history.ts carry both
+`held`/`heldIds` and `ids`. Typecheck clean, mocha 5346 passing.
+gpu05 job 10594:
+- History fixtures (Python properties and TLC trace HT_*): liveStop,
+  liveStopControl, gapOrder, clockFloor all PASS (develop fails all four on
+  SnapOK).
+- Delivery v2.3 dcheck, labelled: every scenario matches the model. Prop
+  notes only on the by-design rows: W_Other, W_LateTimedOut, U_other, and
+  U_err/U_errTwo, which need ErrFallback or a timeout.
+- Delivery v2.3 dcheck, no label with --errfallback: all match, U_err ok. The
+  only notes are U_other and U_errTwo (two waiting: neither failed, left to
+  the timeout).
+- Delivery v2.3 model (job 10512): Base, LossyTimeout, V3ErrLateOff and
+  V3ErrOnly pass; W_ErrFallback and V3CoverErrFallback fail as expected.
