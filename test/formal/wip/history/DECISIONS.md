@@ -639,3 +639,21 @@ gpu05 job 10594:
   the timeout).
 - Delivery v2.3 model (job 10512): Base, LossyTimeout, V3ErrLateOff and
   V3ErrOnly pass; W_ErrFallback and V3CoverErrFallback fail as expected.
+
+## D33 Final sweep after merging #278-#281 (2026-11-11)
+
+Merged into evilnet develop by squash, in this order:
+- #280 3fe9ddf3d
+- #278 ad25a114a
+- #279 fee545d16
+- #281 d0322ffa7
+
+#279 and #281 were brought up to date by merging develop into them rather
+than rebasing (force-push was not available). Their trees equal the
+rebased ones.
+
+Sweep on develop fee545d16 + #281 54c6514c2 (whose tree equals d0322ffa7's),
+gpu05 job 10654:
+- History fixtures (Python properties and TLC trace): 4/4 pass.
+- Delivery dcheck, labelled and no-label with --errfallback: byte-identical
+  to the D32 summaries.
