@@ -453,3 +453,28 @@ This decision states restrictions only. It settles no reading of the text.
 - **Coverage.** CoverDone runs on every positive config. The same-budget positive `HBatchAgreesBudget` pairs with `W_BatchBudget`. `HS_NewIdR` checks ReplayIdStable directly, which is an id-range check only.
 - **Retired.** DESIGN's per-model sent/got ghost history: History's witness traces are TLC's counterexamples instead. The schedule with a live line inside a batch's lines is out of scope by D22.
 - **A second budget finding (v0.2 run).** Even when batches arrive in order, `pages(2)` can lose a gap message. A reconnect without StableAcrossReconnect may order a gap message before the held one when their times tie. So the catch-up walks past the held message and runs out of pages. That is why both halves of the pair pin `StableAcrossReconnect`. Result: all 37 checks as expected (history-v0.2, jobs 10474 and 10477).
+
+## D26. History.tla v1 (after HISTORY-REVIEW-3)
+
+- **Three request kinds, one per config (`Mode`).** Each has its own obligation, and the reconnect-only init, floor and completion properties stay reconnect-only.
+  - **`reconnect`:** v0.2's catch-up loop. NoLoss holds when it completes other than by FAIL.
+  - **`join`:** the first JOIN, `LATEST * Limit` on an empty buffer, one page. JoinRecovers: the Limit newest messages of that page's snapshot are held.
+  - **`more`:** `BEFORE <oldest held> Limit`, one page, on one connection, so StableAcrossReconnect is pinned. Here the held messages are the newest and the "gap" is the older history. MoreRecovers: the Limit newest older messages are held.
+  - The obligations are written from the initial store and the snapshot, not from the query the client sent. So a client with the wrong anchor (HC_MoreNewest) fails them.
+- **FAIL (CH-7) is a completion, not a recovery.** The server may answer any query with FAIL (`MayFail`), and the client stops with why = "fail". NoLoss excludes that case. NoLossEvenOnFail does not, and W_FailLoss shows it fails, so the exclusion is reachable and matters.
+- **Selector forms are explicit:** `star` (LATEST *), `msgid` and `ts`, so form 0 no longer stands for a timestamp. LATEST is not extended past `*`, because no client modelled sends anything else.
+- **UnknownEmpty (MI-5):** a BEFORE whose msgid the snapshot does not hold selects nothing.
+  - With minted replay ids, that lookup is reachable (CoverUnknownSel on HS_NewIdUnknown), and the minted anchor then ends the loop on an empty page, losing the gap (HS_NewIdAnchor).
+  - HS_UnknownLatest answers an unknown msgid as if it were LATEST, and UnknownEmpty catches it.
+- **EndNext, a second end oracle written from the next query.** A tagged page means `BEFORE msgid=<its first wire msgid>`, against the same snapshot, selects nothing; a tagged empty page means the query had nothing eligible. Neither side uses EndOK.
+  - **Regressions:** HS_EndLast tags a reversed batch by its last element (CoverEndReversed shows such a page is reachable), and HS_EndEmpty tags an empty page while messages remain. EndNext catches both.
+  - **Exactness:** EndOK is computed on content ids, and EndTruthful decodes the wire ids. EndNext builds a msgid continuation from the first wire id, even when the client anchors by timestamp, so it does not check timestamp exactness. With a minted first id the next lookup is unknown, so EndNext accepts a tag that EndOK refuses. With timestamp anchors and tied times, the next timestamp query can be empty although the first message is not the oldest. In both cases the server's EndOK is the conservative one: it never tags falsely, though it may leave a truthful case untagged.
+- **The reconnect tie loss, named.** W_TieReconnect is HBatchAgreesBudget without StableAcrossReconnect, which fails NoLoss (D25's last bullet). So agreeing batches alone are not enough for pages(2).
+- **Not modelled:** AFTER, AROUND, BETWEEN and TARGETS; LATEST with a selector; a live line inside a batch's lines (D22); retrying after FAIL.
+- **The `more` configs hold two messages.** With one held message, the oldest and the newest held are the same, so HC_MoreNewest could not differ (job 10500 found this). Result: all 57 checks as expected (history-v1, jobs 10500 and 10504; `model/results-h1.summary`).
+- **After HISTORY-REVIEW-4.**
+  - **JOIN and `more` guards.** JoinRecovers and MoreRecovers now apply to every completion except FAIL, not only the one-page stop ("one"), so a client that stops early with "budget", "empty" or "floor" does not escape them.
+  - **FAIL in the one-page modes.** HMoreFail is added, and JOIN and `more` each get FAIL and completion covers.
+  - **The minted-anchor chain.** The `unkEmpty` ghost records an empty page answering a BEFORE whose msgid is unknown. CoverUnknownLoss, on the minting mutant (HS_NewIdChain), reaches that page, the "empty" stop and a missing gap message together in one state.
+  - **EndNext's limits.** It is independent of EndOK's position test, but not of Elig. Its empty-page branch trusts the recorded `el`.
+  - Result: all 63 checks as expected (history-v1.1, job 10505).

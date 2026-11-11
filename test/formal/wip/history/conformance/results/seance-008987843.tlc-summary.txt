@@ -1,0 +1,39 @@
+echo1              guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+batch              guaranteed  match=F0D1,F1D1  props=ok
+noteB              guaranteed  match=F0D1,F1D1  props=ok
+nestB              guaranteed  match=F0D1,F1D1  props=ok
+fail1              guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+err1               guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+failB              guaranteed  match=F0D1,F1D1  props=ok
+noteFB             guaranteed  match=F0D1,F1D1  props=ok
+modEcho            allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+ack1               adversarial match=F0D0,F0D1,F1D0,F1D1  props=ok
+partial            adversarial match=F0D0,F0D1,F1D0,F1D1  props=ok
+silence            adversarial match=F0D0,F0D1,F1D0,F1D1  props=ok
+lateAfterTimeout   adversarial match=F0D0,F0D1,F1D0,F1D1  props=ok
+echoFail           adversarial match=F0D1,F1D1  props=ok
+failEcho           adversarial match=F0D1,F1D1  props=ok
+close              allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+closeInBatch       allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+selfPre            guaranteed  match=F1D0,F1D1  props=ok
+selfPost           guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+notice             guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+histOpen           allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+histBefore         allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+twoEcho            guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+interleaved        guaranteed  match=F0D1,F1D1  props=ok
+interleavedSwap    guaranteed  match=F0D1,F1D1  props=ok
+modBatch           allowed     match=F0D1,F1D1  props=ok
+sameText           guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=ok
+W_Other            allowed     match=F1D0,F1D1  props=ConfirmedByOwn: 1 confirmed by a other line answering other (step 1)
+W_LateTimedOut     adversarial match=F1D0,F1D1  props=ConfirmedByOwn: 2 confirmed by a late line answering 1 (step 3); NoCrossFromTimedOut: 2 settled by 1's late echo (step 3)
+W_SelfCopy         guaranteed  match=F0D0,F0D1  props=ok
+kindCross          allowed     match=F1D0,F1D1  props=ok
+U_echo             guaranteed  match=F1D0,F1D1  props=ok
+U_sameText         guaranteed  match=F1D0,F1D1  props=ok
+U_other            allowed     match=F1D0,F1D1  props=ConfirmedByOwn: 1 confirmed by a other line answering other (step 1)
+U_err              guaranteed  match=F0D0,F0D1,F1D0,F1D1  props=Resolved: 1 still pending at the end
+U_errTwo           guaranteed  match=F1D0,F1D1  props=Resolved: 2 still pending at the end
+U_close            allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+U_hist             allowed     match=F1D0,F1D1  props=ok
+U_self             guaranteed  match=F1D0,F1D1  props=ok

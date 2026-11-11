@@ -1,0 +1,39 @@
+echo1              skipped (no-label)
+batch              skipped (no-label)
+noteB              skipped (no-label)
+nestB              skipped (no-label)
+fail1              skipped (no-label)
+err1               skipped (no-label)
+failB              skipped (no-label)
+noteFB             skipped (no-label)
+modEcho            skipped (no-label)
+ack1               skipped (no-label)
+partial            skipped (no-label)
+silence            adversarial match=F0D0,F0D1,F1D0,F1D1  props=ok
+lateAfterTimeout   adversarial match=F0D0,F0D1,F1D0,F1D1  props=ok
+echoFail           skipped (no-label)
+failEcho           skipped (no-label)
+close              allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+closeInBatch       skipped (no-label)
+selfPre            skipped (no-label)
+selfPost           skipped (no-label)
+notice             skipped (no-label)
+histOpen           skipped (no-label)
+histBefore         skipped (no-label)
+twoEcho            skipped (no-label)
+interleaved        skipped (no-label)
+interleavedSwap    skipped (no-label)
+modBatch           skipped (no-label)
+sameText           skipped (no-label)
+W_Other            skipped (no-label)
+W_LateTimedOut     skipped (no-label)
+W_SelfCopy         skipped (no-label)
+kindCross          skipped (no-label)
+U_echo             guaranteed  match=F1D0,F1D1  props=ok
+U_sameText         guaranteed  match=F1D0,F1D1  props=ok
+U_other            allowed     match=F1D0,F1D1  props=ConfirmedByOwn: 1 confirmed by a other line answering other (step 1)
+U_err              guaranteed  match=-  props=ok
+U_errTwo           guaranteed  match=-  props=ConfirmedByOwn: 2 confirmed by a resp line answering 1 (step 3)
+U_close            allowed     match=F0D0,F0D1,F1D0,F1D1  props=ok
+U_hist             allowed     match=F1D0,F1D1  props=ok
+U_self             guaranteed  match=F1D0,F1D1  props=ok

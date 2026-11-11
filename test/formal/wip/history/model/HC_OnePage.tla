@@ -6,6 +6,13 @@
 (* the client's loop (CH-23, Seance's catchup.ts) with dedupe and merge.  *)
 (* Decisions: ../DECISIONS.md D3-D11, D14, D22-D24.  Bounds: DESIGN.md.    *)
 (*                                                                         *)
+(* v1 (HISTORY-REVIEW-3, D26): three request kinds, each with its own     *)
+(* obligation (Mode: reconnect catch-up, first JOIN's LATEST *, "more"'s  *)
+(* BEFORE <oldest held>); FAIL ends a request without recovering it; the *)
+(* selector form (wildcard, timestamp, msgid) is explicit, an unknown     *)
+(* msgid selects nothing (UnknownEmpty), and EndNext is an end oracle     *)
+(* written from the next query rather than from EndOK.                    *)
+(*                                                                         *)
 (* v0.1 (HISTORY-REVIEW-1): msgid and content are separate (a replay may *)
 (* mint a new id, HS_NewId); the page records its snapshot, so the       *)
 (* PageEligible and EndTruthful oracles are fixed at answer time.          *)
@@ -17,8 +24,10 @@
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
 CONSTANTS
-    NHeld,         \* messages the client held before the gap (1..2)
-    NGap,          \* messages stored during the gap (1..3)
+    Mode,          \* "reconnect", "join" (first JOIN) or "more" (D26)
+    MayFail,       \* the server may answer a query with FAIL (CH-7)
+    NHeld,         \* reconnect: messages held before the gap (1..2); more: held (newest); join: 0
+    NGap,          \* reconnect: stored during the gap; more: older than the held; join: the store
     LiveOn,        \* one more message stored during catch-up (D6)
     Times,         \* the time values, e.g. {1, 3}
     Fuzz,          \* FUZZ_INTERVAL (D8: 0 or 1)
@@ -40,8 +49,10 @@ Ids == 1..N
 Mids == 1..(2 * N)                \* a message's msgid; N + c is a re-minted id for content c
 Content(x) == IF x > N THEN x - N ELSE x
 Replay(c) == c                    \* CH-18: a replayed message keeps its msgid
-Held == 1..NHeld
-Gap == (NHeld + 1)..NStored
+\* reconnect: the held messages are the oldest, the gap follows; more: the held
+\* messages are the newest and the "gap" is the older history; join: nothing held.
+Held == IF Mode = "more" THEN (NGap + 1)..NStored ELSE 1..NHeld
+Gap == IF Mode = "more" THEN 1..NGap ELSE (NHeld + 1)..NStored
 LiveId == N                       \* meaningful only when LiveOn
 
 \* Store times are non-decreasing along the store (D8, no skew).
@@ -68,13 +79,17 @@ VARIABLES
     anchor,    \* client: the first message of the last page (CH-23 earliest_message)
     pages,     \* client: pages received
     got,       \* client: messages retrieved (D14)
-    why        \* client: why catch-up stopped ("none" while running)
+    why,       \* client: why catch-up stopped ("none" while running)
+    pg1,       \* ghost: the first page as received (its snapshot), or NoItem
+    unkEmpty   \* ghost: an empty page answered a BEFORE with an unknown msgid
 
-vars == <<time, ord, liveSt, liveRel, q, s2c, buf, pgSeen, liveSeen, phase, anchor, pages, got, why>>
+vars == <<time, ord, liveSt, liveRel, q, s2c, buf, pgSeen, liveSeen, phase, anchor, pages, got, why, pg1, unkEmpty>>
 
-NoQ == [k |-> "none", sel |-> 0, ts |-> 0]
+\* form: "star" (LATEST *), "msgid" or "ts" (BEFORE msgid=sel / timestamp=ts).
+NoQ == [k |-> "none", form |-> "none", sel |-> 0, ts |-> 0]
+NoItem == [k |-> "none", ms |-> << >>, end |-> FALSE, qq |-> NoQ, el |-> {}, so |-> << >>]
 T(x) == time[Content(x)]            \* a msgid's time
-Floor == time[NHeld] - Fuzz       \* lower_bound - FUZZ_INTERVAL (CH-23)
+Floor == IF NHeld = 0 THEN 0 ELSE time[NHeld] - Fuzz   \* lower_bound - FUZZ_INTERVAL (CH-23); reconnect only
 
 \* D7: the order on the new connection.
 \*   StableAcrossReconnect: no existing pair swaps (the store order);
@@ -89,21 +104,24 @@ Init ==
     /\ ord \in {o \in Perms(1..NStored) : OrdOK(o, time)}
     /\ liveSt = FALSE /\ liveRel = FALSE
     /\ q = NoQ /\ s2c = <<>>
-    /\ buf = [i \in Held |-> i]        \* held in the old connection's order
+    /\ buf = IF Mode = "more" THEN [i \in 1..NHeld |-> NGap + i]
+             ELSE [i \in 1..NHeld |-> i]   \* held in the old connection's order; join: empty
     /\ pgSeen = {} /\ liveSeen = FALSE
     /\ phase = "query" /\ anchor = 0 /\ pages = 0 /\ got = 0 /\ why = "none"
+    /\ pg1 = NoItem /\ unkEmpty = FALSE
 
 -----------------------------------------------------------------------------
 \* Server.
 
 \* D3, D5: eligible messages for a query against the order o (anchor excluded).
+\* Only LATEST * and BEFORE msgid= / timestamp= are modelled (D26).
 Elig(qq, o) ==
-    CASE qq.k = "latest" -> Range(o)
+    CASE qq.form = "star" -> Range(o)                    \* LATEST *
       \* MI-5: a msgid is looked up as given; an unknown one selects nothing
       \* (D5's empty-batch reply).
-      [] qq.k = "before" /\ qq.sel # 0 ->
+      [] qq.form = "msgid" ->
             IF qq.sel \in Range(o) THEN {o[i] : i \in 1..(Pos(o, qq.sel) - 1)} ELSE {}
-      [] OTHER -> {m \in Range(o) : time[m] < qq.ts}     \* BEFORE timestamp=ts
+      [] qq.form = "ts" -> {m \in Range(o) : time[m] < qq.ts}   \* BEFORE timestamp=ts
 
 \* D10: with Contiguous, the c eligible messages nearest the selector, i.e.
 \* the newest in o; else any c of them.
@@ -135,22 +153,28 @@ SrvAnswer ==
              s2c' = Append(s2c, [k |-> "page", ms |-> [i \in DOMAIN p |-> Replay(p[i])], end |-> e,
                                  qq |-> q, el |-> Elig(q, ord), so |-> ord])
     /\ q' = NoQ
-    /\ UNCHANGED <<time, ord, liveSt, liveRel, buf, pgSeen, liveSeen, phase, anchor, pages, got, why>>
+    /\ UNCHANGED <<time, ord, liveSt, liveRel, buf, pgSeen, liveSeen, phase, anchor, pages, got, why, pg1, unkEmpty>>
+
+\* CH-7: the server may refuse the query with FAIL (D26).
+SrvFail ==
+    /\ MayFail /\ q.k # "none"
+    /\ s2c' = Append(s2c, [NoItem EXCEPT !.k = "fail", !.qq = q])
+    /\ q' = NoQ
+    /\ UNCHANGED <<time, ord, liveSt, liveRel, buf, pgSeen, liveSeen, phase, anchor, pages, got, why, pg1, unkEmpty>>
 
 \* D6: the live message is stored (it joins the order as the newest) ...
 StoreLive ==
     /\ LiveOn /\ ~liveSt
     /\ liveSt' = TRUE
     /\ ord' = Append(ord, LiveId)
-    /\ UNCHANGED <<time, liveRel, q, s2c, buf, pgSeen, liveSeen, phase, anchor, pages, got, why>>
+    /\ UNCHANGED <<time, liveRel, q, s2c, buf, pgSeen, liveSeen, phase, anchor, pages, got, why, pg1, unkEmpty>>
 
 \* ... and relayed at any later point, before or after a page (BA-9).
 RelayLive ==
     /\ liveSt /\ ~liveRel
     /\ liveRel' = TRUE
-    /\ s2c' = Append(s2c, [k |-> "live", ms |-> <<LiveId>>, end |-> FALSE, qq |-> NoQ,
-                           el |-> {}, so |-> << >>])
-    /\ UNCHANGED <<time, ord, liveSt, q, buf, pgSeen, liveSeen, phase, anchor, pages, got, why>>
+    /\ s2c' = Append(s2c, [NoItem EXCEPT !.k = "live", !.ms = <<LiveId>>])
+    /\ UNCHANGED <<time, ord, liveSt, q, buf, pgSeen, liveSeen, phase, anchor, pages, got, why, pg1, unkEmpty>>
 
 -----------------------------------------------------------------------------
 \* Client.
@@ -169,15 +193,21 @@ MergeAll(b, ms) == IF ms = <<>> THEN b ELSE MergeAll(Merge1(b, Head(ms)), Tail(m
 
 BudgetLeft(pg, gt) == IF BudgetKind = "pages" THEN pg < BudgetN ELSE gt < BudgetN
 
+\* The first query: LATEST * for a reconnect or a first JOIN; for "more",
+\* BEFORE the oldest held message (DESIGN.md's table).  Later queries (the
+\* reconnect loop only): BEFORE the first message of the last page.
+FirstAnchor == NGap + 1             \* "more": the oldest held message
+Before(a) == IF MsgidAnchor THEN [NoQ EXCEPT !.k = "before", !.form = "msgid", !.sel = a]
+             ELSE [NoQ EXCEPT !.k = "before", !.form = "ts", !.ts = T(a)]
+
 CQuery ==
     /\ phase = "query"
     /\ IF ~BudgetLeft(pages, got)
        THEN phase' = "done" /\ why' = "budget" /\ q' = q
-       ELSE /\ q' = IF pages = 0 THEN [NoQ EXCEPT !.k = "latest"]
-                    ELSE IF MsgidAnchor THEN [NoQ EXCEPT !.k = "before", !.sel = anchor]
-                    ELSE [NoQ EXCEPT !.k = "before", !.ts = T(anchor)]
+       ELSE /\ q' = IF pages = 0 /\ Mode # "more" THEN [NoQ EXCEPT !.k = "latest", !.form = "star"]
+                    ELSE Before(IF pages = 0 THEN FirstAnchor ELSE anchor)
             /\ phase' = "wait" /\ why' = why
-    /\ UNCHANGED <<time, ord, liveSt, liveRel, s2c, buf, pgSeen, liveSeen, anchor, pages, got>>
+    /\ UNCHANGED <<time, ord, liveSt, liveRel, s2c, buf, pgSeen, liveSeen, anchor, pages, got, pg1, unkEmpty>>
 
 \* CH-23: process one wire item.  A page ends the wait and decides the stop.
 CRecv ==
@@ -187,10 +217,17 @@ CRecv ==
        /\ buf' = MergeAll(buf, it.ms)
        /\ pgSeen' = IF it.k = "page" THEN pgSeen \cup {Content(it.ms[i]) : i \in DOMAIN it.ms} ELSE pgSeen
        /\ liveSeen' = (liveSeen \/ it.k = "live")
+       /\ pg1' = IF it.k = "page" /\ pages = 0 THEN it ELSE pg1
+       /\ unkEmpty' = (unkEmpty \/ (it.k = "page" /\ it.ms = << >> /\ it.qq.form = "msgid"
+                                    /\ it.qq.sel \notin Range(it.so)))
        /\ IF it.k = "live"
           THEN UNCHANGED <<phase, anchor, pages, got, why>>
+          ELSE IF it.k = "fail"           \* D26: FAIL ends the request, unrecovered
+          THEN /\ phase' = "done" /\ why' = "fail"
+               /\ UNCHANGED <<anchor, pages, got>>
           ELSE LET ms == it.ms
-                   stop == IF ms = <<>> THEN "empty"
+                   stop == IF Mode # "reconnect" THEN "one"   \* JOIN and "more": one page
+                           ELSE IF ms = <<>> THEN "empty"
                            ELSE IF it.end THEN "end"
                            ELSE IF T(ms[1]) < Floor THEN "floor"
                            ELSE IF StopOnHeld /\ Range(ms) \cap Held # {} THEN "held"
@@ -203,7 +240,7 @@ CRecv ==
                      ELSE phase' = "done" /\ why' = stop
     /\ UNCHANGED <<time, ord, liveSt, liveRel, q>>
 
-Next == SrvAnswer \/ StoreLive \/ RelayLive \/ CQuery \/ CRecv
+Next == SrvAnswer \/ SrvFail \/ StoreLive \/ RelayLive \/ CQuery \/ CRecv
 
 Spec == Init /\ [][Next]_vars
 FairSpec == Spec /\ WF_vars(SrvAnswer) /\ WF_vars(RelayLive) /\ WF_vars(CQuery) /\ WF_vars(CRecv)
@@ -213,15 +250,27 @@ FairSpec == Spec /\ WF_vars(SrvAnswer) /\ WF_vars(RelayLive) /\ WF_vars(CQuery) 
 
 TypeOK ==
     /\ phase \in {"query", "wait", "done"}
-    /\ why \in {"none", "budget", "empty", "end", "floor", "held"}
+    /\ why \in {"none", "budget", "empty", "end", "floor", "held", "fail", "one"}
     /\ Range(buf) \subseteq Mids
     /\ pages \in Nat /\ got \in Nat
 
 Done == phase = "done"
 
-\* NoLoss (DESIGN.md): once catch-up completes, every gap message is held.
+\* NoLoss (DESIGN.md): once a reconnect catch-up completes, other than by
+\* FAIL (D26), every gap message is held.
 Held1 == {Content(buf[i]) : i \in DOMAIN buf}
-NoLoss == Done => Gap \subseteq Held1
+NoLoss == (Mode = "reconnect" /\ Done /\ why # "fail") => Gap \subseteq Held1
+\* The same without the FAIL exception (W_FailLoss: FAIL is reachable and loses).
+NoLossEvenOnFail == (Mode = "reconnect" /\ Done) => Gap \subseteq Held1
+
+\* D26, first JOIN: LATEST * Limit holds the Limit newest messages of the
+\* first page's snapshot.
+JoinRecovers == (Mode = "join" /\ Done /\ why # "fail") =>
+                    LET so == pg1.so IN {so[i] : i \in {j \in DOMAIN so : j > Len(so) - Limit}} \subseteq Held1
+\* D26, "more": BEFORE <oldest held> Limit holds the Limit newest of the older
+\* messages (the store order is unchanged on one connection).
+MoreRecovers == (Mode = "more" /\ Done /\ why # "fail") =>
+                    {g \in Gap : g > NGap - Limit} \subseteq Held1
 
 \* NoDup: no msgid twice in the buffer.
 NoDup == \A i, j \in DOMAIN buf : i # j => buf[i] # buf[j]
@@ -242,6 +291,21 @@ NoDupLive == Cardinality({i \in DOMAIN buf : buf[i] = LiveId}) <= 1
 PageEligible == \A i \in DOMAIN s2c :
                   s2c[i].k = "page" => {Content(x) : x \in Range(s2c[i].ms)} \subseteq s2c[i].el
 
+\* MI-5, D26: a BEFORE whose msgid the snapshot does not hold selects nothing.
+UnknownEmpty == \A i \in DOMAIN s2c :
+                  (s2c[i].k = "page" /\ s2c[i].qq.form = "msgid" /\ s2c[i].qq.sel \notin Range(s2c[i].so))
+                      => s2c[i].ms = << >>
+
+\* D26: the end oracle written from CH-23's next query, not from EndOK.  A
+\* tagged page means BEFORE msgid=<its first wire msgid>, against the same
+\* snapshot, would select nothing; a tagged empty page means the query had
+\* nothing eligible.  (Exactness: with a minted first id the next lookup is
+\* unknown, so this oracle accepts the tag; EndOK, decoding content, does not.)
+EndNext == \A i \in DOMAIN s2c :
+              (s2c[i].k = "page" /\ s2c[i].end) =>
+                  IF s2c[i].ms = << >> THEN s2c[i].el = {}
+                  ELSE Elig([NoQ EXCEPT !.k = "before", !.form = "msgid", !.sel = s2c[i].ms[1]], s2c[i].so) = {}
+
 \* D9: a chathistory-end tag is truthful.
 EndTruthful == \A i \in DOMAIN s2c :
                   (s2c[i].k = "page" /\ s2c[i].end) =>
@@ -259,5 +323,17 @@ CoverEnd       == ~(why = "end")
 CoverBudget    == ~(why = "budget")
 CoverHeldStop  == ~(why = "held")
 CoverLiveBoth  == ~(liveSeen /\ LiveOn /\ LiveId \in pgSeen)
+CoverFail      == ~(why = "fail")
+CoverJoinDone  == ~(Mode = "join" /\ Done /\ why = "one" /\ Len(buf) >= Limit)
+CoverMoreDone  == ~(Mode = "more" /\ Done /\ why = "one" /\ Gap \cap Held1 # {})
+\* HISTORY-REVIEW-4: the minted-anchor chain in one state: a BEFORE with an
+\* unknown msgid, its empty page ending the loop, and a gap message missing
+CoverUnknownLoss == ~(Done /\ why = "empty" /\ unkEmpty /\ ~(Gap \subseteq Held1))
+CoverUnknownSel == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ s2c[i].qq.form = "msgid" /\ s2c[i].qq.sel \notin Range(s2c[i].so))
+\* the reversed-batch regression (review 2): a page that reaches the snapshot's
+\* oldest message but whose batch starts elsewhere, e.g. order <<1,2>>, batch
+\* <<2,1>>; it must go untagged (HS_EndLast tags it)
+CoverEndReversed == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ Len(s2c[i].ms) >= 2
+                        /\ s2c[i].ms[Len(s2c[i].ms)] = s2c[i].so[1] /\ s2c[i].ms[1] # s2c[i].so[1])
 CoverLiveInPage == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ LiveOn /\ LiveId \in {Content(x) : x \in Range(s2c[i].ms)})
 =============================================================================

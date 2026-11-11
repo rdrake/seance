@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Write History.tla's configs, mutants and list-h0.  Run from model/.
+"""Write History.tla's configs, mutants and list-h1 (v1, D26).  Run from model/.
 
 Each witness is the positive config Tiny with the named changes; its comment
 says why it is reachable (DESIGN.md).  Mutants: History.tla with one anchor
 replaced (the anchor must occur exactly once).
 """
-BASE = dict(NHeld=1, NGap=2, LiveOn="TRUE", Times="{1, 3}", Fuzz=0, Limit=1,
+BASE = dict(Mode='"reconnect"', MayFail="FALSE", NHeld=1, NGap=2, LiveOn="TRUE", Times="{1, 3}", Fuzz=0, Limit=1,
             BudgetKind='"pages"', BudgetN=5, ExactCount="TRUE", Contiguous="TRUE",
             TimeOrdered="TRUE", BatchAgrees="TRUE", StableAcrossReconnect="FALSE",
             SendsEnd="TRUE", Dedupe="TRUE", MsgidAnchor="TRUE", StopOnHeld="FALSE",
             InsertMerge="TRUE")
-SAFE = "TypeOK NoLoss NoDup ContentOnce ReplayIdStable Order PageEligible EndTruthful"
+SAFE = ("TypeOK NoLoss NoDup ContentOnce ReplayIdStable Order PageEligible EndTruthful"
+        " EndNext UnknownEmpty JoinRecovers MoreRecovers")
+JOIN = dict(Mode='"join"', NHeld=0, NGap=3, Limit=2)
+MORE = dict(Mode='"more"', NHeld=2, NGap=3, Limit=2, StableAcrossReconnect="TRUE")
 CFGS = {
   # positives
   "HTiny": ({}, SAFE, "Terminates", "pass"),
@@ -49,21 +52,66 @@ CFGS = {
   "CoverLiveInPage": ({}, "CoverLiveInPage", None, "fail"),
   "CoverLiveBoth": ({}, "CoverLiveBoth", None, "fail"),
   "CoverBudget": (dict(BudgetN=1), "CoverBudget", None, "fail"),
+  # ---- v1 (D26) ----
+  # FAIL ends a reconnect catch-up unrecovered; NoLoss excludes it
+  "HFail": (dict(MayFail="TRUE"), SAFE, "Terminates", "pass"),
+  "W_FailLoss": (dict(MayFail="TRUE"), "NoLossEvenOnFail", None, "fail"),
+  "CoverFail": (dict(MayFail="TRUE"), "CoverFail", None, "fail"),
+  # first JOIN: LATEST * Limit on an empty buffer
+  "HJoin": (JOIN, SAFE, "Terminates", "pass"),
+  "HJoinFail": (dict(JOIN, MayFail="TRUE"), SAFE, "Terminates", "pass"),
+  "W_JoinHoles": (dict(JOIN, Contiguous="FALSE"), "JoinRecovers", None, "fail"),
+  "CoverJoinDone": (JOIN, "CoverJoinDone", None, "fail"),
+  # "more": BEFORE <oldest held> Limit
+  "HMore": (MORE, SAFE, "Terminates", "pass"),
+  "W_MoreHoles": (dict(MORE, Contiguous="FALSE"), "MoreRecovers", None, "fail"),
+  # a timestamp selector excludes an older message tied with the oldest held
+  "W_MoreTsTie": (dict(MORE, MsgidAnchor="FALSE"), "MoreRecovers", None, "fail"),
+  "CoverMoreDone": (MORE, "CoverMoreDone", None, "fail"),
+  # HISTORY-REVIEW-4: FAIL in each one-page mode, with its own covers
+  "HMoreFail": (dict(MORE, MayFail="TRUE"), SAFE, "Terminates", "pass"),
+  "CoverFail_HJoinFail": (dict(JOIN, MayFail="TRUE"), "CoverFail", None, "fail"),
+  "CoverFail_HMoreFail": (dict(MORE, MayFail="TRUE"), "CoverFail", None, "fail"),
+  "CoverJoinDone_HJoinFail": (dict(JOIN, MayFail="TRUE"), "CoverJoinDone", None, "fail"),
+  "CoverMoreDone_HMoreFail": (dict(MORE, MayFail="TRUE"), "CoverMoreDone", None, "fail"),
+  # D25's last bullet, named: without Stable, a reconnect tie puts a gap
+  # message before the held one and pages(2) misses it
+  "W_TieReconnect": (dict(Limit=2, NGap=3, BudgetN=2), "NoLoss", None, "fail"),
+  # the reversed-batch regression: a page that reaches the oldest message with
+  # its batch reversed is reachable (HS_EndLast must then tag it falsely)
+  "CoverEndReversed": (dict(BatchAgrees="FALSE", Limit=2, NGap=3), "CoverEndReversed", None, "fail"),
   "CoverHeldStop": (dict(NHeld=2, NGap=2, StopOnHeld="TRUE", StableAcrossReconnect="TRUE"), "CoverHeldStop", None, "fail"),
 }
+MINT = ('Replay(c) == c ', 'Replay(c) == c + N ')
 MUTS = {
   # CH-18: the server mints a new msgid on replay; a deduping client then
   # holds the same content twice
-  "HS_NewId": ('Replay(c) == c ', 'Replay(c) == c + N ', "HTiny", "ContentOnce"),
-  "HS_NewIdR": ('Replay(c) == c ', 'Replay(c) == c + N ', "HTiny", "ReplayIdStable"),
+  "HS_NewId": ([MINT], "HTiny", "ContentOnce"),
+  "HS_NewIdR": ([MINT], "HTiny", "ReplayIdStable"),
+  # D26: a minted replay id becomes the next BEFORE selector, which is unknown
+  # to the server, so the loop stops on an empty page and loses the gap
+  "HS_NewIdAnchor": ([MINT], "HTiny", "NoLoss"),
+  "HS_NewIdUnknown": ([MINT], "HTiny", "CoverUnknownSel"),
+  # HISTORY-REVIEW-4: the chain in one state (unknown BEFORE, empty page, loss)
+  "HS_NewIdChain": ([MINT], "HTiny", "CoverUnknownLoss"),
+  # an unknown msgid answered as if it were LATEST (MI-5 says nothing)
+  "HS_UnknownLatest": ([MINT, ('IF qq.sel \\in Range(o) THEN {o[i] : i \\in 1..(Pos(o, qq.sel) - 1)} ELSE {}',
+                               'IF qq.sel \\in Range(o) THEN {o[i] : i \\in 1..(Pos(o, qq.sel) - 1)} ELSE Range(o)')],
+                       "HTiny", "UnknownEmpty"),
+  # the end regressions, checked by EndNext (not EndOK): the last element of a
+  # reversed batch, and a tagged empty page while messages remain
+  "HS_EndLast": ([('ELSE Pos(o, p[1]) = 1', 'ELSE Pos(o, p[Len(p)]) = 1')], "HNoBatchAgrees", "EndNext"),
+  "HS_EndEmpty": ([('IF p = << >> THEN E = {}', 'IF p = << >> THEN TRUE')], "W_EmptyPage", "EndNext"),
+  # "more" anchored at the newest held message instead of the oldest
+  "HC_MoreNewest": ([('FirstAnchor == NGap + 1 ', 'FirstAnchor == NStored ')], "HMore", "MoreRecovers"),
   # server puts the anchor itself in a BEFORE page (CH:83 excludes it)
-  "HS_Anchor": ('    /\\ LET E == Elig(q, ord)\n', '    /\\ LET E == Elig(q, ord) \\cup (IF q.sel # 0 THEN {q.sel} ELSE {})\n', "HTiny", "PageEligible"),
+  "HS_Anchor": ([('    /\\ LET E == Elig(q, ord)\n', '    /\\ LET E == Elig(q, ord) \\cup (IF q.form = "msgid" THEN {q.sel} ELSE {})\n')], "HTiny", "PageEligible"),
   # server tags chathistory-end whatever remains (D9)
-  "HS_FalseEnd": ('(IF SendsEnd /\\ EndOK(E, p, ord) THEN BOOLEAN ELSE {FALSE})', '(IF SendsEnd THEN BOOLEAN ELSE {FALSE})', "HTiny", "EndTruthful"),
+  "HS_FalseEnd": ([('(IF SendsEnd /\\ EndOK(E, p, ord) THEN BOOLEAN ELSE {FALSE})', '(IF SendsEnd THEN BOOLEAN ELSE {FALSE})')], "HTiny", "EndTruthful"),
   # client ignores the floor and stops after the first page
-  "HC_OnePage": ('ELSE "none"', 'ELSE "floor"', "HTiny", "NoLoss"),
+  "HC_OnePage": ([('ELSE "none"', 'ELSE "floor"')], "HTiny", "NoLoss"),
   # client stops at the floor on a tie (<= instead of <, CH-23)
-  "HC_FloorLe": ('ELSE IF T(ms[1]) < Floor THEN "floor"', 'ELSE IF T(ms[1]) <= Floor THEN "floor"', "HTiny", "NoLoss"),
+  "HC_FloorLe": ([('ELSE IF T(ms[1]) < Floor THEN "floor"', 'ELSE IF T(ms[1]) <= Floor THEN "floor"')], "HTiny", "NoLoss"),
 }
 def cfg(over, inv, prop, spec_fair):
     c = dict(BASE, **over)
@@ -74,18 +122,21 @@ def cfg(over, inv, prop, spec_fair):
     out += ["CHECK_DEADLOCK FALSE", ""]
     return "\n".join(out)
 # HISTORY-REVIEW-2: completion with every gap message held, on every positive
-for pos in ["HTiny2", "HHeldStop", "HMsgs", "HFuzz", "HNoBatchAgrees", "HBatchAgreesBudget"]:
+for pos in ["HTiny2", "HHeldStop", "HMsgs", "HFuzz", "HNoBatchAgrees", "HBatchAgreesBudget", "HFail"]:
     CFGS["CoverDone_" + pos] = (CFGS[pos][0], "CoverDone", None, "fail")
 lst = []
 for n, (over, inv, prop, exp) in CFGS.items():
     open(n + ".cfg", "w").write(cfg(over, inv, prop, prop is not None))
     lst.append(f"History {n} {exp}")
 src = open("History.tla").read()
-for n, (old, new, base, prop) in MUTS.items():
-    assert src.count(old) == 1, (n, src.count(old))
-    open(n + ".tla", "w").write(src.replace(old, new).replace("MODULE History", "MODULE " + n))
+for n, (reps, base, prop) in MUTS.items():
+    m = src
+    for old, new in reps:
+        assert m.count(old) == 1, (n, old, m.count(old))
+        m = m.replace(old, new)
+    open(n + ".tla", "w").write(m.replace("MODULE History", "MODULE " + n))
     over, _, _, _ = CFGS[base]
     open(n + "_" + base + ".cfg", "w").write(cfg(over, prop, None, False))
     lst.append(f"{n} {n}_{base} fail")
-open("list-h0", "w").write("\n".join(lst) + "\n")
+open("list-h1", "w").write("\n".join(lst) + "\n")
 print(len(lst), "checks")
