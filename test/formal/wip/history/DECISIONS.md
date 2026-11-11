@@ -568,3 +568,34 @@ This decision states scope and restrictions only. It builds nothing yet. Review 
 - **The control, on both revisions:** the walk completes and recovers [a, b, l], but `l` is shown twice: once in the gap, once when relayed after the walk. This is the live-after-gather duplicate review 5 predicted, a client finding.
   - #278's repeated-msgid check (handlers/privmsg.ts) should drop the second copy. Not yet run on #278 combined with the fix.
 - **Not a refinement claim.** This is two whole-page schedules, compared by requests and content only.
+
+## D30. The catch-up PRs (#279, #280, #281) against History: fixtures with Python property checks (2026-11-11)
+
+- **Method.** `test/formal/history/catchup_fixtures.py` runs four whole-page schedules through each checkout's own harness. The store is simulated with the checkout's own `insertMessage`. History.tla's properties are applied to the observation:
+  - Requests: the model client's CQuery sequence for the schedule;
+  - NoLoss, NoDup and Order on the store.
+
+  It also checks IdsRise, which comes from the UI, not the model. No TLC: this is option A, which the coordinator accepted.
+- **Fixtures:**
+  - **liveStop** (#279) and its control (D29).
+  - **gapOrder** (#281): a live line is relayed before a single page that reaches h, and the gap must sort above it.
+  - **clockFloor** (#280): a local line at 12:40, typed while down, is the newest row. The walk must still page back to h at 12:10.
+
+| Fixture | develop 4f5a4bd | #279 bafdeb7 | #280 411aee9 | #281 ba6c040 | #278+#279 | all four |
+|---|---|---|---|---|---|---|
+| liveStop | FAIL Requests, NoLoss, Order | Order only | FAIL | Requests, NoLoss | Order only | PASS |
+| liveStopControl | NoDup (l twice) | NoDup | NoDup | NoDup | PASS | PASS |
+| gapOrder | Order | Order | Order | PASS | Order | PASS |
+| clockFloor | Requests, NoLoss | Requests, NoLoss | PASS | Requests, NoLoss | Requests, NoLoss | PASS |
+
+- **Reading.**
+  - Each PR fixes its own fixture and leaves the others' failures as they were.
+  - #278's repeated-msgid check removes the control's duplicate.
+  - The four together pass everything.
+  - The all-four mix has one textual conflict in channel.ts: #279's `heldAtJoin` and #281's `gapIds` are added at the same spot. Keeping both resolves it, and typecheck plus the history, pending, messageUpdates and attach-cursor tests pass (135).
+- **What the model does not express.**
+  - The local clock: History has only server times, so clockFloor checks the walk's requests and losses, not the clock.
+  - Display order: Order is the model's property for the client buffer; here it is applied to the store as simulated with the PR's helper.
+  - IdsRise is a UI invariant.
+  - Whole pages only (D22).
+- **Cost:** about 45 minutes, no gpu05 jobs. Results are in `test/formal/history/results/catchup-*.jsonl`.
