@@ -304,3 +304,152 @@ Model v0 checks it (`model/Delivery.tla`):
   echo exists;
 - `W_Other`: fails;
 - `W_LateFallback`: fails.
+
+## D16. Concurrent and nested batches (Delivery v2)
+
+> "Start and end messages of one batch MAY refer to another batch. ... This means that one batch
+> is nested to another. Client MAY delay processing messages of inner batches to the end of
+> outermost batch." (BA:59-63); interleaving example (BA:100-115).
+
+**Allowed.** A server may interleave the lines of different responses (BA:100-115) and may nest
+a batch inside a labeled one (BA:59-63, LR:55-58). **Model v2:** each response is queued and
+emitted line by line, under weak fairness, so responses interleave freely. Every line carries its
+own batch id (start and end only) and its parent membership (`ref`). BA:51-52 forbids a start or
+end from belonging to the batch it opens or closes. The client keeps a map from reference to open
+batch. A member takes the label of the outermost labeled batch it is inside, which is the only
+labeled one at depth 2. Under `Deferred`, every line in a batch, nested ones included, is
+processed in wire order when the **outermost** batch ends (BA:63).
+
+Depth is at most 2 (a restriction): a labeled-response batch holding one inner batch. Interleaving
+keeps BA's framing: each response's lines stay in order, a member is sent only while its batch is
+open, and both delimiters of a nested batch name the same parent. `multiline` and `history` are
+abstract names, standing for `draft/multiline` and `chathistory`. The inner batch is a multiline
+echo (it settles) or a history replay (D19, it does not). A history batch may also carry a
+CHATHISTORY request's label directly (LR:55-58: an existing type applicable to the whole
+response). Multiline assembly itself is not modelled: the echo is one line.
+
+## D17. Competing settling lines in one response
+
+A single-target PRIVMSG has one outcome. A response that holds both an echo and a FAIL or 4xx for
+the same single-target line answers it twice. Multi-target lines are outside the model (one
+target per request). No text read here forbids echo plus error for one target. LR allows several lines in one
+logical response, and EM:50-52 allows a fake echo for a blocked message. **Adversarial** is
+therefore a conservative modelling choice, not a proved MUST violation. The ordinary environment
+gives one settling result; switch `Competing` adds batches echo-then-fail and fail-then-echo.
+First-wins is D15's client policy: the first settling line in processing order (wire order;
+under `Deferred`, the buffered order, which is the same). The ghost `firstK` records the kind of
+the first settling line of the response itself. A response holds no history line, and a close
+discards the rest. `FirstWins` checks the outcome's cause against it whenever the copy was
+settled by its own response.
+
+## D18. Connection close
+
+The client may lose the connection at any time (environment, **allowed**; no fairness). On close:
+- every pending copy becomes **failed**, with cause `close`, which does not prove "not sent";
+- queued, in-flight and buffered lines are discarded, with nothing processed;
+- nothing more happens. Close is terminal here; reconnecting belongs to the reconnect-policy
+  model.
+
+Failing the remaining copies matches Seance's `resetPending`. Discarding lines already
+received but buffered, and making close terminal, are model choices. A batch still open at close
+is a legal trace: a cut connection cannot deliver its end, so BA:54's closure obligation holds
+only on a connection that survives. That is how D13's missing-end mutant differs from close.
+`OutcomeMatchesCause` allows `failed` with cause `fail`, `err` or `close`. Timeouts, close and replies
+race freely. Outcomes absorb (D13), so a reply after a timeout settles nothing, and lines after
+a close never arrive.
+
+## D19. Recognised history lines never settle a pending copy
+
+A chathistory reply replays stored lines. It may include lines we sent, even on this connection
+(CH:65, CH:125-128), but a replay is not a new delivery acknowledgment. **Seance's policy** (a
+client restriction): `handlers/privmsg.ts` calls `settleEcho` only when `!client.replaying`
+(review 6 checked the call site, not the code that sets the flag). Replay that the client does
+not recognise is outside this guard. Automatic history batching is only a SHOULD
+(batches/chathistory.md:22-27), so an unbatched replay of our own line is an ordinary unlabeled
+same-text line. It confuses the fallback exactly as the other-session line does (W_Other), and
+the model does not repeat it. **Model v2:** under switch `History`, the server may send a
+`history` batch, standalone or nested inside a labeled response, holding an unlabeled same-text
+copy of a sent line. No history line settles anything. The batch is standalone and unlabeled, nested in a labeled
+response, or labeled itself. Property `HistoryNeverSettles` (recognised history) checks this, and
+the mutant `DM_HistorySettles`, which lets those lines reach the fallback, must break it.
+Under `Deferred` the inner lines are buffered like any other.
+
+## D20. Self-message order, NOTICE, modified echoes, bounds
+
+- **Self-copy order.** LR:60 requires the label on the echo only. Nothing orders the echo against
+  the delivered copy, so once responses interleave (D16) the delivered copy may arrive first.
+  **Allowed.** With the fallback on, an early delivered copy settles the oldest same-text copy,
+  which may be the copy it answers.
+- **NOTICE.** Requests are PRIVMSG or NOTICE (switch `Notice`; EM:21-29 covers both). The fallback
+  matches the kind as well as the text and target, as Seance does. Property `SameKind`: a copy
+  is settled by an echo only of its own kind. ACK, error and close settlements have no kind.
+  Label matching checks only the label, so this holds for the fallback, not as a general
+  safeguard. A NOTICE gets no error reply in the model. TAGMSG is out of scope.
+- **Modified echoes.** EM:22-24 lets the server alter the echoed text, and the client must cope.
+  **Allowed**, switch `Modify`: an echo's text may be any text, including another pending
+  copy's, or a value matching no copy. A labeled modified echo still confirms its own copy. An
+  unlabeled one matches by its altered text, so it can settle another copy or nothing (D15).
+- **Bounds (DESIGN.md).** 3 requests, depth 2, the self-message, and at most 1 late reply over
+  the whole run. That last is stricter than DESIGN's "one in flight". They are raised last, in a
+  run of their own.
+- **Where Seance's code is wider than the model.** A present label that names no copy settles
+  nothing (since #277). Without `labeled-response` the oldest copy of the kind settles even on
+  different text. That is outside the model's restriction that the cap is negotiated.
+
+## D21. Consumption obligations
+
+The client restriction behind D15, stated as an action property over the wire line, not over
+`Handle`:
+- **Immediate.** The client reads an echo, ACK, FAIL or 4xx outside any batch, or inside one
+  when `Deferred` is off, and not in history. If its own or inherited label names a pending copy,
+  that copy gets the line's outcome in that step: echo → confirmed, ACK → accepted, FAIL or 4xx →
+  failed.
+- **Deferred.** When the outermost batch ends, every pending copy with an eligible buffered line
+  gets the outcome of the first such line, in buffered order, across the whole nested tree,
+  excluding history.
+
+FAIL and 4xx stay distinct kinds (`fail`, `err`), so dropping either dispatch is caught
+(`DM_IgnoreErr`). ACK is reachable only under `Lossy`, standalone (`DM_IgnoreAck` on a Lossy
+config). Batched ACK is not generated.
+
+These catch a client that ignores a reachable response even when the timeout would later resolve
+the copy, which liveness cannot see.
+
+## D22. History.tla v0: scope and abstractions
+
+This decision states restrictions only. It settles no reading of the text.
+- **Scope.** v0 covers only the catch-up after one reconnect (CH-23's loop and Seance's `catchup.ts`). The first JOIN's LATEST, `more`, FAIL and unknown selectors come later. Their rules stay in RULES.md and D5.
+- **A page is one wire item.** The client processes a whole batch at once. A live line is a separate item, so it can arrive before or after the page, but never between two of its lines (BA-9 allows that). This is a restriction. With the client's per-message merge and dedupe, a live line inside the batch acts like one just before or just after it, with one exception: a client that defers batch processing (Delivery's D2) handles the live line first. Both of those positions are modelled.
+- **The live message joins the order as the newest.** The connection order is chosen at reconnect (Init, D7), and the live message is appended to it when it is stored. Under `TimeOrdered` that is forced, because store times are non-decreasing (D8). With `TimeOrdered` off this is a restriction: a later message could take any position.
+- **chathistory-end is only sent when the page holds every eligible message.** With `Contiguous` on, that is exactly D9's "the next page in the same direction is empty". With it off, it is a restriction: a holey page that left only newer messages out could truthfully carry the tag.
+- **Init fixes every per-run choice:** times, held and gap messages, and the connection order. The switches are constants. So `split-env.py`'s method (formal-spec D26) applies unchanged.
+- **Termination** is the only liveness property (`FairSpec`). NoLoss, NoDup and Order are invariants checked at completion. Each has a cover and a witness.
+
+## D23. Delivery v2.2 (after MODEL-REVIEW-3)
+
+- **History lines are queued** (`hout`) and emitted one at a time (`SEmitHist`), like a response. An own echo, another session's line or another batch can now fall between a history batch's start and end (BA:93-98). `DM_GlobalHist` is a client that treats every line as history while any history batch is open, and it must break ImmediateObligation. `V2CoverEchoInHist` shows that an own echo can come next while a history batch is open.
+- **The label ledger counts emitted lines.** `labeledN` grows in SEmit, not SAnswer. So a LabelOnce violation means two labeled lines were actually on the wire.
+- **ImmediateObligation reads the wire's provenance.** It uses the line's own `role` and `who` ghosts, not the client's `EffLab` and `HistOf`. A client that misassociates a line can no longer weaken the oracle. DeferredObligation still reads the client's buffer; see the README's "Still open".
+- **Modify reaches late echoes.** A late unlabeled echo may carry an altered text (EM-2), which matches no copy (`V2CoverModLate`).
+- **Restriction, kept from v2:** a self-message's delivered copy comes before or after the whole response, never between a batch's start and end. LR-5 doesn't restrict where it goes, so this is a restriction.
+- **Bound:** V2History now runs with MaxReq = 1. Line-by-line history multiplies the interleavings, and at MaxReq = 2 v2.1 already reached 102M states.
+- The mutant DM_LastOpened is renamed DM_HighestRef. It picks the open batch with the highest reference, which is not the one opened last (MODEL-REVIEW-3 §3).
+
+## D24. History.tla v0.1 (after HISTORY-REVIEW-1)
+
+- **Msgid and content are separate.** A message's content is its index. The msgid it carries on the wire is `Replay(c)`, which is `c` itself (CH-18). The mutant `HS_NewId` mints `c + N` instead, and `ContentOnce` catches it: a deduping client then holds the same content twice. `ReplayIdStable` states CH-18 directly.
+- **Every page records its snapshot:** the eligible set and the order at answer time. PageEligible and EndTruthful read that snapshot, not the current order, and mutants change only the server's choice, never the oracle.
+- **chathistory-end** may be sent when no eligible message left out of the page is older than every message in it. That is D9's "the next page in the same direction is empty". It replaces v0's "the page holds every eligible message" and drops v0's unconditional exemption for the live message.
+- **Batch order (a finding).** With msgid anchors and contiguous, exact pages, a batch in another order costs pages but skips no older message. So `BatchAgrees` matters to NoLoss only through the budget. The paired checks are `HNoBatchAgrees` (passes with `pages(5)`) and `W_BatchBudget` (fails with `pages(2)`).
+- **Witness stories.** W_NoDedupe now checks `NoDupLive`: the live message is relayed, replayed and held twice. W_Append fails because older history is appended after newer messages. DESIGN's story of a live message stored at time 1 after a time-3 page can't happen, since store times are non-decreasing (D8).
+- **Bounds.** Most configs use `pages(5)`, Seance's cap, and DESIGN's bounds now say so. `HFuzz` runs with Fuzz = 1.
+- **Liveness.** `StoreLive` has no fairness, so a run may never store the live message. Terminates means the catch-up ends, not that it recovers every gap message: that is NoLoss's job.
+
+## D25. History.tla v0.2 (after HISTORY-REVIEW-2)
+
+- **chathistory-end, on the wire.** CH:136 says the next request in the same direction "will return an empty batch". v0.2 takes the next request to be CH-23's BEFORE on the batch's first message, run against the page's snapshot. So the tag is truthful when that first message is the oldest in the order, or, for an empty page, when the query had nothing eligible. This replaces v0.1's NoneOlder, which ignored batch order (HISTORY-REVIEW-2's counterexample: order and page `<<1,2>>`, batch `<<2,1>>`).
+- **Opaque selector lookup (MI-5).** The server looks up a selector's msgid as given. An unknown msgid, such as a minted replay id, selects nothing: D5's empty-batch reply. v0.1 resolved a minted id back to its content, which an opaque server cannot do.
+- **Content against msgid.** CoverDone and CoverLiveInPage compare contents, as NoLoss does. Dedupe, the held-overlap stop and NoDupLive compare msgids, as a client must.
+- **Coverage.** CoverDone runs on every positive config. The same-budget positive `HBatchAgreesBudget` pairs with `W_BatchBudget`. `HS_NewIdR` checks ReplayIdStable directly, which is an id-range check only.
+- **Retired.** DESIGN's per-model sent/got ghost history: History's witness traces are TLC's counterexamples instead. The schedule with a live line inside a batch's lines is out of scope by D22.
+- **A second budget finding (v0.2 run).** Even when batches arrive in order, `pages(2)` can lose a gap message. A reconnect without StableAcrossReconnect may order a gap message before the held one when their times tie. So the catch-up walks past the held message and runs out of pages. That is why both halves of the pair pin `StableAcrossReconnect`. Result: all 37 checks as expected (history-v0.2, jobs 10474 and 10477).

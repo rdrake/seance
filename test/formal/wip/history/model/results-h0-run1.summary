@@ -1,0 +1,26 @@
+OK History HTiny expect=pass got=pass distinct=2920 
+OK History HTiny2 expect=pass got=pass distinct=9598 
+OK History HHeldStop expect=pass got=pass distinct=484 
+OK History HMsgs expect=pass got=pass distinct=2678 
+OK History W_EmptyPage expect=fail got=fail distinct=352 Invariant NoLoss is violated
+OK History W_TimeOrdered expect=fail got=fail distinct=772 Invariant NoLoss is violated
+OK History W_D7Reorder expect=fail got=fail distinct=687 Invariant NoLoss is violated
+OK History W_TsTie expect=fail got=fail distinct=737 Invariant NoLoss is violated
+OK History W_Budget expect=fail got=fail distinct=457 Invariant NoLoss is violated
+OK History W_Holes expect=fail got=fail distinct=1971 Invariant NoLoss is violated
+UNEXPECTED History W_BatchOrder expect=fail got=pass distinct=52618 
+OK History W_NoDedupe expect=fail got=fail distinct=469 Invariant NoDup is violated
+OK History W_Append expect=fail got=fail distinct=2086 Invariant Order is violated
+OK History CoverDone expect=fail got=fail distinct=1260 Invariant CoverDone is violated
+OK History CoverMultiPage expect=fail got=fail distinct=1271 Invariant CoverMultiPage is violated
+UNEXPECTED History CoverFloor expect=fail got=pass distinct=2920 
+OK History CoverEmpty expect=fail got=fail distinct=1955 Invariant CoverEmpty is violated
+OK History CoverEnd expect=fail got=fail distinct=1209 Invariant CoverEnd is violated
+OK History CoverLiveInPage expect=fail got=fail distinct=185 Invariant CoverLiveInPage is violated
+OK History CoverBudget expect=fail got=fail distinct=353 Invariant CoverBudget is violated
+OK History CoverHeldStop expect=fail got=fail distinct=388 Invariant CoverHeldStop is violated
+UNEXPECTED HS_Anchor HS_Anchor_HTiny expect=fail got=pass distinct=2662 
+OK HS_FalseEnd HS_FalseEnd_HTiny expect=fail got=fail distinct=138 Invariant EndTruthful is violated
+OK HC_OnePage HC_OnePage_HTiny expect=fail got=fail distinct=234 Invariant NoLoss is violated
+OK HC_FloorLe HC_FloorLe_HTiny expect=fail got=fail distinct=253 Invariant NoLoss is violated
+2026-11-11T05:03:52-05:00 bundle list-h0 done

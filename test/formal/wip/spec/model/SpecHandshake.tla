@@ -119,7 +119,7 @@ Init ==
              reHold |-> FALSE, failSeen |-> FALSE, failThenEnd |-> FALSE,
              splitCross |-> FALSE, delInSplit |-> FALSE,
              interleave |-> FALSE, twoSplits |-> FALSE, lsEnv |-> FALSE,
-             welcome903 |-> FALSE]
+             welcome903 |-> FALSE, abortChal |-> FALSE]
     /\ gc = [between |-> FALSE, n900 |-> 0, n903 |-> 0]
 
 -----------------------------------------------------------------------------
@@ -443,9 +443,14 @@ CHandle(m) ==
                                  THEN "idle" ELSE @,
                         !.unable = Unable("sasl" \in m.caps /\ "sasl" \notin cli.enabled)]
       [] m.t = "AUTH+" ->
+           \* S1-4 (D27): the client may answer the challenge with its data
+           \* or abort the exchange with "*" (e.g. it will not send PLAIN
+           \* over an unencrypted connection).
            IF cli.sasl = "mech"
-           THEN /\ c2s' = Append(c2s, M("AUTHDATA"))
-                /\ cli' = [cli EXCEPT !.sasl = "data"]
+           THEN \/ /\ c2s' = Append(c2s, M("AUTHDATA"))
+                   /\ cli' = [cli EXCEPT !.sasl = "data"]
+                \/ /\ c2s' = Append(c2s, M("AUTHSTAR"))
+                   /\ cli' = [cli EXCEPT !.sasl = "abort"]
            ELSE c2s' = c2s /\ cli' = cli
       [] m.t = "900" -> c2s' = c2s /\ cli' = [cli EXCEPT !.account = TRUE]
       [] m.t = "903" -> c2s' = c2s
@@ -465,7 +470,8 @@ CRecv ==
          /\ CHandle(m)
          /\ gh' = [gh EXCEPT
                      !.lateReply = @ \/ (m.t \in {"903", "904", "906", "907"} /\ ~InExchange),
-                     !.failSeen = @ \/ (m.t = "904" /\ InExchange)]
+                     !.failSeen = @ \/ (m.t = "904" /\ InExchange),
+                     !.abortChal = @ \/ (m.t = "AUTH+" /\ cli.sasl = "mech" /\ cli'.sasl = "abort")]
     /\ UNCHANGED <<env, sout, srv>>
 
 CLive == ~cli.quit /\ ~cli.closed
@@ -645,6 +651,10 @@ RuleNoSaslAckIfDown ==
 Rule907 ==
     [][((Consumed("AUTHMECH") \/ Consumed("AUTHDATA") \/ Consumed("AUTHSTAR"))
         /\ srv.authed /\ ~Reauth) => Has(NewOut, "907")]_vars
+\* S1-10: an abort ("*") of an exchange in progress gets 906 (SPEC-REVIEW-9 #3).
+Rule906 ==
+    [][(Consumed("AUTHSTAR") /\ srv.sasl \in Active /\ ~Late907)
+       => Has(NewOut, "906")]_vars
 \* S2-6: with reauth, an opener after login is never silently dropped.
 RuleAuthedOpenerAnswered ==
     [][(Consumed("AUTHMECH") /\ srv.authed) => NewOut # <<>>]_vars
@@ -713,5 +723,6 @@ W_LsAllFirst     == ~(srv.lsOn /\ srv.lsRest = {})   \* D22: the last LS line ho
 W_FailBeforeChal == ~(env.svcOk /\ "sasl" \in srv.enabled /\ cli.sasl = "mech"
                       /\ s2c # <<>> /\ Head(s2c).t \in {"904", "906"})  \* D23
 W_StrayOpen      == ~(srv.sasl = "open" /\ cli.sasl = "data")  \* D24: a late response opens an exchange
+W_AbortChal      == ~gh.abortChal       \* D27: "*" in answer to the challenge
 W_EarlyEnd       == ~(cli.endSent /\ ~cli.lsDone)              \* D25: END before LS is complete
 =============================================================================

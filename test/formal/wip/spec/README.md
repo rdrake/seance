@@ -17,7 +17,7 @@
 > | Older work dirs (`refine/`, `w-W_LoggedIn/`) | scratchpad | 600 MB |
 > | Superseded TLC state, approved for deletion but blocked by the permission check (`v3-Small/`, `v3-Reauth/`, `v7/st-ProbeLost903/`, state dirs in `v5/`, `v6/`, `mut/`) | scratchpad | about 18 GB |
 >
-> The scratchpad is `<scratchpad>`.
+> The scratchpad is `/private/tmp/claude-501/-Users-rdrake-workspace-afternet/666f6d50-96db-4eed-be70-73e9aaf86c06/scratchpad`.
 > It is session temporary space and may be cleared without warning, so anything worth keeping
 > there moves first.
 >
@@ -93,8 +93,9 @@ Status at 2026-11-10 15:36 (Eastern):
 - **Small (10066): no error,** 175.31M distinct states, queue empty, 1 h 54 min.
 - **RefLiveness (10065):** running, 240.7M distinct at level 35, 54.7M on the queue, no
   violation yet.
-- **TwoAttempts (10067):** running, 34.5M distinct.
-- Reauth, CapNotify, Split and SplitInOrder (10068-10071) wait behind it.
+- **TwoAttempts (10067): no error,** 182.42M distinct states, queue empty, 1 h 37 min.
+- **Reauth (10068):** running since 17:47. CapNotify, Split and SplitInOrder (10069-10071) wait behind it.
+- RefLiveness at 21:41:56: 310.85M distinct, level 36, 66.36M on the queue (still growing), 8 h 14 m, no violation. Cancelled at 21:43 (Richard's command): the bound was not exhausted.
 
 Each job writes `tlc-<Config>.log` and `tlc-spec-<job>.out` in
 `/project/def-rdrake/rdrake/formal/spec-handshake/v7/` on gpu05. Collect a verdict with

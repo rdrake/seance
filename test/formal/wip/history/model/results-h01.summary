@@ -1,0 +1,30 @@
+OK History HTiny expect=pass got=pass distinct=3140 
+OK History HTiny2 expect=pass got=pass distinct=10278 
+OK History HHeldStop expect=pass got=pass distinct=508 
+OK History HMsgs expect=pass got=pass distinct=2898 
+OK History W_EmptyPage expect=fail got=fail distinct=315 Invariant NoLoss is violated
+OK History W_TimeOrdered expect=fail got=fail distinct=654 Invariant NoLoss is violated
+OK History W_D7Reorder expect=fail got=fail distinct=610 Invariant NoLoss is violated
+OK History W_TsTie expect=fail got=fail distinct=660 Invariant NoLoss is violated
+OK History W_Budget expect=fail got=fail distinct=452 Invariant NoLoss is violated
+OK History W_Holes expect=fail got=fail distinct=379 Invariant NoLoss is violated
+OK History HNoBatchAgrees expect=pass got=pass distinct=59008 
+OK History W_BatchBudget expect=fail got=fail distinct=6800 Invariant NoLoss is violated
+OK History W_NoDedupe expect=fail got=fail distinct=558 Invariant NoDupLive is violated
+OK History W_Append expect=fail got=fail distinct=1990 Invariant Order is violated
+OK History HFuzz expect=pass got=pass distinct=13858 
+OK History CoverDone expect=fail got=fail distinct=1208 Invariant CoverDone is violated
+OK History CoverMultiPage expect=fail got=fail distinct=1220 Invariant CoverMultiPage is violated
+OK History CoverFloor expect=fail got=fail distinct=8514 Invariant CoverFloor is violated
+OK History CoverEmpty expect=fail got=fail distinct=2069 Invariant CoverEmpty is violated
+OK History CoverEnd expect=fail got=fail distinct=1222 Invariant CoverEnd is violated
+OK History CoverLiveInPage expect=fail got=fail distinct=160 Invariant CoverLiveInPage is violated
+OK History CoverLiveBoth expect=fail got=fail distinct=533 Invariant CoverLiveBoth is violated
+OK History CoverBudget expect=fail got=fail distinct=328 Invariant CoverBudget is violated
+OK History CoverHeldStop expect=fail got=fail distinct=396 Invariant CoverHeldStop is violated
+OK HS_NewId HS_NewId_HTiny expect=fail got=fail distinct=263 Invariant ContentOnce is violated
+OK HS_Anchor HS_Anchor_HTiny expect=fail got=fail distinct=461 Invariant PageEligible is violated
+OK HS_FalseEnd HS_FalseEnd_HTiny expect=fail got=fail distinct=108 Invariant EndTruthful is violated
+OK HC_OnePage HC_OnePage_HTiny expect=fail got=fail distinct=192 Invariant NoLoss is violated
+OK HC_FloorLe HC_FloorLe_HTiny expect=fail got=fail distinct=194 Invariant NoLoss is violated
+2026-11-11T07:27:27-05:00 bundle list-h0 done

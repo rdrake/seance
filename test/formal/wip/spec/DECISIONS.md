@@ -160,3 +160,35 @@ S1:79 (and S1:199-213) says success is 900 and 903; it orders neither against th
 > "Upon receiving either a `CAP LS` or `CAP REQ` command during connection registration, the server MUST not complete registration until the client sends a `CAP END` command" (CN:69-71). Nothing requires the client to wait for the LS reply before sending END.
 
 **Found by running irctest through the harness:** its registration helper sends `CAP LS 302`, `NICK`, `USER` and `CAP END` together. v6's client sent END only after reading the whole LS (`cli.lsDone`), so those connections were outside the model. **Model (v7):** a client that does not want SASL may send END at any time after its `CAP LS 302`; one that wants SASL still reads LS first (it needs to know whether sasl is there, S2-3). `W_EarlyEnd` reaches it. Still outside the model client: `CAP REQ` without `CAP LS` ("to blindly request", CN:65), version-less `CAP LS`, removal (`-cap`) and multi-step mechanisms.
+
+## D26. Liveness runs split by environment
+
+This is a checking method, not a reading of the spec. RefLiveness ran to 310.85M distinct states without finishing (job stopped 2026-11-10). **Method:** `hpc/split-env.py --liveness` writes one module per environment, which TLC then checks one at a time: creds × (wantSasl, required) × svcOk, the 12 values Init allows. Each module's spec is `SliceInit /\ [][Next]_vars /\ SrvFair /\ CliFair`, where SliceInit is Init with env pinned. These modules have no VIEW and no symmetry, and every invariant and property of the base config is kept.
+
+**Why it is sound:** env is chosen in Init and never changes. So each behaviour of Spec is a behaviour of exactly one slice, and the slices together have exactly the behaviours of Spec. A temporal property is checked per behaviour. So Spec satisfies it if and only if every slice does. The safety VIEW (SafetyView) is not used here, because a VIEW can merge states that liveness must tell apart.
+
+**Checks** (gpu05, `spec-handshake/v7-split/`):
+- Tiny is checked unsplit and as 12 slices. Both must pass, and the slices' initial states must add up to Tiny's.
+- Four negative controls on Tiny's slices each drop one WF conjunct: SrvAnswer, Srv903, Srv001 and CQuitOblig. Each must make its property fail (AnswersEventually, OwedSent, Terminates and RequiredQuits) in at least one slice.
+- Results: see README.
+
+**Results (2026-11-10, jobs 10089–10093):**
+- Tiny unsplit: 20,243,764 distinct states and 48 initial states, no error.
+- Tiny's 12 slices: all pass. Their initial states sum to 12 × 4 = 48, and their distinct states sum to exactly 20,243,764.
+- Controls: each one fails its property in at least one slice.
+  - Without SrvAnswer, AnswersEventually fails in 12 of 12 slices.
+  - Without Srv903, OwedSent fails in 2 (creds, wantSasl, svcOk).
+  - Without Srv001, Terminates (with OwedSent) fails in 4.
+  - Without CQuitOblig, RequiredQuits (with Terminates) fails in 4: required, with no creds or no service.
+
+## D27. A client may answer the challenge with `AUTHENTICATE *` (v7.1)
+
+S1-4 lets a client abort an exchange at any time. Up to v7, though, the model's client answered `AUTHENTICATE +` only with its data: CAbort could fire before the challenge was read, or after the data, but not in answer to the challenge. Real clients abort exactly there. For example, HexDroid will not send PLAIN over plaintext and replies `AUTHENTICATE *` (HEXDROID.md, finding 3, where this was flagged as a model gap rather than a client bug).
+
+**Model:** when a client in `mech` reads the challenge, it either sends its data (`data`) or sends `*` (`abort`). The ghost `gh.abortChal` and witness `W_AbortChal` show the new branch is reachable.
+
+The previous model is kept as `.SpecHandshake-v7.tla.ref`. v7.1 reruns lists a–c (probes, Tiny, mutants and witnesses, with the mutants regenerated) and every recorded trace, in `spec-handshake/v7.1/` and `traces-v7.1/`. The large configs are still running on v7. Their v7.1 reruns follow, as split slices.
+
+**D26 addendum: the finer split (`--offered`, 48 slices).** These slices also pin the initial `srv.offered`, which NEW and DEL change later. Their soundness rests on a different argument from env's "never changes": each behaviour has exactly one initial state, and the 48 slices partition Init. So each behaviour belongs to exactly one slice. The sub-slices of one env overlap in what they reach, so their distinct-state counts sum to more than the parent's (Tiny: about 10–20% more). The checks that do apply are these: the initial states sum to 48, every slice passes, and each drop-fair control fails in some slice. The largest sub-slice is about 56% of its parent. For example, Tiny's env 4 has 3.49M distinct states, against 1.96M for its largest sub-slice.
+
+**Run note.** On the large slices the rate falls from about 7M to about 1M states generated a minute at around 300M distinct states. The liveness passes there take up to an hour each. Later large runs (v7.1) use `-lncheck final` through `TLC_EXTRA`, which defers the liveness check to the end without weakening it, and more memory per job.

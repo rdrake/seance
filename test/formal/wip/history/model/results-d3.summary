@@ -1,0 +1,60 @@
+OK Delivery Base expect=pass got=pass distinct=1285641 
+OK Delivery BaseFallback expect=pass got=pass distinct=1285641 
+OK Delivery BaseDeferred expect=pass got=pass distinct=1420865 
+OK Delivery NoTimeout expect=pass got=pass distinct=321549 
+OK Delivery LossyTimeout expect=pass got=pass distinct=1486609 
+OK Delivery BaseSelf expect=pass got=pass distinct=20049321 
+OK Delivery BaseDeferredNoTimeout expect=pass got=pass distinct=5517277 
+OK Delivery W_LossyNoTimeout expect=fail got=fail distinct=70201 Temporal property PendingResolves was violated
+OK Delivery W_Other expect=fail got=fail distinct=553 Invariant ConfirmedByOwn is violated
+OK Delivery W_LateFallback expect=fail got=fail distinct=6985 Invariant ConfirmedByOwn is violated
+OK Delivery W_SelfCopy expect=fail got=fail distinct=14019 Invariant ConfirmedByOwn is violated
+OK Delivery W_LateTimedOut expect=fail got=fail distinct=23873 Invariant NoCrossFromTimedOut is violated
+OK Delivery CoverBatchOpen expect=fail got=fail distinct=10920 Invariant CoverBatchOpen is violated
+OK Delivery CoverLateQueued expect=fail got=fail distinct=230 Invariant CoverLateQueued is violated
+OK Delivery CoverTimedOut expect=fail got=fail distinct=244 Invariant CoverTimedOut is violated
+OK Delivery CoverOtherSaid expect=fail got=fail distinct=26 Invariant CoverOtherSaid is violated
+OK Delivery CoverEchoInOpenBatch expect=fail got=fail distinct=19967 Invariant CoverEchoInOpenBatch is violated
+OK Delivery CoverCrossTimed expect=fail got=fail distinct=20500 Invariant CoverCrossTimed is violated
+OK Delivery CoverSelfSent expect=fail got=fail distinct=2 Invariant CoverSelfSent is violated
+OK DM_IgnoreEcho NoTimeout expect=fail got=fail distinct=74411 Temporal property ResolvedByResponse was violated
+OK DM_IgnoreEcho BaseDeferredNoTimeout expect=fail got=fail distinct=73977 Temporal property ResolvedByResponse was violated
+OK DM_WrongLabel Base expect=fail got=fail distinct=300 Invariant ConfirmedByOwn is violated
+OK DM_Early BaseDeferred expect=fail got=fail distinct=17940 Invariant DeferredWaits is violated
+OK DM_Flip LossyTimeout expect=fail got=fail distinct=6524 Action property Absorbing is violated
+OK DS_Twice Base expect=fail got=fail distinct=242 Invariant LabelOnce is violated
+OK DS_InnerLabel BaseDeferred expect=fail got=fail distinct=90 Invariant LabelOnce is violated
+OK DM_FirstOnly BaseDeferredNoTimeout expect=fail got=fail distinct=1790702 Temporal property ResolvedByResponse was violated
+OK Delivery V2Obl expect=pass got=pass distinct=1285641 
+OK Delivery V2DeferredObl expect=pass got=pass distinct=1420865 
+OK Delivery V2DeferredNoTimeout expect=pass got=pass distinct=355369 
+OK Delivery V2LossyObl expect=pass got=pass distinct=1486609 
+OK Delivery V2CompImm expect=pass got=pass distinct=2591097 
+OK Delivery V2CompDef expect=pass got=pass distinct=2782641 
+OK Delivery V2Close expect=pass got=pass distinct=1286654 
+OK Delivery V2CloseDeferred expect=pass got=pass distinct=1641378 
+OK Delivery V2History expect=pass got=pass distinct=102034752 
+OK Delivery V2HistoryDeferred expect=pass got=pass distinct=25128 
+OK Delivery V2NoticeSelf expect=pass got=pass distinct=69461649 
+OK Delivery V2Modify expect=pass got=pass distinct=6655769 
+OK Delivery V2SelfFallback expect=pass got=pass distinct=20751893 
+OK Delivery W_SelfCopyAfterEcho expect=fail got=fail distinct=100102 Invariant NoCrossFromConfirmedDeliv is violated
+OK Delivery V2CoverTwoOpen expect=fail got=fail distinct=41292 Invariant CoverTwoOpen is violated
+OK Delivery V2CoverNested expect=fail got=fail distinct=23752 Invariant CoverNested is violated
+OK Delivery V2CoverTimeoutInOpenBatch expect=fail got=fail distinct=8683 Invariant CoverTimeoutInOpenBatch is violated
+OK Delivery V2CoverClosedPending expect=fail got=fail distinct=227 Invariant CoverClosedPending is violated
+OK Delivery V2CoverHistorySeen expect=fail got=fail distinct=764 Invariant CoverHistorySeen is violated
+OK Delivery V2CoverCompeting expect=fail got=fail distinct=32747 Invariant CoverCompeting is violated
+OK Delivery V2CoverModified expect=fail got=fail distinct=3923 Invariant CoverModified is violated
+OK Delivery V2CoverDelivFirst expect=fail got=fail distinct=12176 Invariant CoverDelivFirst is violated
+OK Delivery V2CoverNotice expect=fail got=fail distinct=245 Invariant CoverNotice is violated
+OK DM_LastOpened V2Obl expect=fail got=fail distinct=134268 Invariant ConfirmedByOwn is violated
+OK DM_Reverse V2CompDef expect=fail got=fail distinct=450758 Invariant FirstWins is violated
+OK DM_IgnoreAck V2LossyObl expect=fail got=fail distinct=3720 Action property ImmediateObligation is violated
+OK DM_IgnoreErr V2Obl expect=fail got=fail distinct=438 Action property ImmediateObligation is violated
+OK DM_HistorySettles V2History expect=fail got=fail distinct=5334 Invariant ConfirmedByOwn is violated
+OK DM_KindBlind V2NoticeSelf expect=fail got=fail distinct=35832 Invariant SameKind is violated
+OK DS_AfterSettle V2Obl expect=fail got=fail distinct=1074 Invariant LabelOnce is violated
+OK DM_FirstOnly V2DeferredObl expect=fail got=fail distinct=245976 Action property DeferredObligation is violated
+OK DM_IgnoreEcho V2DeferredObl expect=fail got=fail distinct=1439 Action property ImmediateObligation is violated
+2026-11-10T23:57:14-05:00 bundle list-d3 done

@@ -44,7 +44,7 @@ named in its header comment.
   (`Fuzz` is 0 or 1).
 - Held before the gap: 1 or 2 messages. Gap: 1 to 3 messages. One extra live message during a
   query (D6). That makes at most 6 stored.
-- `Limit` is 1 or 2. `Budget` is `pages(1..2)` or `messages(2..4)` (D14).
+- `Limit` is 1 or 2. `Budget` is `pages(1..5)` or `messages(2..4)` (D14). Seance's page cap is 5, and most History configs use it. The budget witnesses use `pages(2)`. (This was `pages(1..2)` before HISTORY-REVIEW-1.)
 - The budget-exceeded witness uses `Limit = 1` and `pages(2)` with a gap of 3.
 - There is no fuzz witness in the first version (D8). Floor times are chosen so that both
   "stop" and "continue" are reachable, as coverage only.
@@ -78,7 +78,7 @@ catch-up with a nonempty gap must exist. Termination of the catch-up is checked 
 
 Holds when all of these hold:
 - `ExactCount` and `Contiguous` (D3, D10);
-- `BatchAgrees` (CH-19);
+- `BatchAgrees` (CH-19). With msgid anchors and contiguous, exact pages, a batch in another order skips nothing but wastes pages, so it causes a loss only through the budget (History v0: `HNoBatchAgrees` passes with `pages(5)`, `W_BatchBudget` fails with `pages(2)`);
 - `TimeOrdered`, with times non-decreasing along the store (D7, D8). The spec's timestamp
   stop (`earliest.timestamp < lower_bound`) is safe only if no unseen gap message lies behind a
   page whose oldest message is below the floor;

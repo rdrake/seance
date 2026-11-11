@@ -119,7 +119,7 @@ Init ==
              reHold |-> FALSE, failSeen |-> FALSE, failThenEnd |-> FALSE,
              splitCross |-> FALSE, delInSplit |-> FALSE,
              interleave |-> FALSE, twoSplits |-> FALSE, lsEnv |-> FALSE,
-             welcome903 |-> FALSE]
+             welcome903 |-> FALSE, abortChal |-> FALSE]
     /\ gc = [between |-> FALSE, n900 |-> 0, n903 |-> 0]
 
 -----------------------------------------------------------------------------
@@ -444,9 +444,14 @@ CHandle(m) ==
                                  THEN "idle" ELSE @,
                         !.unable = Unable("sasl" \in m.caps /\ "sasl" \notin cli.enabled)]
       [] m.t = "AUTH+" ->
+           \* S1-4 (D27): the client may answer the challenge with its data
+           \* or abort the exchange with "*" (e.g. it will not send PLAIN
+           \* over an unencrypted connection).
            IF cli.sasl = "mech"
-           THEN /\ c2s' = Append(c2s, M("AUTHDATA"))
-                /\ cli' = [cli EXCEPT !.sasl = "data"]
+           THEN \/ /\ c2s' = Append(c2s, M("AUTHDATA"))
+                   /\ cli' = [cli EXCEPT !.sasl = "data"]
+                \/ /\ c2s' = Append(c2s, M("AUTHSTAR"))
+                   /\ cli' = [cli EXCEPT !.sasl = "abort"]
            ELSE c2s' = c2s /\ cli' = cli
       [] m.t = "900" -> c2s' = c2s /\ cli' = [cli EXCEPT !.account = TRUE]
       [] m.t = "903" -> c2s' = c2s
@@ -466,7 +471,8 @@ CRecv ==
          /\ CHandle(m)
          /\ gh' = [gh EXCEPT
                      !.lateReply = @ \/ (m.t \in {"903", "904", "906", "907"} /\ ~InExchange),
-                     !.failSeen = @ \/ (m.t = "904" /\ InExchange)]
+                     !.failSeen = @ \/ (m.t = "904" /\ InExchange),
+                     !.abortChal = @ \/ (m.t = "AUTH+" /\ cli.sasl = "mech" /\ cli'.sasl = "abort")]
     /\ UNCHANGED <<env, sout, srv>>
 
 CLive == ~cli.quit /\ ~cli.closed
@@ -710,4 +716,10 @@ W_TwoSplits      == ~gh.twoSplits       \* two split ACKs open at once (OtherCap
 W_LsEnv          == ~gh.lsEnv           \* NEW/DEL between the two LS lines
 W_Welcome903     == ~gh.welcome903      \* D20: 001 sent while a 900 or 903 is owed
 W_903First       == ~(gc.n903 > gc.n900)  \* a success's 903 sent before its 900
+W_LsAllFirst     == ~(srv.lsOn /\ srv.lsRest = {})   \* D22: the last LS line holds no modelled cap
+W_FailBeforeChal == ~(env.svcOk /\ "sasl" \in srv.enabled /\ cli.sasl = "mech"
+                      /\ s2c # <<>> /\ Head(s2c).t \in {"904", "906"})  \* D23
+W_StrayOpen      == ~(srv.sasl = "open" /\ cli.sasl = "data")  \* D24: a late response opens an exchange
+W_AbortChal      == ~gh.abortChal       \* D27: "*" in answer to the challenge
+W_EarlyEnd       == ~(cli.endSent /\ ~cli.lsDone)              \* D25: END before LS is complete
 =============================================================================
