@@ -1,0 +1,32 @@
+EM_LateCounts E_Base got=Invariant LateSilent is violated distinct=1726 time=00s at 
+EM_LateCounts E_CountOnce got=pass distinct=689952 time=01min 03s at 
+EM_LateCounts E_LateSilent got=Invariant LateSilent is violated distinct=6610 time=01s at 
+EM_NickOnly E_Base got=Invariant AuthorOnly is violated distinct=2051 time=00s at 
+EM_NickOnly E_NoAcc got=pass distinct=36082 time=05s at 
+EM_NickOnly E_NoLogin got=Invariant AuthorOnly is violated distinct=7660 time=01s at 
+EM_NoCheck E_Base got=Invariant AuthorOnly is violated distinct=264 time=00s at 
+EM_NoCheck E_NoAcc got=Invariant AuthorOnly is violated distinct=100 time=00s at 
+EM_OneAccount E_Base got=Invariant AuthorOnly is violated distinct=2051 time=01s at 
+Edit CoverImpostorWaits got=Invariant CoverImpostorWaits is violated distinct=263 time=00s at 
+Edit CoverInboxDrop got=Invariant CoverInboxDrop is violated distinct=6661 time=01s at 
+Edit CoverLateHidden got=Invariant CoverLateHidden is violated distinct=1726 time=00s at 
+Edit CoverNickChangeAccount got=Invariant CoverNickChangeAccount is violated distinct=1924 time=00s at 
+Edit CoverPageJudged got=Invariant CoverPageJudged is violated distinct=264 time=00s at 
+Edit CoverTakeoverRefused got=Invariant CoverTakeoverRefused is violated distinct=11576 time=01s at 
+Edit E_Base got=pass distinct=689952 time=01min 04s at 
+Edit E_CountOnce got=pass distinct=689952 time=01min 03s at 
+Edit E_LateSilent got=pass distinct=5426064 time=07min 54s at 
+Edit E_LiveOnly got=pass distinct=183024 time=07s at 
+Edit E_Me got=Invariant AuthorOnly is violated distinct=9558 time=01s at 
+Edit E_MeAcc got=Invariant AuthorOnly is violated distinct=162149 time=10s at 
+Edit E_MeLive got=pass distinct=183024 time=07s at 
+Edit E_Mentions got=pass distinct=5426064 time=08min 28s at 
+Edit E_NoAcc got=pass distinct=36082 time=04s at 
+Edit E_NoLogin got=pass distinct=144552 time=13s at 
+Edit W_ImpostorFirst got=Invariant ImpostorIsLine is violated distinct=1826 time=00s at 
+Edit W_InboxNick got=Invariant InboxFollowsEdit is violated distinct=12948 time=01s at 
+Edit W_InboxTakeover got=Invariant OriginalKept is violated distinct=902841 time=44s at 
+Edit W_InboxTrim got=Invariant OriginalKept is violated distinct=507534 time=20s at 
+Edit W_SamePerson got=Invariant SamePerson is violated distinct=2938 time=01s at 
+Edit W_SideBySide got=Invariant NoSideBySide is violated distinct=10311 time=02s at 
+Edit W_Silent got=Invariant AtLeastOnce is violated distinct=1726 time=01s at 

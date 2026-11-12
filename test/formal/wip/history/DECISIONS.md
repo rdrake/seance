@@ -964,3 +964,214 @@ evilnet/seance#290.
   - Seance's hole placement (W_HoleAppend) is not filed.
   - No catch-up fixture has a hole.
   - D34 item 2 (the restore race) is still out of History.
+
+## D37 Edit.tla v0: the message-edit author rule (#288, #289) (2026-11-12)
+
+Seance PRs #288 and #289 (read at pr289 head e07e163) let a line be replaced
+only by its author's edit. This section models that rule.
+
+- **The rule, as the code has it.**
+  - An edit is a resent PRIVMSG tagged `+evilnet.github.io/edit` (and
+    `+seance/edit`) = the original's msgid (wire.ts:21-41).
+  - `isEditAuthor` (channel.ts:61-77) decides who may replace a line:
+    - when either line carries an account, the accounts must match, and one
+      account against none is refused;
+    - otherwise, if both lines are ours (`self`), the edit is taken;
+    - otherwise the nicks must match, under the server's casemapping.
+  - privmsg.ts:268-284 judges the edit when its original is known (shown,
+    or earlier in the same history page). Someone else's edit then loses its
+    edit tag and becomes an ordinary line, counted unread (privmsg.ts:337).
+  - An edit of an original that is not loaded keeps its tag. It waits for
+    the original (privmsg.ts:357, `Channel.awaitOriginal`).
+  - When the original arrives (`takeLateEdit`, client.ts:2809-2818), it goes
+    behind the waiting edit, if that edit's sender is its author. It then
+    counts nothing and gets no inbox entry. This happens both in pushMessage
+    (live or catch-up, client.ts:3755-3768) and in an older page
+    (`settleLateOriginal`, history.ts:537-549).
+- **Model: `model/Edit.tla`, standalone.**
+  - It does not EXTEND Delivery. Delivery models our own outgoing copies
+    (labels, echoes, batches). The edit rule reads lines that people send,
+    and the two share no variable. Composing them would multiply Delivery's
+    0.3M-20M-state configs (README) for no interaction.
+  - Our own edit's local echo (pending.ts:137) is not modelled.
+  - **Server.** A log of lines in server order. Each line is
+    `[p, nick, acc, eo, hl]`: the sender, the nick and account at send time,
+    the msgid it edits (0 for an original), and whether it highlights us.
+  - **People** `{a, m}`, with nicks `{n1, n2, n3}`. They start at n1 and n2:
+    the start is fixed, since the nicks are symmetric.
+    - `Rename` takes a free nick, and `m` taking a nick `a` left is a
+      takeover. MaxRen = 2.
+    - `Account` logs a person into their own account or out (MaxAcc = 1).
+      The starting accounts are chosen freely.
+    - `Me` names the person whose client this is, or "none".
+  - **Arrival.** Each line is either read live, right after it is sent
+    (before any later line or NICK), or missed.
+    - A missed line arrives later in a history page of one or two missed
+      lines, in server order.
+    - The page is either `append` (a catch-up: deliverAppend, pushMessage
+      with replay) or `more` (an older page: deliverPrepend, then
+      settleLateOriginal, then countPageUnread without the replaced lines).
+    - Each line is judged during the collect pass, against the shown lines
+      and the page so far. The queued work runs after delivery: the inbox
+      drop, then the placement or the wait.
+    - So the model covers both orders (edit before and after the original),
+      live and through both replay paths.
+  - **Client state.**
+    - `shown`, plus the author record per line (`MsgRef.from`) and
+      `selfAt`: `isSelf` against our nick at reading time, privmsg.ts:85.
+    - `ed` (editOf kept), `sup` (supersededBy), `aw` (editsBeforeOriginal,
+      one entry per original, as the Map has it), and `inbox`.
+    - `TrimOn`: the UI may drop one loaded line (`chan.forget`). Its inbox
+      entry stays, as it would across a reload.
+  - **Ghosts.** `cnt` and `hlc` count the unread and highlight increments
+    per line; `late` holds the originals hidden as they arrived; `lost`
+    holds pairs `<<o, e>>` where e hid o's text, by replacing it in the
+    timeline or by dropping its inbox entry.
+  - **Abstracted:**
+    - the read marker and `isReading` (nothing is read);
+    - edits of edits;
+    - casefolding (nicks are pre-folded);
+    - a trimmed line is never fetched again;
+    - pages are any one or two missed lines, not contiguous ranges (an
+      over-approximation).
+- **Properties.** `Intended(o, e)` is the stated rule on what the lines
+  carried when sent:
+  - with an account on either line, the accounts are equal;
+  - with none, the nicks are equal, or both lines are truly Me's.
+
+  | Property | What it checks |
+  |---|---|
+  | (a) AuthorOnly | `sup[o] # 0 => Intended(o, sup[o])` |
+  | (b) ImpostorIsLine | An edit that is not Intended, of a shown original, not read as ours, is shown unmarked (`ed = 0`) and counted once. |
+  | (c) CountOnce | An original plus the edit that replaced it count at most 1. Only without mentions, since a highlight in an edit counts by design (edit.ts:425). |
+  | (c) LateSilent | A late-hidden original counts no unread and no highlight. |
+  | (d) OriginalKept | Every `lost` pair is Intended: the original's text leaves the timeline or the inbox only for its author's edit. |
+  | NoSideBySide | Finding check. |
+  | InboxFollowsEdit | Finding check. |
+  | AtLeastOnce | Finding check. |
+  | SamePerson | By-design check. |
+- **Mutants (mkedit.py; one textual edit each):**
+  - `EM_NickOnly`: `IsAuthor == nicks equal`;
+  - `EM_NoCheck`: `IsAuthor == TRUE`;
+  - `EM_OneAccount`: one account against none is not refused (the rule
+    before 6c0f3c1);
+  - `EM_LateCounts`: `HiddenCounts == TRUE`, so a late-hidden original
+    still counts, on both paths.
+- **TLC runs, local** (-workers 1, one or three processes at a time). Every
+  line is in `model/results-e0-local.summary`. Base constants: MaxMsgs 3,
+  MaxRen 2, MaxAcc 1, AccountsOn, PageOn, Mentions off, TrimOn off, Me "none".
+
+| Config | Module | Expect | Result, distinct states |
+|---|---|---|---|
+| E_Base (SAFE = TypeOK, a, c, c, d) | Edit | pass | pass, 689,952 (1 min 04 s) |
+| E_NoLogin (MaxAcc 0) | Edit | pass | pass, 144,552 |
+| E_NoAcc (AccountsOn off) | Edit | pass | pass, 36,082 |
+| E_LiveOnly (PageOn off; SAFE + b + NoSideBySide) | Edit | pass | pass, 183,024 |
+| E_MeLive (Me a, PageOn off; SAFE + b) | Edit | pass | pass, 183,024 |
+| E_Mentions (Mentions; TypeOK, a, LateSilent, d) | Edit | pass | pass, 5,426,064 (8 min 28 s) |
+| E_LateSilent (Mentions; LateSilent) | Edit | pass | pass, 5,426,064 (7 min 54 s) |
+| E_CountOnce (CountOnce) | Edit | pass | pass, 689,952 |
+| E_Me (Me a, no accounts) | Edit | pass | **AuthorOnly violated, 9,558** (finding 3) |
+| E_MeAcc (Me a, accounts) | Edit | pass | **AuthorOnly violated, 162,149** (finding 3; the trace starts without accounts) |
+| W_ImpostorFirst (b) | Edit | fail, known | ImpostorIsLine violated, 1,826 |
+| W_SideBySide | Edit | fail, finding | NoSideBySide violated, 10,311 (finding 2) |
+| W_Silent | Edit | fail, finding | AtLeastOnce violated, 1,726 (finding 4) |
+| W_SamePerson (no accounts) | Edit | fail, by design | SamePerson violated, 2,938 (m takes n1 and edits a's line) |
+| W_InboxNick (Mentions) | Edit | fail, finding | InboxFollowsEdit violated, 12,948 (finding 1b) |
+| W_InboxTrim (Mentions, TrimOn) | Edit | fail, finding | OriginalKept violated, 507,534 (finding 1a, a logs out) |
+| W_InboxTakeover (Mentions, TrimOn, MaxAcc 0) | Edit | fail, finding | OriginalKept violated, 902,841 (finding 1a, takeover) |
+| E_Base | EM_NickOnly | fail | AuthorOnly violated, 2,051 (a's line with an account, a's edit after logging out) |
+| E_NoLogin | EM_NickOnly | fail | AuthorOnly violated, 7,660 (a → n3, m → n1, m edits a's line; both have accounts) |
+| E_NoAcc | EM_NickOnly | pass (same as the code without accounts and without Me) | pass, 36,082 |
+| E_Base | EM_NoCheck | fail | AuthorOnly violated, 264 |
+| E_NoAcc | EM_NoCheck | fail | AuthorOnly violated, 100 |
+| E_Base | EM_OneAccount | fail | AuthorOnly violated, 2,051 |
+| E_Base | EM_LateCounts | fail | LateSilent violated, 1,726 |
+| E_LateSilent | EM_LateCounts | fail | LateSilent violated, 6,610 |
+| E_CountOnce | EM_LateCounts | (probe) | **pass, 689,952**: CountOnce does not catch it (see below) |
+| CoverNickChangeAccount | Edit | fail | violated, 1,924 |
+| CoverTakeoverRefused | Edit | fail | violated, 11,576 |
+| CoverLateHidden | Edit | fail | violated, 1,726 |
+| CoverInboxDrop (Mentions, TrimOn) | Edit | fail | violated, 6,661 |
+| CoverPageJudged (an impostor's edit refused against an original in the same page) | Edit | fail | violated, 264 |
+| CoverImpostorWaits (an impostor's edit waits for an original) | Edit | fail | violated, 263 |
+
+  - Every mutant is caught by the property it targets.
+  - EM_LateCounts is caught by LateSilent but not by CountOnce. The reason
+    is finding 4: the author's edit, read first, counted nothing, so the late
+    original counting once still totals one. CountOnce is kept, because it
+    would catch a double count. LateSilent is the property that pins the rule.
+- **Findings: code against intent** (file:line at pr289 e07e163):
+  1. **The inbox drop matches nicks, not accounts.**
+     - privmsg.ts:322-331 dispatches `inbox:drop` with `by: nick` whenever
+       the edit tag survived.
+     - helpers/inbox.ts:262-276 (the test is at :274) drops the entry when
+       `casefold(e.from.nick) === casefold(by)`.
+     - InboxEntry (shared/types/mention.ts:7-24) carries no account.
+     - (a) **W_InboxTrim / W_InboxTakeover.** The original is not loaded
+       (trimmed by the UI, or after a reload), but its mention is in the
+       inbox. Then an edit tag survives unjudged (privmsg.ts:273-284), and
+       anyone now under the original's nick drops the entry. In the takeover
+       trace, a (account a) moves n1 → n3 and m (account m) takes n1 and
+       edits a's line. The timeline would refuse this edit, but the inbox
+       loses a's mention. This breaks (d).
+     - (b) **W_InboxNick.** The reverse case. a's own edit across a nick
+       change (same account) replaces the line, but the drop names the new
+       nick, so the original's inbox entry, with its old text, stays.
+     - Fix direction: give InboxEntry the sender's account and use
+       `isEditAuthor` in `dropMessage`.
+  2. **One waiting edit per original.**
+     - channel.ts:163 `editsBeforeOriginal` is a Map, and `awaitOriginal`
+       (:311-313) overwrites its entry.
+     - W_SideBySide: a's edit and m's edit of a's line both arrive (here in
+       one page) before the original. m's entry replaces a's. When the
+       original comes, it is refused, so it stands beside a's edit (still
+       marked edited and uncounted). channel.ts:157-162 says this never
+       happens.
+     - Fix direction: keep the author's entry. Either do not overwrite an
+       entry whose sender would be the author of a later original, or keep
+       a list and take the first one whose sender `isAuthor`.
+  3. **`self` is judged at read time** (privmsg.ts:85; channel.ts:69-71).
+     - E_Me: a (us) says a line as n1, which we miss. m edits it as n2. m
+       moves to n3. A page brings our line (self). We move to n2. A page
+       brings m's edit, and its n2 is now our nick, so it reads as self.
+       `self && self` takes it, and m's edit replaces our line on our screen.
+     - This needs no accounts and both lines in history. The nicks differ
+       (n1 vs n2), so the stated "otherwise the nicks must match" would
+       refuse it. The doc comment at channel.ts:56-57 says `self` follows the
+       current nick, so this is a consequence the code knows about, but it is
+       wider than the nick rule.
+     - Live lines are safe: E_MeLive passes. Low severity.
+  4. **An author's edit that arrives before its original leaves the
+     message uncounted** (W_Silent).
+     - The live edit is pushed with `increasesUnread = !self && !editOf`,
+       which is false (privmsg.ts:337). A page edit fails `countsAsUnread`
+       (channel.ts:30-35).
+     - The late original is then hidden, so it counts nothing either.
+     - test/irc/edit.ts:503-547 asserts exactly this, so it may be intended.
+       But the comment at client.ts:3753-3754 ("the edit counted in its
+       place") is wrong. Either the edit should count when it waits for an
+       original, or the comment should say that nothing counts.
+  5. **Known weakness, unchanged: someone else's edit before the original**
+     (W_ImpostorFirst).
+     - The edit tag survives when the original is unknown
+       (privmsg.ts:273-284).
+     - When the original comes, `takeLateEdit` (client.ts:2809-2818)
+       refuses it, so the original shows and counts.
+     - But the impostor's line stays marked as an edit, is never counted,
+       and may already have dropped an inbox entry (finding 1a). This
+       breaks (b).
+- **Not done:**
+  - Our own edit's local echo, and the REDACT-first send path.
+  - Edits of edits (the `applyEdit` chain, messageUpdates.ts:117-133).
+  - Read markers.
+  - Casemapping differences between `fold` and inbox.ts's generic `casefold`.
+  - Re-fetching a trimmed line. Without it, a trimmed original that comes
+    back beside its edit is not explored.
+  - No trace harness against the TypeScript.
+- **For the cluster (not run here):**
+  - MaxMsgs 4: two edits of one original plus an unrelated line, or an edit
+    whose page also brings the original;
+  - E_Mentions with TrimOn (507k-903k states before the first violation;
+    a full pass after a fix of finding 1 would be several million);
+  - MaxRen 3, and MaxAcc 2.
