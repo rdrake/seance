@@ -42,8 +42,8 @@ PROPS = ['RuleCloseOnlyRead', 'RuleRelayWherePushed', 'RuleOpenClean']
 ALL = INVS + PROPS
 # the rules each config is expected to break
 EXPECT = {
-    'Today': ['RuleNoSelfRelay', 'RuleNoOwnReadStub', 'RuleCloseOnlyRead'],
-    'R1Conn': ['RuleNoSelfRelay', 'RuleNoOwnReadStub', 'RuleCloseOnlyRead'],
+    'Today': ['RuleNoSelfRelay', 'RuleNoOwnReadStub', 'RuleCloseOnlyRead', 'RuleRelayWherePushed'],
+    'R1Conn': ['RuleNoSelfRelay', 'RuleNoOwnReadStub', 'RuleCloseOnlyRead', 'RuleRelayWherePushed'],
     'R1Dev': [],
     'R1DevLate': ['RuleRelayWherePushed'],
     'R1R2Late': [],

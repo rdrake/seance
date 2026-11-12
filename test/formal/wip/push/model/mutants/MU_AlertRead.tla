@@ -204,11 +204,15 @@ Leave(d) ==
 \* shown under a conversation's tag takes the place of what that tag showed.
 Show(d, x) == {y \in cards[d] : y.c # x.c} \cup {x}
 
-\* A message push.  Already read here: no fresh card; a strict device shows
-\* the quiet stub, a lax one only when nothing else would be up.
+\* A message push.  Already read here: no fresh card.  A strict device must
+\* still show: the conversation's message card again, quietly and unchanged,
+\* or the quiet stub when none is up (showQuiet); a lax one shows the stub
+\* only when nothing else would be up (keepChromeCount).
 OnMsg(d, p) ==
     IF FALSE
-    THEN IF d \in Strict \/ (cards[d] = {} /\ d \notin open)
+    THEN IF d \in Strict /\ \E y \in cards[d] : y.k = "msg" /\ y.c = p.c
+         THEN [after |-> cards[d], shown |-> TRUE]
+         ELSE IF d \in Strict \/ (cards[d] = {} /\ d \notin open)
          THEN [after |-> Show(d, [k |-> "stub", c |-> p.c, n |-> p.n, by |-> None]),
                shown |-> TRUE]
          ELSE [after |-> cards[d], shown |-> FALSE]

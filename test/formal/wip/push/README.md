@@ -32,8 +32,8 @@ TLC stops at the first violation, so each rule a config is expected to break has
 
 | Config | Run | Constants | Expected to fail |
 | --- | --- | --- | --- |
-| `Today` | limited | nefarious2 and Seance as they are | `RuleNoSelfRelay`, `RuleNoOwnReadStub`, `RuleCloseOnlyRead` |
-| `R1Conn` | limited | R1, bound to the connection | the same three: Mark read's throwaway connection, and D3 |
+| `Today` | limited | nefarious2 and Seance as they are | `RuleNoSelfRelay`, `RuleNoOwnReadStub`, `RuleCloseOnlyRead`, `RuleRelayWherePushed` (it relays to everyone) |
+| `R1Conn` | limited | R1, bound to the connection | the same four: Mark read's throwaway connection, D3, and the account-wide gate |
 | `R1Dev` | limited | R1 by device id, `MergeTime = "newest"` | none |
 | `R1DevLate` | limited | `R1Dev` with `d2` subscribing late | `RuleRelayWherePushed` |
 | `R1R2Late` | limited | `R1DevLate` + R2 | none |
@@ -50,7 +50,7 @@ TLC stops at the first violation, so each rule a config is expected to break has
 | `R1Dev__W_OtherReadStub` | under R1, a read on the Mac still puts a stub on the phone |
 | `R1DevLate__W_RelayNoCard` | a relay to a device never pushed the conversation |
 | `R1R2R3__W_StaleCard` | under R3, a read card left on a closed phone with no relay coming |
-| `R1Dev__W_StaleCard` | **question** Q4, no expectation |
+| `R1Dev__W_StaleCard` | Q4: reachable (v0 run, 39a7be2e5): a WebKit card can go stale even without R3 |
 
 ## Mutants (expected to fail; not yet run)
 
