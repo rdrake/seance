@@ -1,0 +1,43 @@
+OK Bouncer Base expect=pass got=pass distinct=37081 time=2s 
+OK Bouncer BaseB expect=pass got=pass distinct=37056 time=3s 
+OK Bouncer BaseJoins expect=pass got=pass distinct=50364 time=3s 
+OK Bouncer BaseOrder expect=pass got=pass distinct=37081 time=2s 
+OK Bouncer BaseMsgs expect=pass got=pass distinct=164068 time=6s 
+OK Bouncer BaseChg3 expect=pass got=pass distinct=200968 time=7s 
+OK Bouncer Mid expect=pass got=pass distinct=1580393 time=48s 
+OK Bouncer MidB expect=pass got=pass distinct=1577709 time=48s 
+OK Bouncer Split2 expect=pass got=pass distinct=528001 time=16s 
+OK Bouncer MidLossFix expect=pass got=pass distinct=1126392 time=36s 
+OK Bouncer MidRemote expect=pass got=pass distinct=1044879 time=32s 
+OK Bouncer BaseLossFix expect=pass got=pass distinct=42503 time=3s 
+OK Bouncer BaseRemote expect=pass got=pass distinct=28961 time=2s 
+OK Bouncer W_AliasReauth expect=fail got=fail distinct=5 time=1s Error: Invariant ViewMatchesServer is violated.
+OK Bouncer W_AliasReauthTag expect=fail got=fail distinct=36 time=1s Error: Invariant TagAgreesView is violated.
+OK Bouncer W_AliasReauthAgree expect=fail got=fail distinct=38 time=0s Error: Invariant AliasesAgree is violated.
+OK Bouncer W_SplitLoss expect=fail got=fail distinct=159 time=1s Error: Invariant ViewMatchesServer is violated.
+OK Bouncer W_SplitLossConv expect=fail got=fail distinct=26752 time=2s Error: Invariant ViewConverges is violated.
+OK Bouncer W_BxcSession expect=fail got=fail distinct=19738 time=2s Error: Invariant AliasesAgree is violated.
+OK Bouncer W_BurstReauth expect=fail got=fail distinct=11296 time=1s Error: Invariant VerdictsAgree is violated.
+OK Bouncer W_BurstReauthAgree expect=fail got=fail distinct=32472 time=2s Error: Invariant AliasesAgree is violated.
+OK Bouncer W_BothOrigins expect=fail got=fail distinct=374 time=1s Error: Invariant CopiesAgree is violated.
+OK Bouncer W_TagAtSend expect=fail got=fail distinct=113 time=1s Error: Invariant TagAtSend is violated.
+OK Bouncer W_RemoteTag expect=fail got=fail distinct=66 time=1s Error: Invariant TagAtSendPlain is violated.
+OK Bouncer W_Code expect=fail got=fail distinct=7 time=1s Error: Invariant ViewMatchesServer is violated.
+OK Bouncer CoverPromote expect=fail got=fail distinct=8 time=1s Error: Invariant CoverPromote is violated.
+OK Bouncer CoverMerge expect=fail got=fail distinct=8212 time=1s Error: Invariant CoverMerge is violated.
+OK Bouncer CoverClassic expect=fail got=fail distinct=19972 time=2s Error: Invariant CoverClassic is violated.
+OK Bouncer CoverSplitLogoutHealed expect=fail got=fail distinct=12092 time=1s Error: Invariant CoverSplitLogoutHealed is violated.
+OK Bouncer CoverAliasMsg expect=fail got=fail distinct=6 time=1s Error: Invariant CoverAliasMsg is violated.
+OK Bouncer CoverReauthLinked expect=fail got=fail distinct=120 time=1s Error: Invariant CoverReauthLinked is violated.
+OK Bouncer CoverPromoteB expect=fail got=fail distinct=8 time=0s Error: Invariant CoverPromote is violated.
+OK Bouncer CoverMergeLossFix expect=fail got=fail distinct=13172 time=1s Error: Invariant CoverMerge is violated.
+OK M_KeepReplica M_KeepReplica_BaseChg3 expect=fail got=fail distinct=26628 time=1s Error: Invariant ViewConverges is violated.
+OK M_NoLocalNotify M_NoLocalNotify_Base expect=fail got=fail distinct=2 time=1s Error: Invariant ViewMatchesServer is violated.
+OK M_NoRelayAC M_NoRelayAC_Base expect=fail got=fail distinct=2 time=1s Error: Invariant ViewConverges is violated.
+OK M_TagFromHome M_TagFromHome_BaseMsgs expect=fail got=fail distinct=27 time=1s Error: Invariant TagAgreesView is violated.
+OK M_NoBXU M_NoBXU_Base expect=fail got=fail distinct=29 time=0s Error: Invariant AliasesAgree is violated.
+OK M_MergeBothKeep M_MergeBothKeep_Base expect=fail got=fail distinct=3108 time=1s Error: Invariant OneFace is violated.
+OK M_ClassicNoKill M_ClassicNoKill_Base expect=fail got=fail distinct=6394 time=2s Error: Invariant OneFace is violated.
+OK M_JoinStar M_JoinStar_Base expect=fail got=fail distinct=216 time=0s Error: Invariant ViewMatchesServer is violated.
+OK M_PromoteQuit M_PromoteQuit_BaseB expect=fail got=fail distinct=8 time=1s Error: Invariant ViewMatchesServer is violated.
+OK M_BurstStale M_BurstStale_Base expect=fail got=fail distinct=12100 time=1s Error: Invariant ViewConverges is violated.

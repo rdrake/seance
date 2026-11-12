@@ -30,8 +30,8 @@ each property is checked.
 
 ## Actions
 
-- `ChangeP(o, a)`: P's account changes at A (SASL, webhook) or, with `RemoteOrigin`, at B
-  (services), to `X`, `Y` or `*`. ACCOUNT to the local observer; `AC` to the peer.
+- `ChangeP(o, a)`: P's account changes at A (SASL, webhook) or at B (services), as `POrigin`
+  allows, to `X`, `Y` or `*`. ACCOUNT to the local observer; `AC` to the peer.
 - `PartJoinP`: with `Joins`, P parts or joins at A; extended JOIN or PART to oA; `J` to B.
 - `SessReauth(c, a)`: the face re-authenticates (with `SessSwitch`, to another name). Local copy
   of the remote alias updated, `BX U` and `AC` in the `AliasFirst` order; ACCOUNT to the local
@@ -52,7 +52,7 @@ each property is checked.
 
 ## Properties
 
-P1 to P9 of `DECISIONS.md`. Quiescent = link up, both directions empty. P1, P3, P4 and P5 are
+P1 to P10 of `DECISIONS.md`. Quiescent = link up, both directions empty. P1, P3, P4, P5 and P10 are
 checked in every state (P3-P5 through `bad`, set when a delivery breaks one). P2 and P6 to P8
 are checked in quiescent states only: a view may lag while its correction is in flight.
 Convergence is a safety property at quiescence, not liveness: the model does not claim that
@@ -76,7 +76,7 @@ Each replaces one anchor in `Bouncer.tla` (`mkcfg.py`) and must break the proper
 | `M_TagFromHome` | the delivering server stamps the tag from the sender's own server's value, not its copy | `TagAgreesView` |
 | `M_NoBXU` | the face's change does not reach its remote alias | `AliasesAgree` |
 | `M_MergeBothKeep` | at a merge the losing side refuses too, instead of demoting | `OneFace` |
-| `M_ClassicNoKill` | a classic loser is replaced as face but not killed | `OneFace` |
+| `M_ClassicNoKill` | a classic loser is replaced as face but not killed, and no KILL is sent for it | `OneFace` |
 | `M_JoinStar` | the burst JOIN always carries `*` | `ViewMatchesServer` |
 | `M_PromoteQuit` | the split promote QUITs the nick to the observer | `ViewMatchesServer` |
 | `M_BurstStale` | the burst's `N` for P carries the account P had before the split | `ViewConverges` |

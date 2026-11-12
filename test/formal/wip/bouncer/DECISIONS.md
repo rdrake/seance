@@ -24,7 +24,7 @@ A property holds only under the settings it names. Nothing here claims more.
 | Name | Values | Kind | Text / code |
 | --- | --- | --- | --- |
 | `InitPrim` | the session's primary at start is `dA` (on A) or `dB` (on B) | allowed, both checked | D6 |
-| `RemoteOrigin` | P's account may also change at B (services' server) | allowed (code: TRUE) | `m_account.c:187-351`, D3 |
+| `POrigin` | where P's account changes: `"home"` (A), `"services"` (B), `"both"` | `"both"` is what the code allows; each single origin is a restriction | `m_account.c:187-351`, D3 |
 | `SessSwitch` | the session's primary may re-authenticate to another account name | allowed (code: TRUE) | `m_authenticate.c:154-186`, AT:30-36, D4 |
 | `AliasFirst` | the primary's server sends `BX U account=` before `AC` | guaranteed order (code: TRUE); FALSE is a variant | `sasl_auth.c:933,941`, D5 |
 | `AliasReauth` | an alias device may re-authenticate on its own | allowed by the code (TRUE); FALSE is a restriction | `m_authenticate.c:154-186`, `bouncer_session.c:12293`, D5 |
@@ -32,6 +32,7 @@ A property holds only under the settings it names. Nothing here claims more.
 | `Joins` | P may PART and JOIN | allowed | EJ:20-37, D2 |
 | `LossAtSplit` | a split may cut lines still in flight | allowed (code: TRUE); FALSE (split only with empty links) is a restriction | D7 |
 | `PromoteNotify` | the split promote tells observers when the promoted device's account differs from the face they were shown | FALSE is the code (`bouncer_session.c:8617-8619`); TRUE is a candidate change, not the code | D7 |
+| `ReauthInBurst` | a device may change account while a burst `N` or a merge's `BX C` is unread | TRUE is what the code allows; FALSE is a restriction | `m_nick.c:655-658`, D8 |
 | `BxcName` | a merge's `BX C` carries the session record's name (`"session"`) or the device's account (`"device"`) | `"session"` is the code (`bouncer_session.c:10397`, `:14518`); `"device"` is a restriction | D8 |
 | One channel; every user and both observers are in it | fixed | restriction | D2 |
 | Two servers, one link, at most `MaxSplits` splits | fixed | restriction | D6 |
@@ -101,8 +102,11 @@ their uplink, which applies it to its copy and relays it toward the user (`m_acc
 does the same for any `AC` whatever its origin). With services on B, B's copy of P changes
 before A's truth.
 
-**Model.** `RemoteOrigin` lets a change of P start at B, while B has a copy of P. It is the only
-way the model can make a remote copy run ahead of the truth.
+**Model.** `POrigin = "services"` lets a change of P start at B only, while B has a copy of P:
+B's copy then runs ahead of the truth at A. `"both"` lets the two origins change P
+concurrently. `AC` carries no version or timestamp that a receiver compares (the fourth
+parameter, `acc_create`, is X3's registration date, `m_account.c:288-293`), so two crossing
+`AC` lines each overwrite the other's copy.
 
 ## D4. Session account changes (`SessSwitch`, `SessLogout`)
 
@@ -182,7 +186,10 @@ side or both are killed, the loser locally and by `KILL` on the wire.
 the heal, `win.merge` and `win.classic`, read by both servers alike: that is the code's
 contract. The dynamic inputs are read as the code reads them: the incoming side from the `N`
 (the snapshot at the burst), our side from our client now. `BxcName` picks what the `BX C` of a
-demote carries.
+demote carries. `ReauthInBurst` lets a device change account between its server's `N` and the
+peer's `N` (or the merge's `BX C`) being read; a face's server tells only the aliases on its
+roster (`bouncer_session.c:12287-12330`), and a merged alias joins the roster when its `BX C`
+is read.
 
 ## D9. Nick changes (restriction)
 
@@ -203,6 +210,7 @@ burst are D8's.
 | P6 | `AliasesAgree` | at quiescence: every live device of the session, and every server's copy of it, has the face's account | guaranteed reading | skill #12, `bounce_emit_alias_update` |
 | P7 | `CopiesAgree` | at quiescence: every server's copy of a live client equals its truth | guaranteed reading | D2 |
 | P8 | `OneFace` | at quiescence: both servers show the same live face (or none), every live device is its server's face or an alias of a session face there, and no copy names a dead client | guaranteed reading | skill "Burst & Convergence", D8 |
+| P10 | `VerdictsAgree` | the two servers take the same same-nick verdict (merge or classic) at a heal | guaranteed reading (the code's contract: "one keeps exactly when the other yields", `m_nick.c` comment above 655) | D8 |
 | P9 | `NoStaleAfterSplitLogout` | is P2 for P after a logout during a split; covered by P2 and its cover `CoverSplitLogoutHealed` | guaranteed | AN:25-35, AN:63-66 |
 
 P1 and P2 together say: the view is what the server holds, and what the servers hold converges.

@@ -9,6 +9,9 @@ not wired into the build or the tests. The finished parts will move to `test/for
   - `RULES.md` (rules and citations), `DECISIONS.md`, `README.md` (results), `QUEUE.md` (plan);
   - `conformance/`: trace recording and trace checking (`check.py`);
   - `hpc/`: the Slurm scripts.
+- `bouncer/`: account state across a netsplit and a P10 burst in nefarious2, with a bouncer
+  session (`model/Bouncer.tla`); `DECISIONS.md`, `DESIGN.md`, `NOTES.md` (results, and the
+  configs left for the cluster).
 - `history/`: the history and delivery work.
   - `RULES.md`, `DECISIONS.md`, `DESIGN.md`, the Codex reviews and their prompts;
   - `model/Delivery.tla` (v1), its configs, the lists `list-d*`, and `mkmut.py`, which
