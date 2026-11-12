@@ -34,7 +34,7 @@ describe("formal/history catch-up fixtures", function () {
 		removeSpy();
 	});
 
-	const at = (m: string) => `2026-08-25T12:${m}:00.000Z`;
+	const at = (m: string) => (m.includes(":") ? `2026-08-25T${m}:00.000Z` : `2026-08-25T12:${m}:00.000Z`);
 	const line = (id: string, m: string, nick = "bob") =>
 		`@time=${at(m)};msgid=${id} :${nick}!${nick}@host PRIVMSG #seance :${id}`;
 
@@ -149,6 +149,16 @@ FIXTURES = [
          typedWhileDown=True,
          expect=["CHATHISTORY LATEST #seance * 2", "CHATHISTORY BEFORE #seance msgid=b 2"],
          wire="Q A C Q A C"),
+    # #282: the page reaches below everything held (o, 11:55, is older than
+    # our JOIN at 12:00 and was never loaded). It is history, not gap: it
+    # must not be appended above the rejoin. Tonight's phone trace (D33).
+    dict(name="belowHeld", limit=3, held=[["h", "10"]], gap=["a"],
+         pages=[[["o", "11:55"], ["h", "10"], ["a", "12"]]],
+         expect=["CHATHISTORY LATEST #seance * 3"],
+         wire="Q A C",
+         tlc="not modelled: History.tla's reconnect store is held ++ gap (Held == 1..NHeld); "
+             "it has no stored lines older than the held ones, so a page reaching below them "
+             "cannot be expressed (needs an NOld prefix outside buf)"),
 ]
 
 def check(fx, obs):

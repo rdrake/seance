@@ -149,12 +149,15 @@ def main():
     for fx in FIXTURES:
         if fx["name"] not in obs:
             continue
+        if fx.get("tlc"):
+            jobs.append((fx["name"], None, [fx["tlc"]]))
+            continue
         name, tla, cfg, notes = build(fx, obs[fx["name"]])
         open(os.path.join(wd, name + ".tla"), "w").write(tla)
         open(os.path.join(wd, name + ".cfg"), "w").write(cfg)
         jobs.append((fx["name"], name, notes))
     with ThreadPoolExecutor(j) as ex:
-        res = list(ex.map(lambda t: run(wd, t[1]), jobs))
+        res = list(ex.map(lambda t: run(wd, t[1]) if t[1] else "SKIP", jobs))
     lines = ["%-16s %s%s" % (n, r, ("  [" + "; ".join(notes) + "]") if notes else "")
              for (n, _, notes), r in zip(jobs, res)]
     open(os.path.join(wd, "summary.txt"), "w").write("\n".join(lines) + "\n")

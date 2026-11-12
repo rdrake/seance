@@ -657,3 +657,29 @@ gpu05 job 10654:
 - History fixtures (Python properties and TLC trace): 4/4 pass.
 - Delivery dcheck, labelled and no-label with --errfallback: byte-identical
   to the D32 summaries.
+
+## D34 Cold start with a held session: the belowHeld fixture and what History.tla lacks (2026-11-12)
+
+Phone trace, 00:15:41 UTC. The server's draft/persistence batch for 10 channels
+took 0.76 s, longer than the client's 0.75 s autojoin quiet period, so the
+client JOINed and walked itself. The walk's LATEST page reached below the
+oldest held line, and 52 older lines were appended above the rejoin. Fixed in
+#282 (03a2f172a).
+
+- New fixture `belowHeld`: a page with a line older than everything held.
+  Python properties fail on develop d0322ffa7 (Order: h,o,a) and pass on
+  03a2f172a. The four earlier fixtures pass on both.
+- TLC trace (gpu05 job 10670): the four earlier fixtures pass on both shas.
+  belowHeld is SKIP because it is not expressible.
+
+Missing from History.tla:
+1. In reconnect mode the store is held ++ gap (`Held == 1..NHeld`). It needs
+   an NOld prefix: stored lines older than the held ones that are not in buf,
+   plus a decision on what the spec says a client does with page lines below
+   lower_bound - FUZZ (drop or merge). Seance now drops those below everything
+   held and keeps those inside it.
+2. The restore race has no counterpart: no session restore, ATTACH cursor
+   replay, or autojoin wait. It is a timing property (no client JOIN or walk
+   while the restore batch is open) and belongs in a session model, not
+   History. Covered for now only by test/irc/persistence.ts "holds the
+   autojoin while a restoration batch is still arriving".
