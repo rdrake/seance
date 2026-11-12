@@ -1,0 +1,47 @@
+# SASL v0.1 (35f1f88c6) limited runs, cloud container, TLC -workers 3, 20 min cap per config
+# config | result | distinct states | time
+TinyMechs | No error has been found | 2143217 distinct states found | Finished in 06min
+TinyChunks | No error has been found | 95747 distinct states found | Finished in 15s
+TinyReauth | No error has been found | 3292275 distinct states found | Finished in 10min
+TinyS1 | No error has been found | 1152196 distinct states found | Finished in 03min
+TinyNotify | TIMEOUT at 20 min, no violation (6.43M distinct, 2.56M on queue): too big for a limited run
+TinyEnv | No error has been found | 2143217 distinct states found | Finished in 03min
+TinySame | No error has been found | 3238825 distinct states found | Finished in 10min
+TinyNoValue | No error has been found | 1888411 distinct states found | Finished in 05min
+TinyNotifyList | TIMEOUT at 20 min, no violation (6.50M distinct, 2.36M on queue): too big for a limited run
+TinyChunks2 | No error has been found | 129967 distinct states found | Finished in 18s
+TinyNoAbandon | No error has been found | 40014 distinct states found | Finished in 06s
+W_903First | Error: Invariant W_903First is violated. | 2663 distinct states found | Finished in 01s
+W_AbortMid | Error: Invariant W_AbortMid is violated. | 1269 distinct states found | Finished in 01s
+W_AccountChange | Error: Invariant W_AccountChange is violated. | 564699 distinct states found | Finished in 11s
+W_AcctEarly | Error: Invariant W_AcctEarly is violated. | 2462 distinct states found | Finished in 01s
+W_ChalChunked | Error: Invariant W_ChalChunked is violated. | 24424 distinct states found | Finished in 01s
+W_DelMid | Error: Invariant W_DelMid is violated. | 8787 distinct states found | Finished in 02s
+W_ExactPlus | Error: Invariant W_ExactPlus is violated. | 4353 distinct states found | Finished in 01s
+W_FailLogout | Error: Invariant W_FailLogout is violated. | 536692 distinct states found | Finished in 11s
+W_Late907 | Error: Invariant W_Late907 is violated. | 11041 distinct states found | Finished in 01s
+W_Late908 | Error: Invariant W_Late908 is violated. | 626 distinct states found | Finished in 00s
+W_Limit | Error: Invariant W_Limit is violated. | 3988 distinct states found | Finished in 01s
+W_LoggedIn | Error: Invariant W_LoggedIn is violated. | 717545 distinct states found | Finished in 14s
+W_MultiChunk | Error: Invariant W_MultiChunk is violated. | 3940 distinct states found | Finished in 01s
+W_NewList | Error: Invariant W_NewList is violated. | 700 distinct states found | Finished in 00s
+W_NewThenAuth | Error: Invariant W_NewThenAuth is violated. | 1365945 distinct states found | Finished in 26s
+W_NoValueLogin | Error: Invariant W_NoValueLogin is violated. | 22820 distinct states found | Finished in 02s
+W_PostReg | Error: Invariant W_PostReg is violated. | 36895 distinct states found | Finished in 02s
+W_PostRegErr | Error: Invariant W_PostRegErr is violated. | 1094 distinct states found | Finished in 01s
+W_Refuse907 | Error: Invariant W_Refuse907 is violated. | 603032 distinct states found | Finished in 12s
+W_Relogin | Error: Invariant W_Relogin is violated. | 780632 distinct states found | Finished in 16s
+W_Retry908 | Error: Invariant W_Retry908 is violated. | 586440 distinct states found | Finished in 12s
+W_StaleList | Error: Invariant W_StaleList is violated. | 6799 distinct states found | Finished in 02s
+W_TwoRound | Error: Invariant W_TwoRound is violated. | 22851 distinct states found | Finished in 02s
+MU_ChangeOn907 | Error: Action property Rule907NoChange is violated. | 31423 distinct states found | Finished in 06s
+MU_Chunk401 | Error: Invariant RuleClientFraming is violated. | 774 distinct states found | Finished in 01s
+MU_DelKeepOwed | Error: Invariant DelCancels is violated. | 122601 distinct states found | Finished in 17s
+MU_EarlyVerdict | Error: Action property RuleVerdictAfterLast is violated. | 1726 distinct states found | Finished in 01s
+MU_ExactShort | Error: Action property RuleClientSendsPayload is violated. | 1225 distinct states found | Finished in 01s
+MU_FinalShort | Error: Action property RuleClientSendsPayload is violated. | 13463 distinct states found | Finished in 03s
+MU_KeepAfterDel | Error: Action property RuleClientAuthOnlyEnabled is violated. | 11636 distinct states found | Finished in 04s
+MU_No907 | Error: Action property Rule907 is violated. | 31473 distinct states found | Finished in 06s
+MU_NoPlusAfter400 | Error: Invariant RuleClientFraming is violated. | 758 distinct states found | Finished in 01s
+MU_PostRegWrongErr | Error: Action property RuleReauthRefused is violated. | 1372 distinct states found | Finished in 02s
+MU_SrvKeepAfterDel | Error: Invariant DelCancels is violated. | 6744 distinct states found | Finished in 03s
