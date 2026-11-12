@@ -193,8 +193,9 @@ SrvEnd == sout' = sout /\ srv' = [srv EXCEPT !.endSeen = TRUE]      \* CN-16 aft
 
 \* Handshake D21: without reauth, every AUTHENTICATE line after a successful
 \* login that finds no exchange gets 907.
-\* D20 (v0.3): "fresh" refuses only while an account is set, so a client
-\* logged out by other means, or never logged in, may log in after 001.
+\* D20 (v0.3): "fresh" refuses only while an account is set or owed (903
+\* sent, its 900 still due), so a client logged out by other means, or
+\* never logged in, may log in after 001.
 NoReauth == \/ Reauth = "none" /\ srv.succeeded
             \/ FALSE
 Late907 == NoReauth /\ srv.sasl \notin Active

@@ -80,6 +80,6 @@ mut('MU_No907', 'TinyS1',
     'ELSE IF NoReauth\n    THEN',
     'ELSE IF FALSE\n    THEN')
 mut('MU_FreshNo907', 'TinyFresh',
-    '\\/ Reauth = "fresh" /\\ srv.account # ""',
+    '\\/ Reauth = "fresh" /\\ (srv.account # "" \\/ srv.owe900 # "")',
     '\\/ FALSE')
 print('ok')
