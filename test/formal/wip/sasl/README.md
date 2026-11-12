@@ -67,13 +67,15 @@ The v0.1 switches default to FALSE except where the table says otherwise: `AnyOr
 | `TinyChunks2` | limited (v0.1) | Spec | As TinyChunks, but FULL+SHORT and FULL+FULL+`+` responses are accepted | MaxLen 2 |
 | `TinyReauth` | limited | Spec | Reauthentication allowed: login after 001, account change a1→a2, a failed reauthentication that logs out (901), logout by other means then login again, 903 before 900, the account set before its late 900 | Reauth "full", ClientReauth, AcctEarly; accounts a1,a2; 2 openers; 1 env event |
 | `TinyS1` | limited | Spec | S1 server: 907 for every AUTHENTICATE line after login, 904 for an unauthenticated opener after 001 (D8, `RuleReauthRefused`) | as TinyReauth, Reauth "none", AcctEarly off |
-| `TinyNotify` | limited | Spec | cap-notify: sasl absent then NEW sasl=list, DEL mid-exchange (and its cancelled owed output), silent mechanism changes (stale lists), 908 | Mechs P,E; 2 openers; 2 REQs; 2 env events; SilentChange; Send908 |
+| `TinyNotify` | limited | Spec | cap-notify: sasl absent then NEW sasl=list, DEL mid-exchange (and its cancelled owed output), silent mechanism changes (stale lists), 908 | Mechs P,E; 2 openers; 2 REQs; 1 env event (v0.2; was 2); SilentChange; Send908 |
 | `TinyNotifyList` | limited (v0.1) | Spec | List updates by NEW only, so `MechListAgrees` is live | as TinyNotify, SilentChange off, Send908 off |
 | `TinyNoAbandon` | limited (v0.1) | Spec | Server-driven completion: no abort, give-up or quit; `ExchangeEnds` with `RuleExitByServerLine` | as TinyMechs, NoAbandon |
 | `TinyEnv` | limited | EnvSpec | As TinyMechs with server fairness only: safety and `OwedEventuallyClears` | TinyMechs |
 | `TinySame` | limited, own list | Spec | Reauth "same": a change of account refused with 907 at the verdict (D9; open question Q4, so kept apart) | as TinyReauth, Reauth "same" |
 | `Reference` | **comprehensive, not now** | Spec | Everything together | Mechs P,S,X; 2 chunks; MaxLen 2; 3 openers; 2 REQs; 2 env events; Reauth "full"; every switch on except PickListed and NoAbandon |
 | `RefSafety` | **comprehensive, not now** | EnvSpec | Reference, safety only, with `VIEW SafetyView` | Reference |
+| `RefNotify` | **comprehensive, not now** (v0.2) | Spec | TinyNotify at its v0.1 size, which did not finish in a 20-minute limited run | as TinyNotify, 2 env events |
+| `RefNotifyList` | **comprehensive, not now** (v0.2) | Spec | TinyNotifyList at its v0.1 size | as TinyNotifyList, 2 env events |
 | `RefNone` | **comprehensive, not now** | Spec | Reference with Reauth "none" | Reference |
 
 Every witness config is limited. Each checks one `W_*` invariant, which should FAIL: a counterexample shows the feature is reached.
@@ -98,10 +100,10 @@ Every witness config is limited. Each checks one `W_*` invariant, which should F
 | `W_AcctEarly` | TinyReauth | v0.1: the account set while its 900 is still owed (R1 relaxed) |
 | `W_Late907` | TinyS1 | 907 after a login |
 | `W_PostRegErr` | TinyS1 | an unauthenticated opener after 001 gets 904 |
-| `W_NewList` | TinyNotifyList | v0.1: a valued NEW changes and replaces the client's list |
-| `W_NewThenAuth` | TinyNotify | v0.1: LS without sasl, then NEW, REQ, ACK, opener, 903, in that order |
-| `W_DelMid` | TinyNotify | DEL of sasl during an exchange |
-| `W_StaleList` | TinyNotify | an opener of a listed mechanism the server no longer supports |
+| `W_NewList` | RefNotifyList | v0.1: a valued NEW changes and replaces the client's list |
+| `W_NewThenAuth` | RefNotify | v0.1: LS without sasl, then NEW, REQ, ACK, opener, 903, in that order |
+| `W_DelMid` | RefNotify | DEL of sasl during an exchange |
+| `W_StaleList` | RefNotify | an opener of a listed mechanism the server no longer supports |
 | `W_Refuse907` | TinySame | a change of account refused with 907 |
 
 ### Commands
@@ -138,6 +140,8 @@ Comprehensive (**later, not now**):
     java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config Reference.cfg SpecSasl.tla
     java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config RefSafety.cfg SpecSasl.tla
     java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config RefNone.cfg   SpecSasl.tla
+    java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config RefNotify.cfg SpecSasl.tla
+    java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config RefNotifyList.cfg SpecSasl.tla
 
 ## Mutants (expected results, not yet run)
 
@@ -148,9 +152,9 @@ Comprehensive (**later, not now**):
 | `MU_Chunk401` | TinyChunks | The client sends the last 400-byte chunk and its `+` as one over-long line. | `RuleClientLineLen` (also `RuleClientSendsPayload`) |
 | `MU_FinalShort` (v0.1) | TinyChunks | The client sends SHORT where the empty final response `+` is due. | `RuleClientEmptyFinal` (also `RuleClientSendsPayload`). `RuleClientFraming` and v0's plan-based check would pass. |
 | `MU_ExactShort` (v0.1) | TinyChunks | The client ends an exact-400 payload with SHORT instead of `+`. | `RuleClientSendsPayload`. `RuleClientFraming` would pass. |
-| `MU_KeepAfterDel` | TinyNotify | The client keeps its exchange after DEL sasl, and keeps sending. | `RuleClientAuthOnlyEnabled` |
-| `MU_SrvKeepAfterDel` | TinyNotify | The server keeps the exchange after sending DEL sasl. | `DelCancels` |
-| `MU_DelKeepOwed` (v0.1) | TinyNotify | The server's DEL leaves an owed 903 alive. | `DelCancels` (also `RuleDelCancelsOutput`) |
+| `MU_KeepAfterDel` | RefNotify | The client keeps its exchange after DEL sasl, and keeps sending. | `RuleClientAuthOnlyEnabled` |
+| `MU_SrvKeepAfterDel` | RefNotify | The server keeps the exchange after sending DEL sasl. | `DelCancels` |
+| `MU_DelKeepOwed` (v0.1) | RefNotify | The server's DEL leaves an owed 903 alive. | `DelCancels` (also `RuleDelCancelsOutput`) |
 | `MU_ChangeOn907` | TinyS1 | The server logs the client out in the step that sends 907. | `Rule907NoChange` (`RuleAccountNotified` also forbids it) |
 | `MU_No907` | TinyS1 | An S1 server lets an authenticated client authenticate again. | `Rule907` (also `RuleReauthRefused`) |
 | `MU_PostRegWrongErr` (v0.1) | TinyS1 | An S1 server answers an unauthenticated opener after 001 with 906 instead of an error. | `RuleReauthRefused`. `RuleOpenerAnswered` would pass. |

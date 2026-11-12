@@ -12,10 +12,10 @@ Expected (predictions; nothing has been run):
                                  400 (chunking off by one)     -> RuleClientFraming
   MU_Chunk401       (TinyChunks) client sends a 400-byte payload as one over-long
                                  line instead of chunk + "+"   -> RuleClientLineLen
-  MU_KeepAfterDel   (TinyNotify) client keeps its exchange (and keeps sending)
+  MU_KeepAfterDel   (RefNotify)  client keeps its exchange (and keeps sending)
                                  after DEL sasl                -> RuleClientAuthOnlyEnabled
-  MU_SrvKeepAfterDel(TinyNotify) server keeps the exchange after DEL sasl -> DelCancels
-  MU_DelKeepOwed    (TinyNotify) v0.1: DEL leaves an owed 903 alive (CN:456-457)
+  MU_SrvKeepAfterDel(RefNotify)  server keeps the exchange after DEL sasl -> DelCancels
+  MU_DelKeepOwed    (RefNotify)  v0.1: DEL leaves an owed 903 alive (CN:456-457)
                                                                -> DelCancels
   MU_FinalShort     (TinyChunks) v0.1: client sends SHORT where the empty final
                                  response "+" is due (S1-9)    -> RuleClientEmptyFinal
@@ -52,13 +52,13 @@ mut('MU_NoPlusAfter400', 'TinyChunks',
 mut('MU_Chunk401', 'TinyChunks',
     'ELSE IF p.full THEN Fulls(p.n) \\o <<"PLUS">>   \\* cli-exact',
     'ELSE IF p.full THEN Fulls(p.n - 1) \\o <<"LONG">>')
-mut('MU_KeepAfterDel', 'TinyNotify',
+mut('MU_KeepAfterDel', 'RefNotify',
     '!.sasl = IF InExchange THEN "idle" ELSE @, !.out = IF InExchange THEN <<>> ELSE @,',
     '!.sasl = @, !.out = @,')
-mut('MU_SrvKeepAfterDel', 'TinyNotify',
+mut('MU_SrvKeepAfterDel', 'RefNotify',
     '!.cout = <<>>, !.sasl = "idle", !.got = 0,',
     '!.got = @,')
-mut('MU_DelKeepOwed', 'TinyNotify',
+mut('MU_DelKeepOwed', 'RefNotify',
     '!.owe903 = FALSE, !.owe904 = FALSE, !.owe908 = FALSE]',
     '!.owe904 = FALSE, !.owe908 = FALSE]')
 mut('MU_FinalShort', 'TinyChunks',

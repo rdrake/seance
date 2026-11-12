@@ -58,6 +58,14 @@ BASE['TinyNoValue'] = dict(BASE['TinyMechs'], AdvertValue='FALSE', PickListed='T
                            AnyOrder908='FALSE')
 # v0.1 (#7): list updates by NEW only, so MechListAgrees is live.
 BASE['TinyNotifyList'] = dict(BASE['TinyNotify'], SilentChange='FALSE', Send908='FALSE')
+# v0.2: the two notify configs above did not finish in a 20-minute limited run
+# (6.5M states, 2.3M+ queued). Their sizes move to the comprehensive list as
+# RefNotify/RefNotifyList (the notify witnesses keep those bases: they fail
+# fast), and the limited configs get one environment event instead of two.
+BASE['RefNotify'] = BASE['TinyNotify']
+BASE['RefNotifyList'] = BASE['TinyNotifyList']
+BASE['TinyNotify'] = dict(BASE['RefNotify'], MaxEnv=1)
+BASE['TinyNotifyList'] = dict(BASE['RefNotifyList'], MaxEnv=1)
 # v0.1 (#12): room for FULL + SHORT to be accepted (MaxLen 2).
 BASE['TinyChunks2'] = dict(BASE['TinyChunks'], MaxLen=2)
 # v0.1 (#15): server-driven completion: no abort, give-up or quit.
@@ -96,6 +104,8 @@ CFGS['Reference'] = ('Reference', 'Spec', INV, SAFE + LIVE, None,
                      'COMPREHENSIVE: not for now')
 CFGS['RefSafety'] = ('Reference', 'EnvSpec', INV, SAFE, 'SafetyView',
                      'COMPREHENSIVE: not for now (safety only, VIEW)')
+for b in ('RefNotify', 'RefNotifyList'):
+    CFGS[b] = (b, 'Spec', INV, SAFE + LIVE, None, 'COMPREHENSIVE: not for now')
 CFGS['RefNone'] = ('RefNone', 'Spec', INV, SAFE + LIVE, None,
                    'COMPREHENSIVE: not for now')
 
@@ -108,8 +118,8 @@ WIT = {
     'W_FailLogout': 'TinyReauth', 'W_Relogin': 'TinyReauth', 'W_903First': 'TinyReauth',
     'W_AcctEarly': 'TinyReauth',
     'W_Late907': 'TinyS1', 'W_PostRegErr': 'TinyS1',
-    'W_NewList': 'TinyNotifyList', 'W_NewThenAuth': 'TinyNotify', 'W_DelMid': 'TinyNotify',
-    'W_StaleList': 'TinyNotify',
+    'W_NewList': 'RefNotifyList', 'W_NewThenAuth': 'RefNotify', 'W_DelMid': 'RefNotify',
+    'W_StaleList': 'RefNotify',
     'W_NoValueLogin': 'TinyNoValue',
     'W_Refuse907': 'TinySame',
 }
