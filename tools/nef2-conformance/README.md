@@ -26,5 +26,10 @@ AfterNET.
   writes it to `state/saslusers`, the SASLDB file, as a plain-text password.
   `state/` is gitignored.
 - **IAuth policy:** `SRTAWUwFr`.
+- **Fake lag:** off, for conformance runs only. The image's `base.conf` puts
+  every client in its `Users` class, which already sets `fakelagfactor = 0`
+  and `fakelagminimum = 0`, so this config adds nothing; 20 back-to-back PINGs
+  come back at once. AfterNET keeps its lag, so the harness runs here without
+  `--small` or `--pace`.
 - **Check:** `python3 -I smoke.py` logs in, registers, sends a line and reads
   it back with `CHATHISTORY LATEST`.
