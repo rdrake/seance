@@ -182,7 +182,7 @@ TLC: 82 modelled queries on #hckmattlc; running 82 (page <= 100); 0 left for the
   #1425 n=4 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hckmattlc msgid=ABAAAaHQRehhLG 3
   #1485 n=4 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hckmattlc msgid=ABAABaHQRehqLI 1
   #1486 n=4 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hckmattlc msgid=ABAAAaHQRehhLG 3
-  #1524 n=4 page=0 live=0 M_strict=ERROR(None) I=ERROR(None)  CHATHISTORY BEFORE #hckmattlc msgid=zzzz-not-a-msgid-0000 5
+  #1524 n=4 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hckmattlc msgid=zzzz-not-a-msgid-0000 5
   #1530 n=4 page=4 live=0 M_strict=NO MATCH(2) I=VIOLATES PageEligible(3) M_loose=NO MATCH  CHATHISTORY BEFORE #hckmattlc msgid=ABAAAaHQReh6LK 5
   #1536 n=4 page=4 live=0 M_strict=NO MATCH(2) I=VIOLATES PageEligible(3) M_loose=NO MATCH  CHATHISTORY BEFORE #hckmattlc msgid=ABAAAaHQReiLLM 5
   #1559 n=5 page=2 live=1 M_strict=match(4) I=holds(4)  CHATHISTORY LATEST #hckmattlc * 2

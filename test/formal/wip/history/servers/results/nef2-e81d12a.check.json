@@ -1474,16 +1474,10 @@
     "page": 0,
     "n": 4,
     "live": false,
-    "M_strict": "ERROR",
-    "M_strict_states": null,
-    "M_strict_err": [
-     "Error: Parsing or semantic analysis failed."
-    ],
-    "I": "ERROR",
-    "I_states": null,
-    "I_err": [
-     "Error: Parsing or semantic analysis failed."
-    ]
+    "M_strict": "match",
+    "M_strict_states": 3,
+    "I": "holds",
+    "I_states": 3
    },
    {
     "i": 1530,

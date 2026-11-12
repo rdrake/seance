@@ -16,7 +16,7 @@ MNext ==
 INext ==
     \/ Ask
     \/ ti = 1 /\ ti' = 2
-       FALSE
+       /\ SrvFail
 MSpec == TInit /\ [][MNext]_<<vars, ti>>
 ISpec == TInit /\ [][INext]_<<vars, ti>>
 TDone == ti = 2

@@ -673,7 +673,7 @@ def tlc_module(name, c):
     UNCH = "<<time, ord, liveSt, liveRel, s2c, buf, pgSeen, liveSeen, phase, anchor, pages, got, why, pg1, unkEmpty>>"
     ans = (f'SrvFail /\\ s2c\'[Len(s2c\')].k = "fail"' if c["fail"] else
            f'SrvAnswer /\\ s2c\'[Len(s2c\')].ms = Page /\\ s2c\'[Len(s2c\')].end = {"TRUE" if c["end"] else "FALSE"}')
-    inj = ("FALSE" if c["fail"] else
+    inj = ("/\\ SrvFail" if c["fail"] else
            f'/\\ s2c\' = Append(s2c, [k |-> "page", ms |-> Page, end |-> {"TRUE" if c["end"] else "FALSE"},\n'
            f'                          qq |-> q, el |-> Elig(q, ord), so |-> ord])\n'
            f'       /\\ q\' = NoQ\n'
