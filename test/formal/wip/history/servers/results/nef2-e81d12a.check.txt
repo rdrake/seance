@@ -1,0 +1,112 @@
+server: nef2-e81d12a  version: ['@time=2026-11-12T15:00:04.662Z :irc.conformance.test 351 hckmatq u2.10.12.14+Nefarious(2.0.0)+[].5 irc.conformance.test :B27ADMRUZ6']
+caps: batch draft/chathistory echo-message labeled-response message-tags server-time
+queries: 1562 (573 follow-ups)
+events replayed in history (no event-playback) on: []
+ties #hckmatempty: []
+ties #hckmathist: [['h05', 'h06', 'h07'], ['h09', 'h10']]
+ties #hckmatnojoin: []
+ties #hckmatother: []
+ties #hckmattlc: [['t2', 't3']]
+ties dm: []
+order #hckmathist: server ['h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13', 'h14']
+order #hckmattlc: server ['t1', 't2', 't3', 't4']
+untagged last pages (SendsEnd is a SHOULD): 64
+TARGETS order: ['ascending']
+racing query #1558 (CHATHISTORY LATEST #hckmathist * 5): fits the snapshot before the racing line was stored (failed checks before/after: [0, 1])
+walk walk-msgid 3 (5 pages): 14 lines retrieved, missing [], duplicates 0
+walk walk-msgid 4 (4 pages): 14 lines retrieved, missing [], duplicates 0
+walk walk-ts 3 (5 pages): 13 lines retrieved, missing ['h05'], duplicates 0
+walk walk-ts 4 (4 pages): 12 lines retrieved, missing ['h05', 'h06'], duplicates 0
+
+property     pass   fail    n/a
+FRAME        1562      0      0
+MSGID        3079      0      0
+ELIG         1378      0     12
+EXACT        1498     18     12
+CONTIG       1376      0     12
+ORDER        1378      0     12
+END           870     11    561
+ENDLIVE       238      0      0
+UNKNOWN        22     14      2
+AROUND        140      0      0
+TARGETS         2      4      0
+NOAUTO          0      1      0
+ISUPPORT        2      0      0
+FAILREPLY       0     12      0
+
+[END] AROUND msgid  x4  ()
+    e.g. #1514 CHATHISTORY AROUND #hckmathist msgid=ABAAAaHQReh6LK 5  [msgid from another channel]
+    expected: no end tag
+    observed: tagged
+[END] BEFORE msgid  x2  ()
+    e.g. #1530 CHATHISTORY BEFORE #hckmattlc msgid=ABAAAaHQReh6LK 5  [msgid from another channel]
+    expected: no end tag
+    observed: tagged
+[END] BETWEEN msgid,msgid  x2  ()
+    e.g. #1534 CHATHISTORY BETWEEN #hckmattlc msgid=ABAAAaHQRehhLG msgid=ABAAAaHQReh6LK 5  [msgid from another channel]
+    expected: no end tag
+    observed: tagged
+[END] LATEST msgid  x1  ()
+    e.g. #1523 CHATHISTORY LATEST #hckmattlc msgid=zzzz-not-a-msgid-0000 5  [unknown msgid]
+    expected: no end tag
+    observed: tagged
+[END] TARGETS  x2  ()
+    e.g. #1552 CHATHISTORY TARGETS timestamp=2026-11-12T14:59:04.664Z timestamp=2026-11-12T15:01:14.904Z 10  [TARGETS fwd]
+    expected: no more targets
+    observed: 4 eligible, 3 sent
+[EXACT] AROUND msgid  x8  (latitude (CH:69 MAY return fewer))
+    e.g. #319 CHATHISTORY AROUND #hckmathist msgid=ABAABaHQRegNLB 14  [AROUND msgid=#9]
+    expected: min(limit, available) = 13 (CH:69 lower-case 'should')
+    observed: 12: ['h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13', 'h14']
+[EXACT] AROUND ts  x10  (latitude (CH:69 MAY return fewer))
+    e.g. #280 CHATHISTORY AROUND #hckmathist timestamp=2026-11-12T15:00:04.749Z 14  [AROUND ts=#8]
+    expected: min(limit, available) = 14 (CH:69 lower-case 'should')
+    observed: 13: ['h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13', 'h14']
+[FAILREPLY] AFTER msgid  x2  (info: FAIL is a completion (CH-7))
+    e.g. #1507 CHATHISTORY AFTER #hckmathist msgid=zzzz-not-a-msgid-0000 5  [unknown msgid]
+    expected: a page
+    observed: @label=L1507;time=2026-11-12T15:00:14.710Z :irc.conformance.test FAIL CHATHISTORY MESSAGE_ERROR AFTER #hckmathist zzzz-not-a-msgid-0000 :Unknown message id
+[FAILREPLY] AROUND msgid  x2  (info: FAIL is a completion (CH-7))
+    e.g. #1508 CHATHISTORY AROUND #hckmathist msgid=zzzz-not-a-msgid-0000 5  [unknown msgid]
+    expected: a page
+    observed: @label=L1508;time=2026-11-12T15:00:14.710Z :irc.conformance.test FAIL CHATHISTORY MESSAGE_ERROR AROUND #hckmathist zzzz-not-a-msgid-0000 :Unknown message id
+[FAILREPLY] BEFORE msgid  x2  (info: FAIL is a completion (CH-7))
+    e.g. #1506 CHATHISTORY BEFORE #hckmathist msgid=zzzz-not-a-msgid-0000 5  [unknown msgid]
+    expected: a page
+    observed: @label=L1506;time=2026-11-12T15:00:14.708Z :irc.conformance.test FAIL CHATHISTORY MESSAGE_ERROR BEFORE #hckmathist zzzz-not-a-msgid-0000 :Unknown message id
+[FAILREPLY] BEFORE ts  x1  (info: FAIL is a completion (CH-7))
+    e.g. #1544 CHATHISTORY BEFORE #hckmatnojoin timestamp=2026-11-12T15:01:14.904Z 10  [target not joined]
+    expected: a page
+    observed: @label=L1544;time=2026-11-12T15:00:14.906Z :irc.conformance.test FAIL CHATHISTORY INVALID_TARGET BEFORE #hckmatnojoin :No access to target
+[FAILREPLY] BETWEEN msgid,msgid  x4  (info: FAIL is a completion (CH-7))
+    e.g. #1509 CHATHISTORY BETWEEN #hckmathist msgid=zzzz-not-a-msgid-0000 msgid=ABAAAaHQRehYLF 5  [unknown msgid]
+    expected: a page
+    observed: @label=L1509;time=2026-11-12T15:00:14.712Z :irc.conformance.test FAIL CHATHISTORY MESSAGE_ERROR BETWEEN #hckmathist zzzz-not-a-msgid-0000 :Unknown message id
+[FAILREPLY] LATEST *  x1  (info: FAIL is a completion (CH-7))
+    e.g. #1543 CHATHISTORY LATEST #hckmatnojoin * 10  [target not joined]
+    expected: a page
+    observed: @label=L1543;time=2026-11-12T15:00:14.905Z :irc.conformance.test FAIL CHATHISTORY INVALID_TARGET LATEST #hckmatnojoin :No access to target
+[NOAUTO] -  x1  ()
+    e.g. #None   []
+    expected: no playback on JOIN (CH:41)
+    observed: [':irc.conformance.test NOTICE hckmatl :on 5 ca 1(100) ft 10(10) tr']
+[TARGETS] TARGETS  x4  (selection/order per CH:115-119)
+    e.g. #1549 CHATHISTORY TARGETS timestamp=2026-11-12T15:01:14.904Z timestamp=2026-11-12T14:59:04.664Z 1  [TARGETS back]
+    expected: ['hckmata'], each with its latest time, ordered by time
+    observed: [('#hckmatother', 1794495604858)]
+[UNKNOWN] AROUND msgid  x4  (violation of the D5 restriction)
+    e.g. #1514 CHATHISTORY AROUND #hckmathist msgid=ABAAAaHQReh6LK 5  [msgid from another channel]
+    expected: empty batch or FAIL (D5, MI-5)
+    observed: 2 lines: ['h13', 'h14']
+[UNKNOWN] BEFORE msgid  x4  (violation of the D5 restriction)
+    e.g. #1512 CHATHISTORY BEFORE #hckmathist msgid=ABAAAaHQReh6LK 5  [msgid from another channel]
+    expected: empty batch or FAIL (D5, MI-5)
+    observed: 5 lines: ['h10', 'h11', 'h12', 'h13', 'h14']
+[UNKNOWN] BETWEEN msgid,msgid  x4  (violation of the D5 restriction)
+    e.g. #1516 CHATHISTORY BETWEEN #hckmathist msgid=ABAAAaHQRee4K4 msgid=ABAAAaHQReh6LK 5  [msgid from another channel]
+    expected: empty batch or FAIL (D5, MI-5)
+    observed: 5 lines: ['h02', 'h03', 'h04', 'h05', 'h06']
+[UNKNOWN] LATEST msgid  x2  (violation of the D5 restriction)
+    e.g. #1505 CHATHISTORY LATEST #hckmathist msgid=zzzz-not-a-msgid-0000 5  [unknown msgid]
+    expected: empty batch or FAIL (D5, MI-5)
+    observed: 5 lines: ['h10', 'h11', 'h12', 'h13', 'h14']
