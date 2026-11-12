@@ -4,13 +4,16 @@ A nefarious2 of its own for the server checks against the History model
 (`test/formal/wip/history/`). It runs on 127.0.0.1 only, and never against
 AfterNET.
 
-- **Image:** stock evilnet `ircv3.2-upgrade`. On 2026-11-12 that was
-  e81d12aa, which includes the a428911b tag fix.
+- **Image:** evilnet publishes `ircv3.2-upgrade` builds as packages
+  (linux/amd64). On 2026-11-12 the newest was e81d12a, which includes the
+  a428911b tag fix:
 
-      git clone --branch ircv3.2-upgrade https://github.com/evilnet/nefarious2.git
-      cd nefarious2 && docker build -t nefarious2:ircv3 .
+      docker pull ghcr.io/evilnet/nefarious2:ircv3.2-upgrade-e81d12a
+      NEFARIOUS_IMAGE=ghcr.io/evilnet/nefarious2:ircv3.2-upgrade-e81d12a ./run.sh
 
-  Set `NEFARIOUS_IMAGE` to use another tag.
+  `run.sh` defaults to `nefarious2:ircv3`, a local build of the same branch
+  (`docker build -t nefarious2:ircv3 .` in a checkout of it). Set
+  `NEFARIOUS_IMAGE` to choose the image.
 - **Run:** `./run.sh` starts the container `nef2-conformance` detached. Ports:
   16667 plain IRC and 18067 `ws://`. Watch it with
   `docker logs -f nef2-conformance`.
