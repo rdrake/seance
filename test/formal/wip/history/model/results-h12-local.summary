@@ -1,0 +1,77 @@
+OK History HTiny expect=pass got=pass distinct=3140 
+OK History HTiny2 expect=pass got=pass distinct=10278 
+OK History HHeldStop expect=pass got=pass distinct=508 
+OK History HMsgs expect=pass got=pass distinct=2898 
+OK History W_EmptyPage expect=fail got=fail distinct=183 Invariant NoLoss is violated
+OK History W_TimeOrdered expect=fail got=fail distinct=290 Invariant NoLoss is violated
+OK History W_D7Reorder expect=fail got=fail distinct=543 Invariant NoLoss is violated
+OK History W_TsTie expect=fail got=fail distinct=558 Invariant NoLoss is violated
+OK History W_Budget expect=fail got=fail distinct=449 Invariant NoLoss is violated
+OK History W_Holes expect=fail got=fail distinct=235 Invariant NoLoss is violated
+OK History HNoBatchAgrees expect=pass got=pass distinct=58722 
+OK History HBatchAgreesBudget expect=pass got=pass distinct=424 
+OK History W_BatchBudget expect=fail got=fail distinct=682 Invariant NoLoss is violated
+OK History W_NoDedupe expect=fail got=fail distinct=529 Invariant NoDupLive is violated
+OK History W_Append expect=fail got=fail distinct=1252 Invariant Order is violated
+OK History HFuzz expect=pass got=pass distinct=13858 
+OK History CoverDone expect=fail got=fail distinct=1112 Invariant CoverDone is violated
+OK History CoverMultiPage expect=fail got=fail distinct=1112 Invariant CoverMultiPage is violated
+OK History CoverFloor expect=fail got=fail distinct=7372 Invariant CoverFloor is violated
+OK History CoverEmpty expect=fail got=fail distinct=1923 Invariant CoverEmpty is violated
+OK History CoverEnd expect=fail got=fail distinct=1112 Invariant CoverEnd is violated
+OK History CoverLiveInPage expect=fail got=fail distinct=135 Invariant CoverLiveInPage is violated
+OK History CoverLiveBoth expect=fail got=fail distinct=529 Invariant CoverLiveBoth is violated
+OK History CoverBudget expect=fail got=fail distinct=249 Invariant CoverBudget is violated
+OK History HFail expect=pass got=pass distinct=4604 
+OK History W_FailLoss expect=fail got=fail distinct=161 Invariant NoLossEvenOnFail is violated
+OK History CoverFail expect=fail got=fail distinct=161 Invariant CoverFail is violated
+OK History HJoin expect=pass got=pass distinct=500 
+OK History HJoinFail expect=pass got=pass distinct=698 
+OK History W_JoinHoles expect=fail got=fail distinct=233 Invariant JoinRecovers is violated
+OK History CoverJoinDone expect=fail got=fail distinct=137 Invariant CoverJoinDone is violated
+OK History HMore expect=pass got=pass distinct=158 
+OK History W_MoreHoles expect=fail got=fail distinct=79 Invariant MoreRecovers is violated
+OK History W_MoreTsTie expect=fail got=fail distinct=54 Invariant MoreRecovers is violated
+OK History CoverMoreDone expect=fail got=fail distinct=47 Invariant CoverMoreDone is violated
+OK History HMoreFail expect=pass got=pass distinct=221 
+OK History CoverFail_HJoinFail expect=fail got=fail distinct=161 Invariant CoverFail is violated
+OK History CoverFail_HMoreFail expect=fail got=fail distinct=56 Invariant CoverFail is violated
+OK History CoverJoinDone_HJoinFail expect=fail got=fail distinct=160 Invariant CoverJoinDone is violated
+OK History CoverMoreDone_HMoreFail expect=fail got=fail distinct=55 Invariant CoverMoreDone is violated
+OK History W_TieReconnect expect=fail got=fail distinct=4562 Invariant NoLoss is violated
+OK History CoverEndReversed expect=fail got=fail distinct=2475 Invariant CoverEndReversed is violated
+OK History CoverHeldStop expect=fail got=fail distinct=303 Invariant CoverHeldStop is violated
+OK History HOld expect=pass got=pass distinct=14206 
+OK History HOld2 expect=pass got=pass distinct=58496 
+OK History HOldFuzz expect=pass got=pass distinct=139472 
+OK History W_OldTieBudget expect=fail got=fail distinct=57115 Invariant NoLoss is violated
+OK History HBelowHeld expect=pass got=pass distinct=152 
+OK History HOldHeldStop expect=pass got=pass distinct=594 
+OK History CoverOldDropped expect=fail got=fail distinct=7420 Invariant CoverOldDropped is violated
+OK History CoverOldDropped_HBelowHeld expect=fail got=fail distinct=81 Invariant CoverOldDropped is violated
+OK History W_FuzzBelow expect=fail got=fail distinct=81 Invariant HeldOrder is violated
+OK History CoverDone_HTiny2 expect=fail got=fail distinct=2212 Invariant CoverDone is violated
+OK History CoverDone_HHeldStop expect=fail got=fail distinct=303 Invariant CoverDone is violated
+OK History CoverDone_HMsgs expect=fail got=fail distinct=1112 Invariant CoverDone is violated
+OK History CoverDone_HFuzz expect=fail got=fail distinct=6708 Invariant CoverDone is violated
+OK History CoverDone_HNoBatchAgrees expect=fail got=fail distinct=3802 Invariant CoverDone is violated
+OK History CoverDone_HBatchAgreesBudget expect=fail got=fail distinct=162 Invariant CoverDone is violated
+OK History CoverDone_HFail expect=fail got=fail distinct=1644 Invariant CoverDone is violated
+OK History CoverDone_HOld expect=fail got=fail distinct=6744 Invariant CoverDone is violated
+OK History CoverDone_HOld2 expect=fail got=fail distinct=12693 Invariant CoverDone is violated
+OK History CoverDone_HBelowHeld expect=fail got=fail distinct=66 Invariant CoverDone is violated
+OK HS_NewId HS_NewId_HTiny expect=fail got=fail distinct=152 Invariant ContentOnce is violated
+OK HS_NewIdR HS_NewIdR_HTiny expect=fail got=fail distinct=69 Invariant ReplayIdStable is violated
+OK HS_NewIdAnchor HS_NewIdAnchor_HTiny expect=fail got=fail distinct=561 Invariant NoLoss is violated
+OK HS_NewIdUnknown HS_NewIdUnknown_HTiny expect=fail got=fail distinct=402 Invariant CoverUnknownSel is violated
+OK HS_NewIdChain HS_NewIdChain_HTiny expect=fail got=fail distinct=561 Invariant CoverUnknownLoss is violated
+OK HS_UnknownLatest HS_UnknownLatest_HTiny expect=fail got=fail distinct=402 Invariant UnknownEmpty is violated
+OK HS_EndLast HS_EndLast_HNoBatchAgrees expect=fail got=fail distinct=2475 Invariant EndNext is violated
+OK HS_EndEmpty HS_EndEmpty_W_EmptyPage expect=fail got=fail distinct=70 Invariant EndNext is violated
+OK HC_MoreNewest HC_MoreNewest_HMore expect=fail got=fail distinct=47 Invariant MoreRecovers is violated
+OK HS_Anchor HS_Anchor_HTiny expect=fail got=fail distinct=402 Invariant PageEligible is violated
+OK HS_FalseEnd HS_FalseEnd_HTiny expect=fail got=fail distinct=70 Invariant EndTruthful is violated
+OK HC_OnePage HC_OnePage_HTiny expect=fail got=fail distinct=137 Invariant NoLoss is violated
+OK HC_FloorLe HC_FloorLe_HTiny expect=fail got=fail distinct=137 Invariant NoLoss is violated
+OK HC_KeepOld HC_KeepOld_HBelowHeld expect=fail got=fail distinct=81 Invariant HeldOrder is violated
+OK HC_KeepOldOrder HC_KeepOldOrder_HBelowHeld expect=fail got=fail distinct=81 Invariant Order is violated

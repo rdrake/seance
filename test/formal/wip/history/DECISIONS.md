@@ -683,3 +683,117 @@ Missing from History.tla:
    while the restore batch is open) and belongs in a session model, not
    History. Covered for now only by test/irc/persistence.ts "holds the
    autojoin while a restoration batch is still arriving".
+
+## D35 History v1.2: NOld, and lines below the held range (2026-11-12)
+
+Answers D34 item 1. Item 2 (the restore race) stays out of History.
+
+- **What changed in History.tla.**
+  - New constant `NOld`: stored lines older than every held line. They are in
+    the server's store but not in the client's buffer. In reconnect mode the
+    store is `Old ++ Held ++ Gap` (ids `1..NOld`, then the held ones, then the
+    gap). The other modes assume `NOld = 0`.
+  - `Floor` reads the newest held line, `time[NOld + NHeld]`. The new
+    `HoldsFrom` is the oldest held line's time (Seance: `chan.oldestTimeOf`).
+  - `Cutoff == min(Floor, HoldsFrom)`.
+  - CRecv merges `Kept(it)`, not `it.ms`. In reconnect mode, with something
+    held, a page line with `T < Cutoff` is not placed. The stop decision, the
+    anchor, the budget and `pgSeen` still read the whole page, as Seance's
+    `reached` and `oldest` do.
+  - New invariant **HeldOrder** (in SAFE): in a reconnect, no line older than
+    every held line comes after a held line in the buffer. New cover
+    **CoverOldDropped**: a page reached below everything held and a line was
+    dropped.
+- **Decision: lines below the held range are dropped (Seance's rule since #282).**
+  - A line below `min(floor, oldest held)` is older than the gap and was never
+    loaded. Placed, an appending client puts it after the held lines, above the
+    rejoin. Scrolling up brings it as history.
+  - A line at or above the cutoff is merged as before: by msgid (Dedupe), then
+    by time or appended (InsertMerge).
+  - With nothing held, nothing is dropped. Seance needs a held msgid; the model
+    needs `NHeld > 0`.
+  - With `NOld = 0` no page line is ever below the cutoff (store times are
+    non-decreasing), so v1.1's behaviour is unchanged.
+- **Mutants (mkhist.py, Placed(m) == TRUE: pre-#282, append them):**
+  - HC_KeepOld violates HeldOrder.
+  - HC_KeepOldOrder violates Order. This is the fixture's Python property
+    (d0322ffa7: Order h,o,a).
+  - Both run on HBelowHeld, the belowHeld shape: one old line, one held, one
+    gap line, no live line, Limit 3 (one LATEST page holds all of it), and
+    InsertMerge off (Seance appends on a reconnect).
+  - With InsertMerge on, an old line would be inserted before the held ones,
+    and neither property breaks. Only an appending client shows the bug.
+- **Two findings, kept as W_ configs:**
+  - **W_FuzzBelow.** The cutoff is min(floor, oldest held). With one held line
+    the FUZZ window lies below the oldest held line, so an old line inside it
+    is kept. An appending client then puts it after the held line, which
+    violates HeldOrder. Run: Fuzz 1, Times {1, 2}.
+    - Seance's 5 s window has this hole for lines up to 5 s older than its
+      oldest held line.
+    - The model has no clock skew, so it calls such a line old. Under skew it
+      could be a gap line, which is why Seance keeps it.
+  - **W_OldTieBudget** (HOldFuzz's first run, at Limit 1). Every time is tied,
+    so Fuzz puts the floor at 0 and no page stops the walk. Without Stable, a
+    gap line is ordered before the old one, and six lines at one per page
+    outrun pages(5). This is D25's tie-and-budget story (W_TieReconnect),
+    with the old line as the extra. HOldFuzz now runs at Limit 2 with Times
+    {1, 2, 3}: with {1, 3}, a Fuzz of 1 changes no stop or drop, and its count
+    equalled HOld2's.
+- **TLC runs, local** (`tla2tools.jar`, -workers 1 so that the counts at a
+  violation repeat). Every summary line is in `model/results-h12-local.summary`
+  (77 checks, all as expected).
+  - **NOld = 0 regression.** The 63 v1.1 checks were run before the change
+    (mkhist.py regenerates the committed files byte for byte) and after it.
+    All 63 give the same result and the same distinct-state count. The passing
+    counts also equal gpu05's results-h1.summary (for example HTiny 3140,
+    HTiny2 10278, HNoBatchAgrees 58722). The counts at a violation differ
+    from gpu05's, which used more workers.
+  - New checks:
+
+| Check | Expect | Result |
+|---|---|---|
+| HOld (HTiny + NOld 1) | pass | pass, 14,206 distinct |
+| HOld2 (NHeld 2, Limit 2) | pass | pass, 58,496 |
+| HOldFuzz (NHeld 2, Limit 2, Fuzz 1, Times {1,2,3}) | pass | pass, 139,472 |
+| HOldHeldStop (StopOnHeld, Stable) | pass | pass, 594 |
+| HBelowHeld (the fixture's shape, appending) | pass | pass, 152 |
+| CoverOldDropped | fail | CoverOldDropped violated, 7,420 |
+| CoverOldDropped_HBelowHeld | fail | CoverOldDropped violated, 81 |
+| CoverDone_HOld / _HOld2 / _HBelowHeld | fail | CoverDone violated, 6,744 / 12,693 / 66 |
+| W_FuzzBelow | fail | HeldOrder violated, 81 |
+| W_OldTieBudget | fail | NoLoss violated, 57,115 |
+| HC_KeepOld on HBelowHeld | fail | HeldOrder violated, 81 |
+| HC_KeepOldOrder on HBelowHeld | fail | Order violated, 81 |
+
+- **Trace harness.** history_trace.py maps a page line that is neither held,
+  gap nor live into Old (NOld). Fixture times are now compared as minutes, so
+  "11:55" sorts below "10" (12:10); as strings it sorted above. belowHeld no longer carries `tlc` (SKIP).
+  Each harness run replays a stored observation file. Every pass takes every
+  step (Len(W) + 1 states: 4 for belowHeld, 7 or 10 for the others).
+
+| Fixture | d0322ffa7 | 03a2f172a |
+|---|---|---|
+| liveStop | PASS | PASS |
+| liveStopControl | PASS | PASS |
+| gapOrder | PASS | PASS |
+| clockFloor | PASS | PASS |
+| belowHeld | FAIL SnapOK (buf h,a; Seance h,o,a) | PASS |
+
+  As a check on the harness change, `final.jsonl` passes 4/4 and
+  `catchup-develop.jsonl` fails 4/4 on SnapOK, as in D31 and D33.
+- **For the cluster (not run here):**
+  - NOld = 2;
+  - NOld 1 on HNoBatchAgrees (58,722 states at NOld 0), on W_Holes/Contiguous
+    off, and on HMsgs/HFail;
+  - HOldFuzz at Limit 1 with Stable on;
+  - a Seance-shaped reconnect: StopOnHeld on, InsertMerge off, LiveOn, NOld 1.
+    This needs a property weaker than Order, because W_Append's live-line
+    reorder breaks Order there.
+- **Still left.**
+  - D34 item 2, the session or restore-race model, is out of scope here.
+  - Missed lines inside the held range (a hole between two held lines) are not
+    expressible: Held is a contiguous id range. So the "merge, don't drop"
+    half of the rule, and a cutoff of floor alone versus min(floor, oldest
+    held), cannot be told apart in this model.
+  - The model drops by `T < Cutoff` on server times only. clockFloor's local
+    clock is still outside it (D31).

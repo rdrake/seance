@@ -155,10 +155,8 @@ FIXTURES = [
     dict(name="belowHeld", limit=3, held=[["h", "10"]], gap=["a"],
          pages=[[["o", "11:55"], ["h", "10"], ["a", "12"]]],
          expect=["CHATHISTORY LATEST #seance * 3"],
-         wire="Q A C",
-         tlc="not modelled: History.tla's reconnect store is held ++ gap (Held == 1..NHeld); "
-             "it has no stored lines older than the held ones, so a page reaching below them "
-             "cannot be expressed (needs an NOld prefix outside buf)"),
+         # TLC trace: o is History's Old (NOld = 1, D35)
+         wire="Q A C"),
 ]
 
 def check(fx, obs):

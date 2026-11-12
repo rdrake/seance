@@ -6,6 +6,11 @@
 (* the client's loop (CH-23, Seance's catchup.ts) with dedupe and merge.  *)
 (* Decisions: ../DECISIONS.md D3-D11, D14, D22-D24.  Bounds: DESIGN.md.    *)
 (*                                                                         *)
+(* v1.2 (D35): NOld stored lines older than everything held, in the      *)
+(* server's store but not in the buffer (reconnect only); a page line    *)
+(* below min(floor, oldest held) is dropped, as Seance does since #282.  *)
+(* NOld = 0 is v1.1 exactly.                                              *)
+(*                                                                         *)
 (* v1 (HISTORY-REVIEW-3, D26): three request kinds, each with its own     *)
 (* obligation (Mode: reconnect catch-up, first JOIN's LATEST *, "more"'s  *)
 (* BEFORE <oldest held>); FAIL ends a request without recovering it; the *)
@@ -26,6 +31,7 @@ EXTENDS Naturals, Sequences, FiniteSets, TLC
 CONSTANTS
     Mode,          \* "reconnect", "join" (first JOIN) or "more" (D26)
     MayFail,       \* the server may answer a query with FAIL (CH-7)
+    NOld,          \* reconnect: stored lines older than every held one, not in buf (D35); else 0
     NHeld,         \* reconnect: messages held before the gap (1..2); more: held (newest); join: 0
     NGap,          \* reconnect: stored during the gap; more: older than the held; join: the store
     LiveOn,        \* one more message stored during catch-up (D6)
@@ -43,16 +49,20 @@ CONSTANTS
     StopOnHeld,    \* also stop when a page holds a msgid held before the gap
     InsertMerge    \* insert each message by time, or append in arrival order
 
-NStored == NHeld + NGap
+ASSUME NOld = 0 \/ Mode = "reconnect"
+
+NStored == NOld + NHeld + NGap
 N == NStored + (IF LiveOn THEN 1 ELSE 0)
 Ids == 1..N
 Mids == 1..(2 * N)                \* a message's msgid; N + c is a re-minted id for content c
 Content(x) == IF x > N THEN x - N ELSE x
 Replay(c) == c + N                    \* CH-18: a replayed message keeps its msgid
-\* reconnect: the held messages are the oldest, the gap follows; more: the held
-\* messages are the newest and the "gap" is the older history; join: nothing held.
-Held == IF Mode = "more" THEN (NGap + 1)..NStored ELSE 1..NHeld
-Gap == IF Mode = "more" THEN 1..NGap ELSE (NHeld + 1)..NStored
+\* reconnect: Old (never loaded), then the held messages, then the gap; more:
+\* the held messages are the newest and the "gap" is the older history; join:
+\* nothing held.
+Old == 1..NOld
+Held == IF Mode = "more" THEN (NGap + 1)..NStored ELSE (NOld + 1)..(NOld + NHeld)
+Gap == IF Mode = "more" THEN 1..NGap ELSE (NOld + NHeld + 1)..NStored
 LiveId == N                       \* meaningful only when LiveOn
 
 \* Store times are non-decreasing along the store (D8, no skew).
@@ -89,7 +99,11 @@ vars == <<time, ord, liveSt, liveRel, q, s2c, buf, pgSeen, liveSeen, phase, anch
 NoQ == [k |-> "none", form |-> "none", sel |-> 0, ts |-> 0]
 NoItem == [k |-> "none", ms |-> << >>, end |-> FALSE, qq |-> NoQ, el |-> {}, so |-> << >>]
 T(x) == time[Content(x)]            \* a msgid's time
-Floor == IF NHeld = 0 THEN 0 ELSE time[NHeld] - Fuzz   \* lower_bound - FUZZ_INTERVAL (CH-23); reconnect only
+Floor == IF NHeld = 0 THEN 0 ELSE time[NOld + NHeld] - Fuzz   \* lower_bound - FUZZ_INTERVAL (CH-23); reconnect only
+\* D35: the oldest held line's time (Seance: chan.oldestTimeOf(held)), and the
+\* cutoff below which a reconnect page line is never placed: min(floor, it).
+HoldsFrom == IF NHeld = 0 THEN 0 ELSE time[NOld + 1]
+Cutoff == IF Floor < HoldsFrom THEN Floor ELSE HoldsFrom
 
 \* D7: the order on the new connection.
 \*   StableAcrossReconnect: no existing pair swaps (the store order);
@@ -105,7 +119,7 @@ Init ==
     /\ liveSt = FALSE /\ liveRel = FALSE
     /\ q = NoQ /\ s2c = <<>>
     /\ buf = IF Mode = "more" THEN [i \in 1..NHeld |-> NGap + i]
-             ELSE [i \in 1..NHeld |-> i]   \* held in the old connection's order; join: empty
+             ELSE [i \in 1..NHeld |-> NOld + i]   \* held in the old connection's order; join: empty
     /\ pgSeen = {} /\ liveSeen = FALSE
     /\ phase = "query" /\ anchor = 0 /\ pages = 0 /\ got = 0 /\ why = "none"
     /\ pg1 = NoItem /\ unkEmpty = FALSE
@@ -188,6 +202,15 @@ Merge1(b, m) ==
     IF Dedupe /\ m \in Range(b) THEN b
     ELSE IF InsertMerge THEN InsertByTime(b, m) ELSE Append(b, m)
 
+\* D35, Seance since #282 (history.ts resolve): in a reconnect, a page line
+\* older than min(floor, oldest held) is older than the gap, never loaded,
+\* and is not placed (scrolling up brings it as history).  Only with a held
+\* line to judge by (Seance: a held msgid; else the page is kept); a line at
+\* or above the cutoff is merged as before (by msgid, Dedupe).  The stop
+\* decision, the anchor and the budget still read the whole page.
+Placed(m) == ~(Mode = "reconnect" /\ NHeld > 0 /\ T(m) < Cutoff)
+Kept(it) == IF it.k = "page" THEN SelectSeq(it.ms, Placed) ELSE it.ms
+
 RECURSIVE MergeAll(_, _)
 MergeAll(b, ms) == IF ms = <<>> THEN b ELSE MergeAll(Merge1(b, Head(ms)), Tail(ms))
 
@@ -214,7 +237,7 @@ CRecv ==
     /\ s2c # <<>>
     /\ s2c' = Tail(s2c)
     /\ LET it == Head(s2c) IN
-       /\ buf' = MergeAll(buf, it.ms)
+       /\ buf' = MergeAll(buf, Kept(it))
        /\ pgSeen' = IF it.k = "page" THEN pgSeen \cup {Content(it.ms[i]) : i \in DOMAIN it.ms} ELSE pgSeen
        /\ liveSeen' = (liveSeen \/ it.k = "live")
        /\ pg1' = IF it.k = "page" /\ pages = 0 THEN it ELSE pg1
@@ -271,6 +294,13 @@ JoinRecovers == (Mode = "join" /\ Done /\ why # "fail") =>
 \* messages (the store order is unchanged on one connection).
 MoreRecovers == (Mode = "more" /\ Done /\ why # "fail") =>
                     {g \in Gap : g > NGap - Limit} \subseteq Held1
+
+\* D35, server order against what is held: in a reconnect no line older than
+\* every held line comes after a held line in the buffer (the phone trace:
+\* LATEST reached below the oldest held line, and an appending client put
+\* those lines after the held ones, above the rejoin).
+HeldOrder == Mode = "reconnect" =>
+                 \A i, j \in DOMAIN buf : (i < j /\ Content(buf[i]) \in Held) => T(buf[j]) >= HoldsFrom
 
 \* NoDup: no msgid twice in the buffer.
 NoDup == \A i, j \in DOMAIN buf : i # j => buf[i] # buf[j]
@@ -335,5 +365,7 @@ CoverUnknownSel == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ s2c[i].qq.form =
 \* <<2,1>>; it must go untagged (HS_EndLast tags it)
 CoverEndReversed == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ Len(s2c[i].ms) >= 2
                         /\ s2c[i].ms[Len(s2c[i].ms)] = s2c[i].so[1] /\ s2c[i].ms[1] # s2c[i].so[1])
+\* D35: a page reached below everything held and the client dropped a line
+CoverOldDropped == ~(\E o \in Old : o \in pgSeen /\ o \notin Held1 /\ time[o] < Cutoff)
 CoverLiveInPage == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ LiveOn /\ LiveId \in {Content(x) : x \in Range(s2c[i].ms)})
 =============================================================================

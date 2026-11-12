@@ -5,7 +5,10 @@
 
 OBS.jsonl is catchup_fixtures.py's output for one checkout.  For each fixture
 a module HT_<name> EXTENDS History with Init pinned (ids in time order, times
-as ranks of the fixture's minutes, ord the store order) and a step sequence W
+as ranks of the fixture's minutes, ord the store order) and a step sequence W.
+A page line that is neither held, gap nor live (belowHeld's o) was stored
+before everything held: it goes into History's Old prefix (NOld, D35), so the
+store is Old ++ Held ++ Gap ++ live
 built from the fixture's wire template and the observed requests:
 
   Q  the client's next observed CHATHISTORY request (CQuery with that query)
@@ -33,17 +36,26 @@ from catchup_fixtures import FIXTURES  # noqa: E402
 JAR = os.environ.get("TLA_JAR", os.path.expanduser("~/tools/formal/tla2tools.jar"))
 JAVA = os.environ.get("TLC_JAVA", "java").split()
 
-BASE = dict(Mode='"reconnect"', MayFail="FALSE", Fuzz=0, BudgetKind='"pages"', BudgetN=5,
+BASE = dict(Mode='"reconnect"', MayFail="FALSE", NOld=0, Fuzz=0, BudgetKind='"pages"', BudgetN=5,
             ExactCount="TRUE", Contiguous="TRUE", TimeOrdered="TRUE", BatchAgrees="TRUE",
             StableAcrossReconnect="TRUE", SendsEnd="FALSE", Dedupe="TRUE", MsgidAnchor="TRUE",
             StopOnHeld="TRUE", InsertMerge="TRUE")
+
+
+def minute(t):
+    """A fixture time: "MM" is 12:MM (the fixture's `at`), or "HH:MM"."""
+    h, m = t.split(":") if ":" in t else ("12", t)
+    return int(h) * 60 + int(m)
 
 
 def build(fx, obs):
     held = [m for m, _ in fx["held"]]
     gap = fx["gap"]
     live = fx.get("live")
-    names = held + gap + ([live[0]] if live else [])
+    known = set(held) | set(gap) | ({live[0]} if live else set())
+    old = sorted({m for page in fx["pages"] for m, _ in page if m not in known},
+                 key=lambda m: minute([t for page in fx["pages"] for x, t in page if x == m][0]))
+    names = old + held + gap + ([live[0]] if live else [])
     mins = {}
     for m, t in fx["held"]:
         mins[m] = t
@@ -53,6 +65,7 @@ def build(fx, obs):
     if live:
         mins[live[0]] = live[1]
     num = {m: i + 1 for i, m in enumerate(names)}          # ids in store (time) order
+    mins = {m: minute(t) for m, t in mins.items()}
     ranks = {t: i + 1 for i, t in enumerate(sorted(set(mins.values())))}
     times = [ranks[mins[m]] for m in names]
     assert times == sorted(times), "fixture ids must follow time order"
@@ -98,7 +111,7 @@ def build(fx, obs):
 
     final = [num[r["msgid"]] for r in obs["store"]
              if r["msgid"] and r["msgid"] in num]
-    consts = dict(BASE, NHeld=len(held), NGap=len(gap), LiveOn="TRUE" if live else "FALSE",
+    consts = dict(BASE, NOld=len(old), NHeld=len(held), NGap=len(gap), LiveOn="TRUE" if live else "FALSE",
                   Times="{%s}" % ", ".join(str(x) for x in sorted(set(times))), Limit=fx["limit"])
     consts.update(fx.get("model", {}))
     name = "HT_" + fx["name"]

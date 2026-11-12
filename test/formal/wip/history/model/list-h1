@@ -41,6 +41,15 @@ History CoverMoreDone_HMoreFail fail
 History W_TieReconnect fail
 History CoverEndReversed fail
 History CoverHeldStop fail
+History HOld pass
+History HOld2 pass
+History HOldFuzz pass
+History W_OldTieBudget fail
+History HBelowHeld pass
+History HOldHeldStop pass
+History CoverOldDropped fail
+History CoverOldDropped_HBelowHeld fail
+History W_FuzzBelow fail
 History CoverDone_HTiny2 fail
 History CoverDone_HHeldStop fail
 History CoverDone_HMsgs fail
@@ -48,6 +57,9 @@ History CoverDone_HFuzz fail
 History CoverDone_HNoBatchAgrees fail
 History CoverDone_HBatchAgreesBudget fail
 History CoverDone_HFail fail
+History CoverDone_HOld fail
+History CoverDone_HOld2 fail
+History CoverDone_HBelowHeld fail
 HS_NewId HS_NewId_HTiny fail
 HS_NewIdR HS_NewIdR_HTiny fail
 HS_NewIdAnchor HS_NewIdAnchor_HTiny fail
@@ -61,3 +73,5 @@ HS_Anchor HS_Anchor_HTiny fail
 HS_FalseEnd HS_FalseEnd_HTiny fail
 HC_OnePage HC_OnePage_HTiny fail
 HC_FloorLe HC_FloorLe_HTiny fail
+HC_KeepOld HC_KeepOld_HBelowHeld fail
+HC_KeepOldOrder HC_KeepOldOrder_HBelowHeld fail

@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Write History.tla's configs, mutants and list-h1 (v1, D26).  Run from model/.
+"""Write History.tla's configs, mutants and list-h1 (v1, D26; NOld, D35).  Run from model/.
 
 Each witness is the positive config Tiny with the named changes; its comment
 says why it is reachable (DESIGN.md).  Mutants: History.tla with one anchor
 replaced (the anchor must occur exactly once).
 """
-BASE = dict(Mode='"reconnect"', MayFail="FALSE", NHeld=1, NGap=2, LiveOn="TRUE", Times="{1, 3}", Fuzz=0, Limit=1,
+BASE = dict(Mode='"reconnect"', MayFail="FALSE", NOld=0, NHeld=1, NGap=2, LiveOn="TRUE", Times="{1, 3}", Fuzz=0, Limit=1,
             BudgetKind='"pages"', BudgetN=5, ExactCount="TRUE", Contiguous="TRUE",
             TimeOrdered="TRUE", BatchAgrees="TRUE", StableAcrossReconnect="FALSE",
             SendsEnd="TRUE", Dedupe="TRUE", MsgidAnchor="TRUE", StopOnHeld="FALSE",
             InsertMerge="TRUE")
-SAFE = ("TypeOK NoLoss NoDup ContentOnce ReplayIdStable Order PageEligible EndTruthful"
+SAFE = ("TypeOK NoLoss NoDup ContentOnce ReplayIdStable Order HeldOrder PageEligible EndTruthful"
         " EndNext UnknownEmpty JoinRecovers MoreRecovers")
 JOIN = dict(Mode='"join"', NHeld=0, NGap=3, Limit=2)
 MORE = dict(Mode='"more"', NHeld=2, NGap=3, Limit=2, StableAcrossReconnect="TRUE")
+# D35, the belowHeld fixture's shape: one line stored before everything held,
+# one LATEST page holding all of it, and Seance's appending reconnect client
+BELOW = dict(NOld=1, NGap=1, LiveOn="FALSE", Limit=3, InsertMerge="FALSE")
 CFGS = {
   # positives
   "HTiny": ({}, SAFE, "Terminates", "pass"),
@@ -81,7 +84,29 @@ CFGS = {
   # its batch reversed is reachable (HS_EndLast must then tag it falsely)
   "CoverEndReversed": (dict(BatchAgrees="FALSE", Limit=2, NGap=3), "CoverEndReversed", None, "fail"),
   "CoverHeldStop": (dict(NHeld=2, NGap=2, StopOnHeld="TRUE", StableAcrossReconnect="TRUE"), "CoverHeldStop", None, "fail"),
+  # ---- D35: NOld, lines stored before everything held ----
+  "HOld": (dict(NOld=1), SAFE, "Terminates", "pass"),
+  "HOld2": (dict(NOld=1, NHeld=2, Limit=2), SAFE, "Terminates", "pass"),
+  # Times {1, 2, 3}: with {1, 3} a Fuzz of 1 decides no stop and drops nothing
+  # differently from Fuzz 0 (HOld2 and HOldFuzz then have the same state count)
+  "HOldFuzz": (dict(NOld=1, NHeld=2, Limit=2, Fuzz=1, Times="{1, 2, 3}"), SAFE, "Terminates", "pass"),
+  # first run of HOldFuzz at Limit 1: every time tied, so Fuzz puts the floor
+  # at 0 and no page stops the walk; without Stable a gap line is ordered
+  # before the old one, and six lines at one per page outrun pages(5).  The
+  # D25 tie-and-budget story (W_TieReconnect), with the old line as the extra
+  "W_OldTieBudget": (dict(NOld=1, NHeld=2, Fuzz=1), "NoLoss", None, "fail"),
+  "HBelowHeld": (BELOW, SAFE, "Terminates", "pass"),
+  # Seance's own stop (a held msgid on the page) with an old line in the store
+  "HOldHeldStop": (dict(NOld=1, NHeld=2, NGap=2, StopOnHeld="TRUE", StableAcrossReconnect="TRUE"), SAFE, "Terminates", "pass"),
+  # a page reaches below everything held and a line is dropped
+  "CoverOldDropped": (dict(NOld=1), "CoverOldDropped", None, "fail"),
+  "CoverOldDropped_HBelowHeld": (BELOW, "CoverOldDropped", None, "fail"),
+  # the cutoff is min(floor, oldest held): with one held line the FUZZ window
+  # lies below it, so an old line inside the window is kept and an appending
+  # client puts it after the held line (no skew in the model, so it is old)
+  "W_FuzzBelow": (dict(BELOW, Fuzz=1, Times="{1, 2}"), "HeldOrder", None, "fail"),
 }
+KEEP = ('Placed(m) == ~(Mode = "reconnect" /\\ NHeld > 0 /\\ T(m) < Cutoff)', 'Placed(m) == TRUE')
 MINT = ('Replay(c) == c ', 'Replay(c) == c + N ')
 MUTS = {
   # CH-18: the server mints a new msgid on replay; a deduping client then
@@ -112,6 +137,10 @@ MUTS = {
   "HC_OnePage": ([('ELSE "none"', 'ELSE "floor"')], "HTiny", "NoLoss"),
   # client stops at the floor on a tie (<= instead of <, CH-23)
   "HC_FloorLe": ([('ELSE IF T(ms[1]) < Floor THEN "floor"', 'ELSE IF T(ms[1]) <= Floor THEN "floor"')], "HTiny", "NoLoss"),
+  # D35, Seance before #282: page lines below everything held are appended
+  # (the belowHeld fixture on d0322ffa7: Order h,o,a)
+  "HC_KeepOld": ([KEEP], "HBelowHeld", "HeldOrder"),
+  "HC_KeepOldOrder": ([KEEP], "HBelowHeld", "Order"),
 }
 def cfg(over, inv, prop, spec_fair):
     c = dict(BASE, **over)
@@ -122,7 +151,8 @@ def cfg(over, inv, prop, spec_fair):
     out += ["CHECK_DEADLOCK FALSE", ""]
     return "\n".join(out)
 # HISTORY-REVIEW-2: completion with every gap message held, on every positive
-for pos in ["HTiny2", "HHeldStop", "HMsgs", "HFuzz", "HNoBatchAgrees", "HBatchAgreesBudget", "HFail"]:
+for pos in ["HTiny2", "HHeldStop", "HMsgs", "HFuzz", "HNoBatchAgrees", "HBatchAgreesBudget", "HFail",
+            "HOld", "HOld2", "HBelowHeld"]:
     CFGS["CoverDone_" + pos] = (CFGS[pos][0], "CoverDone", None, "fail")
 lst = []
 for n, (over, inv, prop, exp) in CFGS.items():
