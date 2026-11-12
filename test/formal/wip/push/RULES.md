@@ -26,4 +26,12 @@ The model's names are in brackets.
 - **Close only what is read (R10).** A relay or the opening sweep closes a message card only when every message in it is covered by the marker the device knows, or a card that holds them replaces it. [`RuleCloseOnlyRead`, client]
 - **No alert for a read message.** A message push the device already knows is read shows no fresh card, only the quiet stub WebKit needs. [`RuleNoAlertForRead`, client]
 
+## What the rules prove, and what they don't
+
+- **`RuleNeverRevoked`** holds by construction in the unmutated model: every strict branch shows something. It is there for `MU_SilentRelay`, and it does not model a stalled worker or a failed show.
+- **`RuleNoAlertForRead`** checks the card's data (`seen`), not whether the device alerted. v0 has no silent or renotify flag.
+- **`RuleOpenClean`** checks only the step in which the app opens. The model has no fairness, so nothing proves a card is eventually cleared.
+- **R2 (`RuleRelayWherePushed`)** means a message push *went* to the subscription. It does not mean a card is still there to close: the push may have been dropped, or the card dismissed.
+- **`W_ClosedUnread`** shows a relay on its way that would close an unread card, not the close itself.
+
 Not in v0: R4 (read state carried on the next message push), R6's Chrome budget as a count, R7 (`Topic`, `Urgency`, `TTL` headers), R8 (delay and re-check), R9 (declarative push). `DECISIONS.md` Q1-Q3 has these.

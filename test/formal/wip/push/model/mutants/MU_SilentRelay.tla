@@ -49,7 +49,8 @@ ASSUME /\ Strict \subseteq Dev /\ InitSubbed \subseteq Dev
        /\ OutPer \in {"account", "sub"}
        /\ StrictRelay \in {"send", "skip"}
 
-None == "none"
+None == "none"     \* a quiet stub: shown for a message already read
+Local == "local"   \* Chrome's own answer to a Mark read tapped on it
 Times == 0..MaxMsg               \* a message's number is its time; 0 = before any
 
 MsgPush  == [k : {"msg"}, c : Conv, n : 1..MaxMsg]
@@ -61,11 +62,12 @@ Push == MsgPush \cup ReadPush
 \* pushed to its conversation's tag: `top` is the newest of them, `n` the
 \* time the card carries (data.time), which closes and Mark read compare.
 \* `seen`: what the device knew was read in the conversation when it showed
-\* the card.  A stub says nothing is
-\* unread: "Marked as read" after a relay (`by` the reader), or the quiet
-\* show for a message already read (`by` None).
+\* the card.  A stub says nothing is unread and carries no time (n = 0, so
+\* any relay for its conversation closes it): "Marked as read" after a relay
+\* (`by` the reader), the quiet show for a message already read (`by` None),
+\* or Chrome's answer to a Mark read tapped on it (`by` Local).
 MsgCard  == [k : {"msg"}, c : Conv, n : 1..MaxMsg, top : 1..MaxMsg, seen : Times]
-StubCard == [k : {"stub"}, c : Conv, n : Times, by : Dev \cup {None}]
+StubCard == [k : {"stub"}, c : Conv, n : {0}, by : Dev \cup {None, Local}]
 Card == MsgCard \cup StubCard
 
 VARIABLES
@@ -148,15 +150,14 @@ Targets(w, c) ==
                     /\ (StrictRelay = "skip" => e \notin Strict)
                     /\ (OutPer = "sub" => outS[e][c])}
 
-\* `d` reads `c` up to `n`: on its open page (up to the newest message), or
-\* with a card's Mark read (up to that card), which the worker sends over
-\* its own connection.  The device closes its own cards for c up to n.
-\* The server raises the marker and relays the read.
-ReadAt(d, c, n, via) ==
+\* `d` reads `c` up to `n`, leaving `after` on its screen; the server raises
+\* the marker and relays the read.  `via`: the connection the MARKREAD
+\* went over.
+ReadAt(d, c, n, via, after) ==
     /\ n > known[d][c]
     /\ marker' = [marker EXCEPT ![c] = Max(@, n)]
     /\ known' = [known EXCEPT ![d][c] = n]
-    /\ cards' = [cards EXCEPT ![d] = {x \in @ : ~(x.c = c /\ x.n <= n)}]
+    /\ cards' = [cards EXCEPT ![d] = after]
     /\ IF n > marker[c] /\ Gate(c)
        THEN LET T == Targets(Who(d, via), c)
                 r == [k |-> "read", c |-> c, n |-> n, by |-> d]
@@ -169,9 +170,26 @@ ReadAt(d, c, n, via) ==
     /\ step' = "read"
     /\ UNCHANGED <<log, subbed, open, silent, got>>
 
-ReadOnPage(d, c) == d \in open /\ ReadAt(d, c, Latest(c), "page")
-\* Mark read: the marker at the time the card carries.
-ReadFromCard(d, x) == x \in cards[d] /\ x.k = "msg" /\ ReadAt(d, x.c, x.n, "worker")
+\* On the open page, up to the newest message; the page closes its cards
+\* for c up to there.
+ReadOnPage(d, c) ==
+    /\ d \in open
+    /\ ReadAt(d, c, Latest(c), "page",
+              {x \in cards[d] : ~(x.c = c /\ x.n <= Latest(c))})
+
+\* Mark read on a card (handleMarkRead): the marker at the time the card
+\* carries, sent through the open page when there is one (viaPage), else
+\* over a throwaway connection (swMarkRead).  Locally (markedReadHere): on
+\* WebKit the tapped card goes; on Chrome every card of the conversation
+\* goes, and when that would leave nothing up, "Marked as read" answers the
+\* tap in its place.
+ReadFromCard(d, x) ==
+    LET rest == {y \in cards[d] : y.c # x.c}
+        after == IF d \in Strict THEN cards[d] \ {x}
+                 ELSE IF rest = {} THEN {[k |-> "stub", c |-> x.c, n |-> 0, by |-> Local]}
+                 ELSE rest
+    IN /\ x \in cards[d] /\ x.k = "msg"
+       /\ ReadAt(d, x.c, x.n, IF d \in open THEN "page" ELSE "worker", after)
 
 \* A device subscribes (late): it has had none of the earlier pushes.
 Subscribe(d) ==
@@ -213,7 +231,7 @@ OnMsg(d, p) ==
     THEN IF d \in Strict /\ \E y \in cards[d] : y.k = "msg" /\ y.c = p.c
          THEN [after |-> cards[d], shown |-> TRUE]
          ELSE IF d \in Strict \/ (cards[d] = {} /\ d \notin open)
-         THEN [after |-> Show(d, [k |-> "stub", c |-> p.c, n |-> p.n, by |-> None]),
+         THEN [after |-> Show(d, [k |-> "stub", c |-> p.c, n |-> 0, by |-> None]),
                shown |-> TRUE]
          ELSE [after |-> cards[d], shown |-> FALSE]
     ELSE LET prev == {y \in cards[d] : y.k = "msg" /\ y.c = p.c}
@@ -230,7 +248,7 @@ OnMsg(d, p) ==
 \* when it would otherwise be left showing nothing.
 OnRead(d, p) ==
     LET left == {y \in cards[d] : ~(y.c = p.c /\ y.n <= p.n)}
-        stub == [k |-> "stub", c |-> p.c, n |-> p.n, by |-> p.by]
+        stub == [k |-> "stub", c |-> p.c, n |-> 0, by |-> p.by]
     IN IF d \notin Strict /\ left = {} /\ d \notin open
        THEN [after |-> left \cup {stub}, shown |-> TRUE]
        ELSE [after |-> left, shown |-> FALSE]
@@ -315,16 +333,18 @@ RuleOpenClean ==
 W_OwnReadStub == ~\E d \in Strict : \E x \in cards[d] : x.k = "stub" /\ x.by = d
 \* A read on another device puts "Marked as read" on a strict device.
 W_OtherReadStub == ~\E d \in Strict : \E x \in cards[d] : x.k = "stub" /\ x.by \notin {d, None}
-\* A card stays up on a closed device after everything in it was read
-\* elsewhere, with no relay on its way to close it.
+\* A card stays up on a closed device after another device read everything
+\* in it, with no relay on its way that would close it.
 W_StaleCard ==
     ~\E d \in Dev \ open : \E x \in cards[d] :
-        /\ x.k = "msg" /\ x.top <= marker[x.c]
-        /\ ~\E p \in chan[d] : p.k = "read" /\ p.c = x.c
+        /\ x.k = "msg"
+        /\ \E e \in Dev \ {d} : known[e][x.c] >= x.top
+        /\ ~\E p \in chan[d] : p.k = "read" /\ p.c = x.c /\ p.n >= x.n
 \* A relay heads for a device that was never pushed a message of its conversation.
 W_RelayNoCard ==
     ~\E d \in Dev : \E p \in chan[d] : p.k = "read" /\ ~\E i \in got[d] : log[i] = p.c
-\* A card is closed by a relay while it holds a message newer than the marker.
+\* A relay is on its way that will close a card holding a message newer
+\* than its marker (if nothing replaces the card first).
 W_ClosedUnread ==
     ~\E d \in Dev : \E p \in chan[d] :
         /\ p.k = "read"

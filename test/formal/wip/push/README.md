@@ -12,7 +12,7 @@ Files:
 - `model/make-configs.py`: the configs.
 - `model/mutants/make-mutants.py`: the mutants.
 
-Every module parses with SANY. **Nothing has been model checked yet.** TLC runs on gpu05.
+Every module parses with SANY. Limited runs are in the cloud; comprehensive ones go to gpu05 later.
 
 ## Server and client choices (constants)
 
