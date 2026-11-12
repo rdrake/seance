@@ -41,6 +41,10 @@ ASSUME CliPasses \subseteq {"none", "right", "wrong"} /\ CliPasses # {}
 ASSUME MetaVals \subseteq {0, 1} /\ MetaVals # {}
 ASSUME Cookie \in BOOLEAN /\ Meta \in BOOLEAN /\ Timeout \in BOOLEAN
 
+\* TLC configs cannot write a tuple: they bind NickList <- NL1 or NL2.
+NL1 == <<"n1">>
+NL2 == <<"n1", "n2">>
+
 Nicks == {NickList[i] : i \in 1..Len(NickList)}
 ASSUME Taken \subseteq Nicks
 FreeNick == Nicks \ Taken # {}

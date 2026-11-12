@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write SpecReg's configs: limited (run now), comprehensive (later), witnesses."""
 S = lambda *a: '{' + ', '.join('"%s"' % x for x in a) + '}'
-Q = lambda *a: '<<' + ', '.join('"%s"' % x for x in a) + '>>'
+Q = lambda *a: {1: 'NL1', 2: 'NL2'}[len(a)]   # tuples are defined in SpecReg.tla
 D = dict(NickList=Q('n1'), Taken='{}', PassReq='"none"', CliPasses=S('none'),
          Cookie='FALSE', Meta='FALSE', MetaVals='{0}', Timeout='FALSE')
 BASE = {
@@ -34,7 +34,7 @@ for w, b in WIT.items():
 def render(name):
     base, inv, props, note = CFGS[name]
     out = ['\\* %s: %s; constants of %s' % (name, note, base), 'SPECIFICATION Spec', 'CONSTANTS']
-    out += ['  %s = %s' % kv for kv in BASE[base].items()]
+    out += ['  %s %s %s' % (k, '<-' if k == 'NickList' else '=', v) for k, v in BASE[base].items()]
     out += ['INVARIANTS', '  ' + ' '.join(inv)]
     if props:
         out += ['PROPERTIES', '  ' + ' '.join(props)]
