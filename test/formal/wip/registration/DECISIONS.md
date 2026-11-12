@@ -26,6 +26,8 @@ The client enables metadata whenever `before-connect` is advertised (`Meta`), an
 - a METADATA during registration without `before-connect` gets `FAIL`;
 - 761 with target `*` answers an accepted SET (MD example 711-730).
 
+Without the metadata cap, the recorded servers differ: one answers `421`, the other accepts the SET (and sends no batch, the cap not being negotiated). The model folds "advertised" and "enabled" into `Meta`, so it does not cover this case.
+
 ## D6. The burst
 `001`, then (with metadata) `BATCH +` / the keys / `BATCH -` targeting the client's own nick, then `376`. MD:113 and MD:140 make the batch a MUST, empty if nothing is set. MD:140's "clients receive their current metadata (... plus any metadata set by the client during connection registration via before-connect)" is descriptive. It is read as required: a key the server acknowledged before 001 is in the batch (`RuleMetaCarries`).
 
@@ -39,8 +41,8 @@ This is still registration (MD:176). The server may have completed registration 
 - 464 alone leaves the connection open and unregistered (`refused`), until the server ends it (D4).
 
 ## Open questions (to settle from traces)
-- **Q1.** METADATA aimed at a target other than `*` before registration: refused, or accepted? The spec is silent; the model reads refused (D5).
-- **Q2.** METADATA after CAP END and before 001: is it in the burst? This is server-dependent (D7). The traces show each server's behaviour.
-- **Q3.** Does each server send a cookie PING, and does it hold 001 until the PONG (D2)?
-- **Q4.** Each server's registration timeout, and what it sends (D4).
-- **Q5.** After 464, does each server close the connection (D8)? This needs a server that requires a password.
+- **Q1.** METADATA aimed at a target other than `*` before registration: refused, or accepted? The spec is silent; the model reads refused (D5). **Observed (traces/):** both servers refuse it with `FAIL METADATA` (one `INVALID_TARGET`, the other `KEY_NO_PERMISSION`). The model's reading stands; settled.
+- **Q2.** METADATA after CAP END and before 001: is it in the burst? This is server-dependent (D7). The traces show each server's behaviour. **Observed:** both branches occur. One server reads the SET before completing registration (`761` with target `*`, key in the burst); the other completes registration first (`761` with the nick, after the burst). Settled as server-dependent, as D7 models.
+- **Q3.** Does each server send a cookie PING, and does it hold 001 until the PONG (D2)? **Observed:** neither recorded server sends a PING during registration on the ports recorded; 001 follows CAP END without one. The cookie stays a switch with nothing observed against it.
+- **Q4.** Each server's registration timeout, and what it sends (D4). **Observed:** both end an incomplete registration after 60 s with `ERROR` and close the connection (D4).
+- **Q5.** After 464, does each server close the connection (D8)? This needs a server that requires a password. **Observed:** on the server recorded with a connection password, a wrong one gets `464` then `ERROR` and the close; the right one registers. Settled for that server; the model keeps the other branches (MC:32 allows 464 alone or ERROR alone).
