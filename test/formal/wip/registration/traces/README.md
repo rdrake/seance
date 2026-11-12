@@ -21,3 +21,4 @@ Recorded with `record_reg.py` against local servers only, with no accounts and n
 | `timeout-silent` | Q4 |
 
     record_reg.py HOST PORT OUT.jsonl --server-label NAME [--only a,b] [--timeout-wait S] [--pass P]
+    check.py reg-*.jsonl     # the wire rules of ../model/SpecReg.tla, per connection
