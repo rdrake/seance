@@ -52,7 +52,7 @@ TLC stops at the first violation, so each rule a config is expected to break has
 | `R1R2R3__W_StaleCard` | under R3, a read card left on a closed phone with no relay coming |
 | `R1Dev__W_StaleCard` | Q4: reachable (v0 run, 39a7be2e5): a WebKit card can go stale even without R3 |
 
-## Mutants (expected to fail; not yet run)
+## Mutants (all caught, RESULTS.md)
 
 | Mutant | Base | Change | Should break |
 | --- | --- | --- | --- |
