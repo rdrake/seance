@@ -80,6 +80,8 @@ The text never says whether an opener that names an unsupported mechanism also g
 
 **Open (Q1):** may a server send 908 alone, with no 904? If it may, a client that waits for 904 waits for ever. Should a conforming client therefore treat 908 as the end of the exchange?
 
+**Observed (Q1, v0.3, traces/):** neither recorded server sends 908 alone: one sends 908 then 904, the other 904 alone. The model keeps D4 (908 is always followed by 904), and the client does not treat 908 as the end. Q1 is settled for the model.
+
 ## D5. Choosing a mechanism
 
 > "Clients SHOULD pick a mechanism present in the `CAP LS` reply" (S2:73-74); "Clients MUST handle the case when there is no value" (S2:44-46); "... one or more mechanisms they do not understand." (S2:48-49)
@@ -110,6 +112,8 @@ The model client never sends a LONG line (`RuleClientLineLen`). The spec's 905 i
 
 **Open (Q2):** is 904 what S1:64's limit should produce? Or does the spec mean 905 to cover it too?
 
+**Observed (Q2, v0.3, traces/):** the recorded servers differ: one ends an over-long response with 904, the other with 905. As the spec names no numeric, the model's limit now sends either (`LimitFail`), and the client must treat both as the end of the exchange. Q2 is settled for the model.
+
 ## D7. Client SASL after 001 (extends hs D2)
 
 > "The AUTHENTICATE command MUST be used before registration is complete" (S1:36)
@@ -132,6 +136,8 @@ sasl-3.2 says it "updates" sasl-3.1 (S2:4-5). S1:89-90 leaves the registered sta
 
 **Open (Q3):** is 904 the "appropriate error" for an unauthenticated client after registration, or should a server that cannot authenticate in registered state stop offering sasl after 001?
 
+**Observed (Q3, v0.3, traces/):** both recorded servers accept an opener after 001 from a client that is not logged in, and complete the login (900, 903). This is the new `Reauth = "fresh"` (D20). `"none"` (904 after 001) stays as a reading of S1. Q3 is settled for the model.
+
 ## D9. `Reauth = "same"`: reauthentication without changing account
 
 S2:65 names 907 for "changing accounts is not supported". S1:227 defines 907 as the reply to an attempt "to initiate SASL authentication after it has already finished successfully". The opener does not name the account; only services know it, after the response.
@@ -141,6 +147,8 @@ S2:65 names 907 for "changing accounts is not supported". S1:227 defines 907 as 
 So this 907 comes at decision time, not as the reply to the opener. That is a reading S1:227's word "initiate" does not obviously support. It is kept to its own config (`TinySame`, in its own list), not mixed into the default limited runs.
 
 **Open (Q4):** must a server that does not support account changes refuse at the opener with 907, before knowing the account? Or may it run the exchange and refuse at the end? If at the end, is 907 or 904 the right numeric?
+
+**Observed (Q4, v0.3, traces/):** both recorded servers refuse at the opener with 907, for the same account and for another one, and answer the data line that follows with 907 too. That is `"fresh"` (D20). `"same"` (refusal at the verdict) stays as a reading, with TinySame in its own list. Q4 is settled for the observed servers.
 
 ## D10. A failed reauthentication and the existing login
 
@@ -153,6 +161,8 @@ So this 907 comes at decision time, not as the reply to the opener. That is a re
 Both are allowed. A client must therefore not assume its account survives a failed reauthentication, and must follow 900/901.
 
 **Open (Q5):** does a failed reauthentication keep the old login?
+
+**Observed (Q5, v0.3, traces/):** where a reauthentication can run after a login (one server, with a token mechanism), a failure gives 904 and keeps the existing login: no 901, and WHOIS still shows the account. The model keeps both branches (keep, or 901 then 904; D10), since the spec allows either. Q5 stays open as a spec question, with keep observed.
 
 ## D11. What the client may assume about a mechanism list it got earlier
 
@@ -171,6 +181,8 @@ Both are allowed. A client must therefore not assume its account survives a fail
 In short, an earlier list is a hint, not a promise. A client may open a listed mechanism, but must handle 904 (with or without 908) and retry.
 
 **Open (Q6):** must a server that changes its mechanism set send `NEW sasl=<list>` to cap-notify clients? CN:420 says "can", and CN:491-492 does not cover values. And does a value-update NEW leave the cap enabled, as the model assumes?
+
+**Observed (Q6, v0.3, traces/):** not observable. Neither recorded server changes its mechanism list at run time: stopping either recorded server's account backend (the services link, or the identity provider) sent no CAP DEL or NEW, and a later CAP LS listed the same mechanisms. Q6 stays open.
 
 ## D12. Lines that find no response (changes hs D24)
 
@@ -195,6 +207,8 @@ hs D24 also let a stray response open a new exchange. This model drops that bran
 - A client may therefore see a 900 with no 903 after a DEL. It must take its account from 900/901, and treat the exchange as ended by the DEL.
 
 **Open (Q7):** may a server log the client out (901) because sasl was DELed? And may it send the owed 900, as here, or must that be cancelled too? S2:22-23 speaks of "reauthentication if authentication is lost via the cap-notify capability", which could be read either way.
+
+**Observed (Q7, v0.3, traces/):** not observable. No recorded server DELs sasl; with the identity provider stopped mid-exchange, the server answered the payload with 904. Q7 stays open.
 
 ## D14. Bound: the server reads AUTHENTICATE lines only once owed lines are out
 
@@ -253,3 +267,7 @@ S1:39-40 asks clients to be "prepared for timeouts at all times". In the model t
 `CGiveUp` is neither of these. It is an **explicit local-abandonment assumption**: a client that has sent `*` stops waiting for its 906, and may open a new exchange. The spec does not describe this. It is kept because real clients time out locally.
 
 Its consequence is hs D12's: the abandoned exchange's 906 (or another of its replies) can arrive later and end the next exchange early. `ExchangeEnds` accepts give-ups. The `NoAbandon` scenario (D15) turns `CGiveUp` off.
+
+## D20. `Reauth = "fresh"`: login after 001 while logged out, 907 while logged in (v0.3)
+
+Both servers recorded in `traces/` behave this way (Q3, Q4). An opener from a client with an account set gets 907 (and so does every later AUTHENTICATE line outside an exchange, `Late907`); an opener from a client without one runs normally, before or after 001. A client logged out by other means may therefore log in again. `NoReauth` in the model names the refusing condition for "none" (after any login) and "fresh" (while an account is set). Limited config `TinyFresh` (TinyReauth's bounds), witnesses `W_FreshPostReg` and `W_FreshLate907`, mutant `MU_FreshNo907`.

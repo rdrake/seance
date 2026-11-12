@@ -30,6 +30,8 @@ Expected (predictions; nothing has been run):
                                                                -> Rule907NoChange
   MU_No907          (TinyS1)     S1 server lets an authenticated client
                                  authenticate again            -> Rule907
+  MU_FreshNo907     (TinyFresh)  v0.3: a "fresh" server lets a logged-in client
+                                 authenticate again   -> Rule907 (also RuleReauthRefused)
 """
 import re
 src = open('../SpecSasl.tla').read()
@@ -75,6 +77,9 @@ mut('MU_ChangeOn907', 'TinyS1',
     "THEN sout' = Append(sout, M(\"907\")) /\\ srv' = srv  \\* opener-907",
     "THEN sout' = Append(sout, M(\"907\")) /\\ srv' = [srv EXCEPT !.account = \"\"]")
 mut('MU_No907', 'TinyS1',
-    'ELSE IF srv.succeeded /\\ Reauth = "none"',
-    'ELSE IF FALSE')
+    'ELSE IF NoReauth\n    THEN',
+    'ELSE IF FALSE\n    THEN')
+mut('MU_FreshNo907', 'TinyFresh',
+    '\\/ Reauth = "fresh" /\\ srv.account # ""',
+    '\\/ FALSE')
 print('ok')

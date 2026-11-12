@@ -71,6 +71,7 @@ The v0.1 switches default to FALSE except where the table says otherwise: `AnyOr
 | `TinyNotifyList` | limited (v0.1) | Spec | List updates by NEW only, so `MechListAgrees` is live | as TinyNotify, SilentChange off, Send908 off |
 | `TinyNoAbandon` | limited (v0.1) | Spec | Server-driven completion: no abort, give-up or quit; `ExchangeEnds` with `RuleExitByServerLine` | as TinyMechs, NoAbandon |
 | `TinyEnv` | limited | EnvSpec | As TinyMechs with server fairness only: safety and `OwedEventuallyClears` | TinyMechs |
+| `TinyFresh` | limited (v0.3) | Spec | Reauth "fresh" (D20, the observed servers): login after 001 while logged out, 907 at the opener while logged in, a logout by other means then a login again | as TinyReauth, Reauth "fresh", AcctEarly off |
 | `TinySame` | limited, own list | Spec | Reauth "same": a change of account refused with 907 at the verdict (D9; open question Q4, so kept apart) | as TinyReauth, Reauth "same" |
 | `Reference` | **comprehensive, not now** | Spec | Everything together | Mechs P,S,X; 2 chunks; MaxLen 2; 3 openers; 2 REQs; 2 env events; Reauth "full"; every switch on except PickListed and NoAbandon |
 | `RefSafety` | **comprehensive, not now** | EnvSpec | Reference, safety only, with `VIEW SafetyView` | Reference |
@@ -105,6 +106,8 @@ Every witness config is limited. Each checks one `W_*` invariant, which should F
 | `W_DelMid` | RefNotify | DEL of sasl during an exchange |
 | `W_StaleList` | RefNotify | an opener of a listed mechanism the server no longer supports |
 | `W_Refuse907` | TinySame | a change of account refused with 907 |
+| `W_FreshPostReg` | TinyFresh | v0.3: under "fresh", a login after 001 |
+| `W_FreshLate907` | TinyFresh | v0.3: under "fresh", 907 after a login |
 
 ### Commands
 
@@ -113,7 +116,7 @@ From `model/`, with `tla2tools.jar` at hand (`TLA` below is its path). Use `-wor
 Limited (now):
 
     for C in TinyMechs TinyNoValue TinyChunks TinyChunks2 TinyReauth TinyS1 \
-             TinyNotify TinyNotifyList TinyNoAbandon TinyEnv; do
+             TinyNotify TinyNotifyList TinyNoAbandon TinyEnv TinyFresh; do
       java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config $C.cfg SpecSasl.tla
     done
     java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config TinySame.cfg SpecSasl.tla   # own list (Q4)
@@ -123,7 +126,8 @@ Witnesses (limited; each should report `Invariant W_x is violated`):
     for W in W_LoggedIn W_Retry908 W_Late908 W_NoValueLogin W_MultiChunk W_ExactPlus \
              W_Limit W_TwoRound W_ChalChunked W_AbortMid W_AccountChange W_PostReg \
              W_FailLogout W_Relogin W_903First W_AcctEarly W_Late907 W_PostRegErr \
-             W_NewList W_NewThenAuth W_DelMid W_StaleList W_Refuse907; do
+             W_NewList W_NewThenAuth W_DelMid W_StaleList W_Refuse907 \
+             W_FreshPostReg W_FreshLate907; do
       java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config $W.cfg SpecSasl.tla
     done
 
@@ -131,7 +135,7 @@ Mutants (limited; from `model/mutants/`, after `python3 make-mutants.py`; each s
 
     for M in MU_EarlyVerdict MU_NoPlusAfter400 MU_Chunk401 MU_FinalShort MU_ExactShort \
              MU_KeepAfterDel MU_SrvKeepAfterDel MU_DelKeepOwed MU_ChangeOn907 MU_No907 \
-             MU_PostRegWrongErr; do
+             MU_PostRegWrongErr MU_FreshNo907; do
       java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config $M.cfg $M.tla
     done
 
@@ -157,6 +161,7 @@ Comprehensive (**later, not now**):
 | `MU_DelKeepOwed` (v0.1) | RefNotify | The server's DEL leaves an owed 903 alive. | `DelCancels` (also `RuleDelCancelsOutput`) |
 | `MU_ChangeOn907` | TinyS1 | The server logs the client out in the step that sends 907. | `Rule907NoChange` (`RuleAccountNotified` also forbids it) |
 | `MU_No907` | TinyS1 | An S1 server lets an authenticated client authenticate again. | `Rule907` (also `RuleReauthRefused`) |
+| `MU_FreshNo907` (v0.3) | TinyFresh | A "fresh" server lets a logged-in client authenticate again. | `Rule907` (also `RuleReauthRefused`) |
 | `MU_PostRegWrongErr` (v0.1) | TinyS1 | An S1 server answers an unauthenticated opener after 001 with 906 instead of an error. | `RuleReauthRefused`. `RuleOpenerAnswered` would pass. |
 
 TLC stops at the first violation it finds. A mutant that is caught first by a different property from the one listed still counts as caught; record which property it was. Each unmutated base config is expected to pass.

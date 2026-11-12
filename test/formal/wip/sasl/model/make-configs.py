@@ -72,6 +72,10 @@ BASE['TinyChunks2'] = dict(BASE['TinyChunks'], MaxLen=2)
 BASE['TinyNoAbandon'] = dict(BASE['TinyMechs'], NoAbandon='TRUE')
 # Rests on D9 (an open question): limited, but in its own list.
 BASE['TinySame'] = dict(BASE['TinyReauth'], Reauth='"same"')
+# v0.3 (D20): the observed servers' reading: login after 001 while logged
+# out, 907 at the opener while logged in.  TinyReauth's bounds, so logout by
+# other means and a login after it are reachable.
+BASE['TinyFresh'] = dict(BASE['TinyReauth'], Reauth='"fresh"', AcctEarly='FALSE')
 # Comprehensive: NOT for now (see README).
 BASE['Reference'] = dict(Mechs=S('P', 'S', 'X'), CliMechs=S('P', 'S'), TwoRound=S('S'),
                          Accounts=S('a1', 'a2'), MaxChunks=2, MaxLen=2, MaxAtt=3, MaxReq=2,
@@ -92,7 +96,8 @@ SAFE = ['Rule907', 'Rule907NoChange', 'RuleAccountNotified', 'Rule906',
 LIVE = ['ExchangeEnds', 'OwedEventuallyClears']
 
 LIMITED = ['TinyMechs', 'TinyChunks', 'TinyChunks2', 'TinyReauth', 'TinyS1',
-           'TinyNotify', 'TinyNotifyList', 'TinyNoValue', 'TinyNoAbandon', 'TinySame']
+           'TinyNotify', 'TinyNotifyList', 'TinyNoValue', 'TinyNoAbandon', 'TinySame',
+           'TinyFresh']
 
 # name -> (base constants, spec, invariants, properties, view, header comment)
 CFGS = {}
@@ -122,6 +127,7 @@ WIT = {
     'W_StaleList': 'RefNotify',
     'W_NoValueLogin': 'TinyNoValue',
     'W_Refuse907': 'TinySame',
+    'W_FreshPostReg': 'TinyFresh', 'W_FreshLate907': 'TinyFresh',
 }
 for w, b in WIT.items():
     CFGS[w] = (b, 'Spec', [w], [], None, 'witness: expected to FAIL (%s)' % w)

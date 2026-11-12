@@ -28,7 +28,9 @@
 (*    sout has sent that line; SrvSend is delivery.                       *)
 (*                                                                         *)
 (* EXTENDS the handshake model:                                           *)
-(*  - Reauth is three-valued ("none" = handshake Reauth FALSE, S1 907;    *)
+(*  - Reauth is four-valued ("none" = handshake Reauth FALSE, S1 907;     *)
+(*    "fresh" = login after 001 while logged out, 907 while logged in,    *)
+(*    the behaviour observed on nefarious2 and Ergo, D20 v0.3;            *)
 (*    "full" = handshake Reauth TRUE, but also after 001 and with the     *)
 (*    account able to change; "same" = reauth allowed but a change of     *)
 (*    account refused with 907, D9 here).  The CLIENT may reauthenticate  *)
@@ -84,7 +86,7 @@ CONSTANTS
     MaxAtt,         \* openers the client may send (exploration bound; S1:48 MAY retry)
     MaxReq,         \* REQs the client may send (exploration bound)
     MaxEnv,         \* environment events: NEW/DEL of sasl, list changes, logouts
-    Reauth,         \* server: "none" | "full" | "same" (S2-6; D8, D9)
+    Reauth,         \* server: "none" | "fresh" | "full" | "same" (S2-6; D8, D9, D20)
     ClientReauth,   \* client may authenticate after a login and after 001 (S2:62-63; D7)
     AdvertValue,    \* server lists mechanisms as the sasl value (S2:38-39 SHOULD)
     Send908,        \* server MAY send 908 for an unsupported mechanism (S1:231; D4)
@@ -95,7 +97,7 @@ CONSTANTS
     NoAbandon       \* v0.1: the client never aborts, gives up or quits (D15): the
                     \* server-driven-completion scenario
 
-ASSUME Reauth \in {"none", "full", "same"}
+ASSUME Reauth \in {"none", "fresh", "full", "same"}
 ASSUME CliMechs \subseteq Mechs /\ TwoRound \subseteq Mechs
 ASSUME MaxChunks \in 1..3 /\ MaxLen \in 1..4
 
@@ -191,12 +193,17 @@ SrvEnd == sout' = sout /\ srv' = [srv EXCEPT !.endSeen = TRUE]      \* CN-16 aft
 
 \* Handshake D21: without reauth, every AUTHENTICATE line after a successful
 \* login that finds no exchange gets 907.
-Late907 == srv.succeeded /\ Reauth = "none" /\ srv.sasl \notin Active
+\* D20 (v0.3): "fresh" refuses only while an account is set, so a client
+\* logged out by other means, or never logged in, may log in after 001.
+NoReauth == \/ Reauth = "none" /\ srv.succeeded
+            \/ Reauth = "fresh" /\ srv.account # ""
+Late907 == NoReauth /\ srv.sasl \notin Active
 
 \* S1:64: no numeric is named for the total-length limit.  905 is defined
-\* for one over-long parameter (S1:219), so the limit gets 904 (D6, v0.1).
+\* for one over-long parameter (S1:219); the limit gets 904 or 905, since
+\* the spec names neither and servers differ (D6, Q2 settled in v0.3).
 LimitFail ==
-    /\ sout' = Append(sout, M("904"))
+    /\ \E n \in {"904", "905"} : sout' = Append(sout, M(n))
     /\ srv' = [srv EXCEPT !.sasl = "idle", !.got = 0, !.cout = <<>>, !.failed = TRUE]
 
 \* One line of a client response (S1:55-63).  Reassembly: FULL lines are
@@ -228,7 +235,7 @@ SrvChunk(t) ==
 SrvMech(mech) ==
     IF srv.sasl \in Active
     THEN SrvChunk("SHORT")
-    ELSE IF srv.succeeded /\ Reauth = "none"
+    ELSE IF NoReauth
     THEN sout' = Append(sout, M("907")) /\ srv' = [srv EXCEPT !.account = ""]
     ELSE IF ~srv.enabled
     THEN \/ sout' = sout /\ srv' = srv
@@ -631,7 +638,7 @@ GNext ==
               out901 |-> gw.out901 \/ Has(NewOut, "901"),
               relogin |-> gw.relogin \/ (gw.out901 /\ srv.account = "" /\ srv'.account # ""),
               refuse907 |-> gw.refuse907 \/ (Has(NewOut, "907") /\ srv.sasl = "decide"),
-              late907 |-> gw.late907 \/ (Has(NewOut, "907") /\ srv.succeeded /\ Reauth = "none"),
+              late907 |-> gw.late907 \/ (Has(NewOut, "907") /\ NoReauth),
               postRegErr |-> gw.postRegErr \/ (SCons /\ sin.t = "AUTHMECH" /\ srv.reg
                                                /\ srv.enabled /\ ~srv.succeeded
                                                /\ Reauth = "none" /\ Has(NewOut, "904")),
@@ -716,7 +723,7 @@ SuccAccounting ==
 \* S1-13 (hs D21): without reauth, every AUTHENTICATE line read after a
 \* successful login, outside an exchange, gets 907.
 Rule907 ==
-    [][(SCons /\ AuthLine(Head(c2s).t) /\ srv.succeeded /\ Reauth = "none"
+    [][(SCons /\ AuthLine(Head(c2s).t) /\ NoReauth
         /\ srv.sasl \notin Active) => Has(NewOut, "907")]_vars
 \* S2:64-65: 907 refuses a change: a step that sends 907 changes no account.
 Rule907NoChange == [][Has(NewOut, "907") => srv'.account = srv.account]_vars
@@ -740,8 +747,8 @@ Rule906 ==
 \* login and 904 otherwise, and changes neither exchange nor account.
 RuleReauthRefused ==
     [][(SCons /\ Head(c2s).t = "AUTHMECH" /\ srv.enabled /\ srv.sasl \notin Active
-        /\ Reauth = "none" /\ (srv.succeeded \/ srv.reg))
-       => /\ Has(NewOut, IF srv.succeeded THEN "907" ELSE "904")
+        /\ (NoReauth \/ (Reauth = "none" /\ srv.reg)))
+       => /\ Has(NewOut, IF NoReauth THEN "907" ELSE "904")
           /\ srv'.sasl = "idle" /\ srv'.account = srv.account]_vars
 \* Progress sanity check (weaker): once sasl is enabled, an opener is
 \* never silently dropped.
@@ -868,4 +875,7 @@ W_Late908       == ~gw.late908      \* AnyOrder908: 904 first, 908 after it (R2)
 \* AcctEarly: the account is set while its 900 is still owed (R1).  On a
 \* first login the account was "", so equality here means it was set early.
 W_AcctEarly     == ~(srv.owe900 # "" /\ srv.account = srv.owe900 /\ srv.succN = 1)
+\* v0.3, D20: under "fresh", a login after 001, and a 907 after a login.
+W_FreshPostReg  == ~(gw.postReg /\ Reauth = "fresh")
+W_FreshLate907  == ~(gw.late907 /\ Reauth = "fresh")
 =============================================================================
