@@ -33,12 +33,19 @@ each property is checked.
 - `ChangeP(o, a)`: P's account changes at A (SASL, webhook) or at B (services), as `POrigin`
   allows, to `X`, `Y` or `*`. ACCOUNT to the local observer; `AC` to the peer.
 - `PartJoinP`: with `Joins`, P parts or joins at A; extended JOIN or PART to oA; `J` to B.
-- `SessReauth(c, a)`: the face re-authenticates (with `SessSwitch`, to another name). When the
+- `SessReauth(c, a)`: with `SessSwitch` (the code; the #223 ruling forbids it, D10), the face
+  re-authenticates to another name. When the
   session is found (`Lookup`: always for `"byRecord"`, only under the session's name for
   `"byName"`), the local copy of the remote alias is updated and `BX U` goes with `AC`, in the
   `AliasFirst` order; otherwise only `AC`. ACCOUNT to the local observer.
-- `AliasReauthA(c, a)`: with `AliasReauth`, an alias device re-authenticates: its own account,
-  ACCOUNT under nick S to the local observer, `AC` to the peer.
+- `AliasReauthA(c, a)`: with `AliasReauth` (the code; the #223 ruling forbids it, D10), an alias
+  device re-authenticates to another name: its own account, ACCOUNT under nick S to the local
+  observer, `AC` to the peer.
+- `SvcRenameB(a)`: with `SvcRename` (D10), services on B rename the account of the face B shows:
+  B's copy changes, ACCOUNT to oB, and `AC M` goes to A (with `"all"`, one for the alias too).
+  When the face is B's own client and the session is found (`Lookup`), B's copy of the alias
+  changes and `BX U` goes before the `AC`; when the face is A's, A does the same on reading the
+  `AC` (`RecvAC`).
 - `LogoutFace(c)`: with `SessLogout`, during a split only: the face is deauthed and leaves the
   session.
 - `Send(c)`: a message. Delivered at once on the sender's server, as `MSG` across the link. The
@@ -52,6 +59,9 @@ each property is checked.
   with its channel membership) and for the local face (with its account and session flag).
 
 ## Properties
+
+`NoLossAfterLinkedSvcRename` is P11 restricted to the services path: a rename while linked, no
+change during a split.
 
 P1 to P11 of `DECISIONS.md`, and `NoLossAfterLinkedRename` (P11 restricted to the live run's
 sequence: a rename while linked, no change during the split). Quiescent = link up, both directions empty. P1, P3, P4, P5 and P10 are
@@ -82,3 +92,4 @@ Each replaces one anchor in `Bouncer.tla` (`mkcfg.py`) and must break the proper
 | `M_JoinStar` | the burst JOIN always carries `*` | `ViewMatchesServer` |
 | `M_PromoteQuit` | the split promote QUITs the nick to the observer | `ViewMatchesServer` |
 | `M_BurstStale` | the burst's `N` for P carries the account P had before the split | `ViewConverges` |
+| `M_SvcNoEmit` | the face's server, reading services' `AC`, does not emit to the session's alias (`m_account.c:312` removed); run on `SvcRecordTight` | `NoLossAfterLinkedSvcRename` |

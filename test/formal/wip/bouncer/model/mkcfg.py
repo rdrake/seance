@@ -12,11 +12,21 @@ import os
 BASE = dict(InitPrim='"dA"', POrigin='"home"', SessSwitch="TRUE", AliasFirst="TRUE",
             AliasReauth="FALSE", SessLogout="TRUE", Joins="FALSE", LossAtSplit="FALSE",
             PromoteNotify="FALSE", BxcName='"device"', ReauthInBurst="FALSE",
-            Lookup='"byRecord"', ClassicTie='"any"', MaxChanges=2, MaxMsgs=1, MaxSplits=1)
+            Lookup='"byRecord"', ClassicTie='"any"', SvcRename='"off"',
+            MaxChanges=2, MaxMsgs=1, MaxSplits=1)
 # the code's values (DECISIONS.md, switch table)
 CODE = dict(POrigin='"both"', AliasReauth="TRUE", LossAtSplit="TRUE",
             PromoteNotify="FALSE", BxcName='"session"', ReauthInBurst="TRUE",
             Lookup='"byName"', ClassicTie='"code"')
+# the #223 ruling (DECISIONS.md D10): a SASL re-auth never moves a client to another
+# account (the face: SessSwitch FALSE; an alias: a same-name re-auth changes nothing,
+# so AliasReauth FALSE).  Every other switch at the code's value; no deauth during
+# a split (that route, W_IntendedLogout, is not a rename).
+INTENDED = dict(CODE, SessSwitch="FALSE", AliasReauth="FALSE", SessLogout="FALSE")
+# the same with no lossy split and no change in the burst window
+TIGHT = dict(INTENDED, LossAtSplit="FALSE", ReauthInBurst="FALSE")
+LOSS = "TypeOK NoUnexpected NoSessionLoss"
+LINKED = "TypeOK NoUnexpected NoLossAfterLinkedSvcRename"
 
 SAFE = ("TypeOK ViewMatchesServer ViewConverges TagAgreesView TagAtSendPlain"
         " AliasesAgree CopiesAgree OneFace VerdictsAgree NoUnexpected")
@@ -63,6 +73,32 @@ CFGS = {
   # exactly one classic winner: the session is never lost
   "BaseWinner":    (dict(ClassicTie='"winner"'), SAFE + " NoSessionLoss", "pass", "limited"),
   "MidWinner":     (dict(ClassicTie='"winner"', MaxChanges=3, MaxMsgs=2, Joins="TRUE"), SAFE + " NoSessionLoss", "pass", "limited"),
+  # the #223 ruling: only services renames move the session's account (D10)
+  "I_Name":          (dict(INTENDED), LOSS, "pass", "limited"),
+  "W_SvcName":       (dict(INTENDED, SvcRename='"face"'), LOSS, "fail", "limited"),
+  "W_SvcNameLinked": (dict(INTENDED, SvcRename='"face"'), LINKED, "fail", "limited"),
+  "W_SvcRecord":     (dict(INTENDED, SvcRename='"face"', Lookup='"byRecord"'), LOSS, "fail", "limited"),
+  "W_SvcRecordLinked": (dict(INTENDED, SvcRename='"face"', Lookup='"byRecord"'), LINKED, "fail", "limited"),
+  # byRecord, one hazard at a time: a rename in the burst window; a split that cuts the BX U
+  "W_SvcRecordBurst": (dict(INTENDED, SvcRename='"face"', Lookup='"byRecord"', LossAtSplit="FALSE"),
+                       LINKED, "fail", "limited"),
+  "W_SvcRecordLoss": (dict(INTENDED, SvcRename='"face"', Lookup='"byRecord"', ReauthInBurst="FALSE"),
+                      LINKED, "fail", "limited"),
+  "SvcRecordTight":  (dict(TIGHT, SvcRename='"face"', Lookup='"byRecord"'), LINKED, "pass", "limited"),
+  "SvcRecordTight3": (dict(TIGHT, SvcRename='"face"', Lookup='"byRecord"', MaxChanges=3, MaxSplits=2),
+                      LINKED, "pass", "limited"),
+  "SvcRecordTightAll": (dict(TIGHT, SvcRename='"all"', Lookup='"byRecord"'), LINKED, "pass", "limited"),
+  "W_SvcRecordTightSplit": (dict(TIGHT, SvcRename='"face"', Lookup='"byRecord"'), LOSS, "fail", "limited"),
+  "W_SvcNameTight":  (dict(TIGHT, SvcRename='"face"'), LINKED, "fail", "limited"),
+  "W_SvcNameTightB": (dict(TIGHT, SvcRename='"face"', InitPrim='"dB"'), LINKED, "fail", "limited"),
+  # X3 told every device (a hypothetical): byName still finds no session under the new name
+  "W_SvcNameAll":    (dict(TIGHT, SvcRename='"all"'), LINKED, "fail", "limited"),
+  "I_Name3":         (dict(INTENDED, MaxChanges=3, MaxSplits=2), LOSS, "pass", "limited"),
+  "W_IntendedLogout": (dict(INTENDED, SessLogout="TRUE"), LOSS, "fail", "limited"),
+  "CoverSvcRenameHealed": (dict(TIGHT, SvcRename='"face"', Lookup='"byRecord"'),
+                           "CoverSvcRenameHealed", "fail", "limited"),
+  "CoverSvcRenameHealedB": (dict(TIGHT, SvcRename='"face"', Lookup='"byRecord"', InitPrim='"dB"'),
+                            "CoverSvcRenameHealed", "fail", "limited"),
   # covers on positives (each must be violated)
   "CoverPromote":   ({}, "CoverPromote", "fail", "limited"),
   "CoverMerge":     ({}, "CoverMerge", "fail", "limited"),
@@ -129,6 +165,10 @@ MUTS = {
     "BurstP(v) == IF v = Home(\"P\") THEN <<L(\"N\", \"P\", acc[v][\"P\"], FALSE, chan[v])>> ELSE <<>>",
     "BurstP(v) == IF v = Home(\"P\") THEN <<L(\"N\", \"P\", preSplit, FALSE, chan[v])>> ELSE <<>>")],
     "Base", "ViewConverges"),
+  "M_SvcNoEmit": ([(
+    "      emit == c \\in Devs /\\ Home(c) = v /\\ face[v] = c /\\ inSess[c]",
+    "      emit == FALSE /\\ c \\in Devs /\\ Home(c) = v /\\ face[v] = c /\\ inSess[c]")],
+    "SvcRecordTight", "NoLossAfterLinkedSvcRename"),
 }
 
 

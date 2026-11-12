@@ -1,4 +1,4 @@
-# Account state across a split and a burst: decisions (v1, after a live run)
+# Account state across a split and a burst: decisions (v2, after a maintainer ruling)
 
 Each entry settles a reading the text leaves open, says why from the spec text or from the
 nefarious2 source, and says how the model shows it. Written before any TLA+.
@@ -26,16 +26,24 @@ classic collision (D8). v1 adds the switches `Lookup` and `ClassicTie` with the 
 taken from that run and from the source, and the property `NoSessionLoss` (P11). Each entry
 says which observation it rests on ("live run, item n").
 
+**v2.** A maintainer ruling on nefarious2 issue #223 (D10): a post-registration OAUTHBEARER
+re-authentication is a token refresh only and must never move a client to another account.
+The two SASL routes v1 modelled to a different account name (`SessSwitch`, `AliasReauth`) are
+therefore server defects (#218, #219), kept as switches so the code's behaviour stays
+reproducible. The one legitimate route left is a services rename (X3 AuthServ `RENAME`),
+modelled by the new switch `SvcRename`.
+
 ## Switches and fixed choices
 
 | Name | Values | Kind | Text / code |
 | --- | --- | --- | --- |
 | `InitPrim` | the session's primary at start is `dA` (on A) or `dB` (on B) | allowed, both checked | D6 |
 | `POrigin` | where P's account changes: `"home"` (A), `"services"` (B), `"both"` | `"both"` is what the code allows; each single origin is a restriction | `m_account.c:187-351`, D3 |
-| `SessSwitch` | the session's primary may re-authenticate to another account name | allowed (code: TRUE) | `m_authenticate.c:154-186`, AT:30-36, D4 |
+| `SessSwitch` | a SASL re-authentication of the session's primary may move it to another account name; FALSE: a re-auth keeps the account (a token refresh) and changes no account state | the code allows it (TRUE); FALSE is the #223 ruling, the intended behaviour (D10) | `m_authenticate.c:154-186`, AT:30-36, D4, D10 |
 | `Lookup` | a session is found by its client's current account name (`"byName"`) or by the client (`"byRecord"`) | `"byName"` is the code (`bouncer_session.c:16822`, `:2172`); `"byRecord"` is a candidate change, not the code | D5, D8 |
 | `AliasFirst` | when a `BX U` is sent at all, it goes before `AC` | the code's order (TRUE); FALSE is a variant | `sasl_auth.c:933,941`, D5 |
-| `AliasReauth` | an alias device may re-authenticate on its own | allowed by the code (TRUE); FALSE is a restriction | `m_authenticate.c:154-186`, `bouncer_session.c:12293`, D5 |
+| `AliasReauth` | an alias device may re-authenticate on its own to another account name | allowed by the code (TRUE); FALSE is the #223 ruling (a same-name re-auth changes nothing and sends no line), the intended behaviour (D10) | `m_authenticate.c:154-186`, `bouncer_session.c:12293`, D5, D10 |
+| `SvcRename` | services rename the account the session's face is logged in to: `"off"`; `"face"`, X3's `RENAME` as written (an `AC M` for the face only); `"all"`, an `AC M` for every device of the session | `"face"` is X3 at a8f6d02 with `sync_log` on; `"off"` is X3 with `sync_log` off (its default) or no rename; `"all"` is a hypothetical | `nickserv.c` `cmd_rename_handle`, `proto-p10.c` `irc_rename`, `m_account.c:267`, `:312`, D10 |
 | `SessLogout` | a session face may be logged out (deauth) during a split | allowed | `sasl_webhook.c:186-219`, D4 |
 | `Joins` | P may PART and JOIN | allowed | EJ:20-37, D2 |
 | `LossAtSplit` | a split may cut lines still in flight | allowed (code: TRUE); FALSE (split only with empty links) is a restriction | D7 |
@@ -252,6 +260,67 @@ servers; the interleavings `W_BurstReauth` needs were not produced there.
 follows NICK keeps its cache keyed by the client. So the model keys views by client identity
 (nick `P` for P, nick `S` for the session face) and leaves NICK out. Nick collisions at the
 burst are D8's.
+
+## D10. Only services move a logged-in session to another account (nefarious2 #223)
+
+**Ruling.** nefarious2 issue #223 (evilnet/nefarious2), after ibutsu/MrLenin's comment: an
+OAUTHBEARER re-authentication after registration is a token refresh only; it must never move a
+client to a different account. At e81d12aa the code allows it: `m_authenticate.c:155-170` lets a
+client that has an account start a new OAUTHBEARER exchange ("OAUTHBEARER supports token
+refresh and a change of account"), and `sasl_login_apply` (`sasl_auth.c:818`) refuses only a
+login under the **same** name with a different Keycloak id (`:827-845`); a different name goes
+through step 7 (D2). That is the route into #218 (an alias re-authenticates to another account:
+`AliasReauth`, D5, `W_AliasReauth*`) and #219 (the primary re-authenticates, then the session is
+lost at a split and a relink: `SessSwitch` with `Lookup = "byName"`, D5, D8, `W_CodeRename`).
+
+**Reading.** `SessSwitch = TRUE` and `AliasReauth = TRUE` stay the code's values, and every v1
+witness built on them still reproduces the code. Under the ruling both are FALSE: a re-auth
+keeps the client's account, which is no account change (the same-name path sends no `AC`,
+`sasl_auth.c:897`, 953), so neither action is enabled. (v1's FALSE for `SessSwitch` allowed a
+change back to the session's name; no config used it, and under the ruling that is a move to
+another account too, so FALSE now forbids every SASL change.) The intended configuration is the
+code's values with these two FALSE (`INTENDED` in `mkcfg.py`).
+
+**The route that remains: a services rename.** X3's AuthServ oper command `RENAME`
+(`cmd_rename_handle`, evilnet/x3 `src/nickserv.c` at a8f6d02, around 2209) renames the handle in
+place: the same `handle_info`, so the same Keycloak user (`hi->kc_id` is not touched; only an
+LDAP rename is attempted, under `WITH_LDAP`). Only when `nickserv_conf.sync_log` is on does it
+call `irc_rename` for each user on `hi->users` (`nickserv.c:2250-2254`), and `sync_log` is off
+unless configured (`nickserv.c:5571`). `irc_rename` (`src/proto-p10.c:611-615`) sends
+`<X3> AC <user> M <new>` when `extended_accounts` is on (its default, `proto-p10.c:2724-2725`),
+and nothing otherwise: no timestamp and no Keycloak id.
+
+X3 holds no alias. Nefarious introduces an alias by `BX C` only, never by `N`, and X3's `BX`
+handler (`cmd_bouncer_transfer`, `proto-p10.c`) acts on `BX P` alone, moving the face's
+`userNode` to the promoted numeric. So `hi->users` holds the session's face, not its aliases, and
+the `AC M` names the face only. The caller's reading ("every device of the session gets the
+new name") is therefore not what X3 sends; it is kept as the hypothetical `SvcRename = "all"`.
+
+The `AC M` lands in `ms_account` (`m_account.c:237-351`) at X3's uplink first, then on every
+server the relay reaches: each sets its copy of the face (`:267`) and clears the face's
+Keycloak id and creation date (`:296-303`, an `AC` with no fifth parameter). At the face's own
+server (`MyConnect`), `bounce_emit_alias_update` (`:312`) runs with the account already set, so
+it finds the session by the **new** name: under `Lookup = "byName"` it misses (the session is
+filed under `hs_account`, set at create, D4/D5) and no alias is told; elsewhere
+`bounce_sync_alias_identity` (`:314`) only copies the timestamp and id to aliases that already
+show the new name. So a services rename at e81d12aa reaches the aliases exactly as a face's
+SASL change does (D5): not at all under `"byName"`.
+
+**Model.** `SvcRenameB(a)`: services sit on B (D3); the face B shows, logged in, gets account
+`a`. B applies it, tells its observer, emits to the session's alias when the face is its own
+client (`BX U` before the relayed `AC`, the order of `m_account.c:312` then `:342-351`), and
+relays the `AC`. When the face is A's, A emits on receipt (`RecvAC`). During a split, services
+reach only B's side. A rename is gated like any face change by `ReauthInBurst`. Identity is not
+modelled beyond the name: the rename keeps the Keycloak user, and a cleared id reads as no
+conflict at the heal (`bounce_rebind_kc_conflict`, `bouncer_rebind_auth.c:37-42`). The plain
+user P is a different account in the model, so a rename does not touch P.
+
+**Restriction.** With `"all"` and `Lookup = "byName"`, both devices show the new name at the
+heal and no session is found under it: the model takes the classic rules on both sides. The
+code may instead reach a keep verdict on one side and a barred demote (`BOUNCE_DEMOTE_NO_SESSION`)
+on the other (`bouncer_converge.c:205-250`, `bouncer_wire.c:94-103`); the classic side then
+kills both, as the same-account override (`m_nick.c:1034-1043`) with equal nick TS still does.
+The outcome, both devices gone, is the same; the verdicts the model records are not.
 
 ## Properties (decided before the model)
 

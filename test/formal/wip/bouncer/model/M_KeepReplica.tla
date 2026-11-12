@@ -1,13 +1,15 @@
 ------------------------------- MODULE M_KeepReplica -------------------------------
 (* Account state of IRCv3 clients across a split and a P10 burst, with one   *)
-(* bouncer session.  Readings: ../DECISIONS.md (D1-D9); scope: ../DESIGN.md. *)
+(* bouncer session.  Readings: ../DECISIONS.md (D1-D10); scope: ../DESIGN.md.*)
 (* Server: nefarious2 ircv3.2-upgrade e81d12aa.                              *)
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
 CONSTANTS
   InitPrim,       \* "dA" or "dB": the session's face at start (D6)
   POrigin,        \* where P's account changes: "home", "services" (at B) or "both" (D3)
-  SessSwitch,     \* the face may re-authenticate to another account name (D4)
+  SessSwitch,     \* a SASL re-authentication of the face may move it to another account
+                  \* name (D4; the code: TRUE).  FALSE is the #223 ruling (D10): a re-auth
+                  \* is a token refresh, keeps the account, and changes no account state
   AliasFirst,     \* BX U before AC on the wire (D5); the code: TRUE
   AliasReauth,    \* an alias device may re-authenticate (D5); the code: TRUE
   SessLogout,     \* a face may be deauthed during a split (D4)
@@ -20,6 +22,9 @@ CONSTANTS
                   \* name; "byRecord": by the client, whatever its name (D5, D8)
   ClassicTie,     \* the classic outcome: "any" (one, the other or both), "winner" (exactly
                   \* one), "code" (the session's two devices tie on nick TS, D8)
+  SvcRename,      \* services (at B) rename the account of the face B shows (D10): "off";
+                  \* "face": X3's RENAME as written, AC M for the face only; "all": AC M
+                  \* for every session device B has a copy of (a hypothetical)
   MaxChanges, MaxMsgs, MaxSplits
 
 Servers == {"A", "B"}
@@ -148,7 +153,7 @@ SessReauth(c, a) ==
       ac == <<L("AC", c, a, FALSE, FALSE)>>
   IN
   /\ nChg < MaxChanges /\ alive[c] /\ inSess[c] /\ face[h] = c /\ MayChangeFace
-  /\ a \in Accts /\ a # acc[h][c] /\ (SessSwitch \/ a = SessName)
+  /\ a \in Accts /\ a # acc[h][c] /\ SessSwitch
   /\ nChg' = nChg + 1
   /\ acc' = [acc EXCEPT ![h][c] = a, ![h][d] = IF hasAlias THEN a ELSE @]
   /\ view' = [view EXCEPT ![ObsAt(h)]["S"] = a]
@@ -186,6 +191,36 @@ LogoutFace(c) ==
   /\ seen' = seen \cup {"splitchange"}
   /\ UNCHANGED <<alive, face, chan, q, link, nMsg, nSplit, win, bad, preSplit, verd>>
 
+\* Services rename the account the face is logged in to (X3 AuthServ RENAME,
+\* nickserv.c cmd_rename_handle; with sync_log, irc_rename: AC <user> M <new>
+\* for each user X3 holds as authed to the handle).  X3 holds no aliases (its
+\* BX handler, proto-p10.c, keeps none), so "face" sends AC for the face only.
+\* Services are on B (D3): B applies the AC first (m_account.c:267), tells its
+\* observer, and, when the face is its own client, emits to the session's
+\* aliases (m_account.c:312, bouncer_session.c:12287-12330) before relaying the
+\* AC; when the face is A's, A emits when the AC reaches it (RecvAC).  D10.
+SvcRenameB(a) ==
+  LET f == face["B"]
+      old == acc["B"][f]
+      d == Peer(f)
+      hit == Home(f) = "B" /\ inSess[f] /\ acc["B"][d] # NOREP /\ alive[d] /\ inSess[d]
+             /\ (Lookup = "byRecord" \/ a = SessName)
+      also == SvcRename = "all" /\ acc["B"][d] = old /\ alive[d] /\ inSess[d]
+      bxu == IF hit THEN <<L("BXU", d, a, FALSE, FALSE)>> ELSE <<>>
+      acs == <<L("AC", f, a, FALSE, FALSE)>> \o
+             (IF also THEN <<L("AC", d, a, FALSE, FALSE)>> ELSE <<>>)
+  IN
+  /\ SvcRename # "off" /\ nChg < MaxChanges /\ MayChangeFace
+  /\ f # NOFACE /\ alive[f] /\ inSess[f]
+  /\ old \in Accts /\ a \in Accts /\ a # old
+  /\ nChg' = nChg + 1
+  /\ acc' = [acc EXCEPT !["B"][f] = a, !["B"][d] = IF hit \/ also THEN a ELSE @]
+  /\ view' = [view EXCEPT !["oB"]["S"] = a]
+  /\ Enq("B", bxu \o acs)
+  /\ seen' = seen \cup {"svcrename"}
+                   \cup (IF Up THEN {"svcrenamelinked"} ELSE {"splitchange"})
+  /\ UNCHANGED <<alive, inSess, face, chan, link, nMsg, nSplit, win, bad, preSplit, verd>>
+
 -----------------------------------------------------------------------------
 (* Messages                                                                *)
 
@@ -207,15 +242,22 @@ Pop(v, out) == q' = [q EXCEPT ![Other(v)] = Tail(@), ![v] = @ \o out]
 
 \* ms_account (m_account.c:189-190 ignore; 209, 325 notify).  A device's AC
 \* is announced under nick S whether it is the face or an alias here (D5).
+\* An AC for a face this server holds as its own (only services send one, D10)
+\* is emitted to the session's aliases before the relay (m_account.c:312).
 RecvAC(v, l) ==
-  LET c == l.c IN
-  /\ IF acc[v][c] = NOREP
-     THEN UNCHANGED <<acc, view>>
-     ELSE /\ acc' = [acc EXCEPT ![v][c] = l.a]
+  LET c == l.c
+      d == Peer(c)
+      emit == c \in Devs /\ Home(c) = v /\ face[v] = c /\ inSess[c]
+              /\ acc[v][d] # NOREP /\ alive[d] /\ inSess[d]
+              /\ (Lookup = "byRecord" \/ l.a = SessName)
+  IN
+  /\ IF acc[v][c] = NOREP \/ (Home(c) = v /\ ~alive[c])
+     THEN UNCHANGED <<acc, view>> /\ Pop(v, <<>>)
+     ELSE /\ acc' = [acc EXCEPT ![v][c] = l.a, ![v][d] = IF emit THEN l.a ELSE @]
           /\ view' = IF c = "P"
                      THEN (IF chan[v] THEN [view EXCEPT ![ObsAt(v)]["P"] = l.a] ELSE view)
                      ELSE (IF face[v] # NOFACE THEN [view EXCEPT ![ObsAt(v)]["S"] = l.a] ELSE view)
-  /\ Pop(v, <<>>)
+          /\ Pop(v, IF emit THEN <<L("BXU", d, l.a, FALSE, FALSE)>> ELSE <<>>)
   /\ UNCHANGED <<alive, inSess, face, chan, bad, seen>>
 
 \* BX U account= applies to an alias only (bounce_alias_update), no line out
@@ -398,6 +440,7 @@ Next ==
   \/ PartJoinP
   \/ \E c \in Devs, a \in Accts : SessReauth(c, a) \/ AliasReauthA(c, a)
   \/ \E c \in Devs : LogoutFace(c)
+  \/ \E a \in Accts : SvcRenameB(a)
   \/ \E c \in Clients : Send(c)
   \/ \E v \in Servers : Recv(v)
   \/ Split
@@ -448,6 +491,11 @@ NoLossAfterLinkedRename ==
   ~(Quiescent /\ \A d \in Devs : ~alive[d]
     /\ "renamelinked" \in seen /\ "splitchange" \notin seen)
 
+\* The same for a services rename while linked (D10)
+NoLossAfterLinkedSvcRename ==
+  ~(Quiescent /\ \A d \in Devs : ~alive[d]
+    /\ "svcrenamelinked" \in seen /\ "splitchange" \notin seen)
+
 \* Covers: each must be violated in some passing config
 CoverPromote == "promote" \notin seen
 CoverMerge == ~(Quiescent /\ "merge" \in seen)
@@ -456,4 +504,8 @@ CoverSplitLogoutHealed ==
   ~(Quiescent /\ {"plogoutsplit", "heal"} \subseteq seen /\ view["oB"]["P"] = NONE)
 CoverAliasMsg == "aliasmsg" \notin seen
 CoverReauthLinked == ~(Quiescent /\ "reauthlinked" \in seen)
+\* a services rename while linked, then a split and a heal that merges
+CoverSvcRenameHealed ==
+  ~(Quiescent /\ {"svcrenamelinked", "heal", "merge"} \subseteq seen
+    /\ \E d \in Devs : alive[d])
 =============================================================================
