@@ -197,7 +197,7 @@ SrvEnd == sout' = sout /\ srv' = [srv EXCEPT !.endSeen = TRUE]      \* CN-16 aft
 \* sent, its 900 still due), so a client logged out by other means, or
 \* never logged in, may log in after 001.
 NoReauth == \/ Reauth = "none" /\ srv.succeeded
-            \/ FALSE
+            \/ Reauth = "fresh" /\ (srv.account # "" \/ srv.owe900 # "")
 Late907 == NoReauth /\ srv.sasl \notin Active
 
 \* S1:64: no numeric is named for the total-length limit.  905 is defined
@@ -236,7 +236,7 @@ SrvChunk(t) ==
 SrvMech(mech) ==
     IF srv.sasl \in Active
     THEN SrvChunk("SHORT")
-    ELSE IF NoReauth
+    ELSE IF Reauth = "none" /\ srv.succeeded
     THEN sout' = Append(sout, M("907")) /\ srv' = srv  \* opener-907
     ELSE IF ~srv.enabled
     THEN \/ sout' = sout /\ srv' = srv

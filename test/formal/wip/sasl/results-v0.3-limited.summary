@@ -1,0 +1,25 @@
+SASL v0.3 limited run (model e80c58f99; mutant fix below), TLC -workers 3, 20-minute cap.
+
+TinyFresh | No error has been found | 1948650 distinct states found | Finished in 06min
+W_FreshPostReg | Error: Invariant W_FreshPostReg is violated. | 25888 distinct states found | Finished in 02s
+W_FreshLate907 | Error: Invariant W_FreshLate907 is violated. | 12177 distinct states found | Finished in 02s
+TinyS1 | No error has been found | 1152196 distinct states found | Finished in 03min
+W_Late907 | Error: Invariant W_Late907 is violated. | 11928 distinct states found | Finished in 02s
+W_PostRegErr | Error: Invariant W_PostRegErr is violated. | 1911 distinct states found | Finished in 01s
+TinyChunks | No error has been found | 98211 distinct states found | Finished in 14s
+TinyChunks2 | No error has been found | 129967 distinct states found | Finished in 19s
+W_Limit | Error: Invariant W_Limit is violated. | 2732 distinct states found | Finished in 01s
+TinyNotify | TIMEOUT/none (6,052,821 distinct states found) | 821 distinct states found | 
+TinyNotifyList | TIMEOUT/none (5,600,839 distinct states found) | 839 distinct states found | 
+MU_No907 | Error: Action property Rule907 is violated. | 31844 distinct states found | Finished in 06s
+MU_PostRegWrongErr | Error: Action property RuleReauthRefused is violated. | 1378 distinct states found | Finished in 01s
+MU_ChangeOn907 | Error: Action property Rule907NoChange is violated. | 30892 distinct states found | Finished in 05s
+MU_FreshNo907 (rebuilt) | Action property Rule907 is violated | 31317 distinct states found
+
+Notes
+- TinyNotify and TinyNotifyList hit the 20-minute cap at about 6 million states,
+  without an error; they move to the comprehensive runs with RefNotify/RefNotifyList.
+- MU_FreshNo907 first mutated NoReauth, which the rules Rule907 and RuleReauthRefused
+  also use, so the property changed with the server and nothing was violated
+  (3,260,651 states, no error). It now mutates only the server's opener step and
+  is caught by Rule907.

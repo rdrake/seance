@@ -79,7 +79,9 @@ mut('MU_ChangeOn907', 'TinyS1',
 mut('MU_No907', 'TinyS1',
     'ELSE IF NoReauth\n    THEN',
     'ELSE IF FALSE\n    THEN')
+# In the server's opener step only: NoReauth also defines the rules, so
+# mutating it there would mutate the property along with the server.
 mut('MU_FreshNo907', 'TinyFresh',
-    '\\/ Reauth = "fresh" /\\ (srv.account # "" \\/ srv.owe900 # "")',
-    '\\/ FALSE')
+    'ELSE IF NoReauth\n    THEN sout\' = Append(sout, M("907"))',
+    'ELSE IF Reauth = "none" /\\ srv.succeeded\n    THEN sout\' = Append(sout, M("907"))')
 print('ok')
