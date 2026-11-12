@@ -271,3 +271,7 @@ Its consequence is hs D12's: the abandoned exchange's 906 (or another of its rep
 ## D20. `Reauth = "fresh"`: login after 001 while logged out, 907 while logged in (v0.3)
 
 Both servers recorded in `traces/` behave this way (Q3, Q4). An opener from a client with an account set, or owed (903 sent, its 900 still due), gets 907 (and so does every later AUTHENTICATE line outside an exchange, `Late907`); an opener from a client without one runs normally, before or after 001. A client logged out by other means may therefore log in again. `NoReauth` in the model names the refusing condition for "none" (after any login) and "fresh" (while an account is set). Limited config `TinyFresh` (TinyReauth's bounds), witnesses `W_FreshPostReg` and `W_FreshLate907`, mutant `MU_FreshNo907`.
+
+## D21. Which mode an observed server means (v0.3 note, no model change)
+
+The recorded nefarious2 refuses every reauthentication at the opener with 907, except OAUTHBEARER. Its maintainers intend OAUTHBEARER only to refresh the current login, not to change account. The filed account-change behaviour is a defect against that intent. So the intended server is `"fresh"` (D20) for its other mechanisms, and `"same"` (D9) for OAUTHBEARER: the exchange runs, and a token for another account is refused, with the login kept. The model's `Reauth` is per server, not per mechanism, so the two halves are checked separately: `TinyFresh` and `TinySame`. Under `"same"`, a refusal may come as 907 (decide-907) or as the general 904 failure branch. Both leave the account unchanged.
