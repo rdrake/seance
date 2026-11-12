@@ -14,9 +14,10 @@ Messages (PRIVMSG / NOTICE / TAGMSG), the client's pending copies (D15):
   KindForEcho        with echo-message the copy is confirmed by its echo;
                      without it, accepted by ACK; an error fails it.  The
                      model's Expect(k) gives the outcome.
-  SelfCopy           messaging your own nick yields two copies (LR-5); the
-                     model allows either to carry the label (role "resp" or
-                     "deliv"), so this is reported, not judged.
+  SelfDelivery (LR)  messaging your own nick: the delivered copy MUST NOT
+                     carry the label.  With echo-message off the only copy is
+                     the delivery, so a labeled copy fails; with it on the two
+                     copies cannot be told apart, so that case is reported.
 
     python3 check_lr.py traces/*.jsonl
 """
@@ -94,6 +95,10 @@ def check(path):
                 self_msg = r["name"] == "privmsg-self"
                 if not errs and lk != want and not self_msg:
                     fails.append(f"KindForEcho: {lk}, the model expects {want}")
+                if self_msg and not echo and lk == "echo":
+                    # labeled-response: the copy delivered to yourself MUST NOT carry the
+                    # label; with echo-message off the only copy is that delivery.
+                    fails.append("SelfDelivery: the delivered copy to self carries the label")
                 if self_msg:
                     copies = [x for x in lines if command(x) == sent_cmd]
                     pos = next((i for i, x in enumerate(copies) if tags(x).get("label") == label), None)
