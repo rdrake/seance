@@ -16,6 +16,10 @@ CONSTANTS
   PromoteNotify,  \* the promote announces a changed account (D7); the code: FALSE
   BxcName,        \* "session" (the code) or "device": what a merge's BX C carries (D8)
   ReauthInBurst,  \* a device may change account while a burst N or merge BX C is unread (D8); the code: TRUE
+  Lookup,         \* "byName" (the code): a session is found by its client's current account
+                  \* name; "byRecord": by the client, whatever its name (D5, D8)
+  ClassicTie,     \* the classic outcome: "any" (one, the other or both), "winner" (exactly
+                  \* one), "code" (the session's two devices tie on nick TS, D8)
   MaxChanges, MaxMsgs, MaxSplits
 
 Servers == {"A", "B"}
@@ -136,7 +140,10 @@ PartJoinP ==
 SessReauth(c, a) ==
   LET h == Home(c)
       d == Peer(c)
+      \* bounce_emit_alias_update looks the session up after the account is set
+      \* (sasl_auth.c:906 then 933; bouncer_session.c:12296, 16822)
       hasAlias == acc[h][d] # NOREP /\ alive[d] /\ inSess[d]
+                  /\ (Lookup = "byRecord" \/ a = SessName)
       bxu == IF hasAlias THEN <<L("BXU", d, a, FALSE, FALSE)>> ELSE <<>>
       ac == <<L("AC", c, a, FALSE, FALSE)>>
   IN
@@ -147,6 +154,8 @@ SessReauth(c, a) ==
   /\ view' = [view EXCEPT ![ObsAt(h)]["S"] = a]
   /\ Enq(h, IF AliasFirst THEN bxu \o ac ELSE ac \o bxu)
   /\ seen' = seen \cup (IF hasAlias /\ Up THEN {"reauthlinked"} ELSE {})
+                   \cup (IF Up /\ acc[h][d] # NOREP /\ alive[d] /\ inSess[d] THEN {"renamelinked"} ELSE {})
+                   \cup (IF ~Up THEN {"splitchange"} ELSE {})
   /\ UNCHANGED <<alive, inSess, face, chan, link, nMsg, nSplit, win, bad, preSplit, verd>>
 
 \* An alias device re-authenticates on its own (D5): bouncer_session.c:12293
@@ -161,7 +170,8 @@ AliasReauthA(c, a) ==
   /\ acc' = [acc EXCEPT ![h][c] = a]
   /\ view' = [view EXCEPT ![ObsAt(h)]["S"] = a]
   /\ Enq(h, <<L("AC", c, a, FALSE, FALSE)>>)
-  /\ UNCHANGED <<alive, inSess, face, chan, link, nMsg, nSplit, win, bad, seen, preSplit, verd>>
+  /\ seen' = seen \cup (IF ~Up THEN {"splitchange"} ELSE {})
+  /\ UNCHANGED <<alive, inSess, face, chan, link, nMsg, nSplit, win, bad, preSplit, verd>>
 
 \* A face is deauthed during a split (sasl_webhook.c:186-219): its session ends
 \* here (bouncer_session.c:12138-12151), the connection stays.
@@ -173,7 +183,8 @@ LogoutFace(c) ==
   /\ acc' = [acc EXCEPT ![h][c] = NONE]
   /\ inSess' = [inSess EXCEPT ![c] = FALSE]
   /\ view' = [view EXCEPT ![ObsAt(h)]["S"] = NONE]
-  /\ UNCHANGED <<alive, face, chan, q, link, nMsg, nSplit, win, bad, seen, preSplit, verd>>
+  /\ seen' = seen \cup {"splitchange"}
+  /\ UNCHANGED <<alive, face, chan, q, link, nMsg, nSplit, win, bad, preSplit, verd>>
 
 -----------------------------------------------------------------------------
 (* Messages                                                                *)
@@ -257,8 +268,10 @@ RecvND(v, l) ==
          /\ view' = [view EXCEPT ![ObsAt(v)]["S"] = l.a]
          /\ Pop(v, <<>>)
          /\ UNCHANGED <<alive, inSess, face, chan, bad, seen, verd>>
-    [] Home(f) = v /\ l.s /\ inSess[f] /\ alive[f] /\ l.a = acc[v][f] /\ l.a # NONE ->
-         \* D.2 merge: m_nick.c:655-658 reads our client's current account
+    [] Home(f) = v /\ l.s /\ inSess[f] /\ alive[f] /\ l.a = acc[v][f] /\ l.a # NONE
+       /\ (Lookup = "byRecord" \/ l.a = SessName) ->
+         \* D.2 merge: m_nick.c:655-658 reads our client's current account; the
+         \* session is found by that name (bouncer_session.c:2172)
          /\ seen' = seen \cup {"merge"}
          /\ verd' = [verd EXCEPT ![v] = "merge"]
          /\ IF win.merge = v
@@ -279,7 +292,9 @@ RecvND(v, l) ==
                    /\ acc' = [acc EXCEPT ![v][c] = l.a]
                    /\ view' = [view EXCEPT ![ObsAt(v)]["S"] = l.a]
                    /\ Pop(v, <<L("KILL", f, NONE, FALSE, FALSE)>>)
-              [] win.classic = v ->
+              [] win.classic = v
+                 \/ (win.classic = "code" /\ acc[v][f] # NONE /\ l.a = NONE) ->
+                   \* (code: the account-asymmetry override, m_nick.c:994-1016)
                    /\ Pop(v, <<L("KILL", c, NONE, FALSE, FALSE)>>)
                    /\ UNCHANGED <<alive, inSess, face, acc, view>>
               [] OTHER ->
@@ -368,7 +383,11 @@ BurstFace(v) ==
 Heal ==
   /\ link = "split"
   /\ link' = "up"
-  /\ \E m \in Servers, k \in Servers \cup {"none"} : win' = [merge |-> m, classic |-> k]
+  /\ \E m \in Servers,
+        k \in CASE ClassicTie = "any" -> Servers \cup {"none"}
+               [] ClassicTie = "winner" -> Servers
+               [] OTHER -> {"code"} :
+       win' = [merge |-> m, classic |-> k]
   /\ q' = [v \in Servers |-> BurstP(v) \o BurstFace(v)]
   /\ verd' = [v \in Servers |-> "none"]
   /\ seen' = seen \cup {"heal"}
@@ -419,6 +438,15 @@ OneFace == Quiescent =>
        \/ (inSess[d] /\ face[Home(d)] # NOFACE /\ inSess[face[Home(d)]])
   /\ \A v \in Servers, c \in Clients :
        Home(c) # v => (acc[v][c] # NOREP <=> alive[c])
+
+\* The session is not lost to a nick collision: at quiescence a device lives
+NoSessionLoss == Quiescent => \E d \in Devs : alive[d]
+
+\* The live-repro path: a face renamed while linked, no device changed during
+\* the split, and the session is lost at the heal
+NoLossAfterLinkedRename ==
+  ~(Quiescent /\ \A d \in Devs : ~alive[d]
+    /\ "renamelinked" \in seen /\ "splitchange" \notin seen)
 
 \* Covers: each must be violated in some passing config
 CoverPromote == "promote" \notin seen

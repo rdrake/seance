@@ -1,4 +1,4 @@
-# Account state across a split and a burst: decisions (v0)
+# Account state across a split and a burst: decisions (v1, after a live run)
 
 Each entry settles a reading the text leaves open, says why from the spec text or from the
 nefarious2 source, and says how the model shows it. Written before any TLA+.
@@ -19,6 +19,13 @@ nefarious2 source, and says how the model shows it. Written before any TLA+.
 
 A property holds only under the settings it names. Nothing here claims more.
 
+**v1.** A live run on a two-server testnet (both servers at e81d12aa, X3 and Keycloak) showed
+three readings of v0 wrong: the face's change of account name sends no `BX U` (D5), the heal
+does not merge such a session (D8), and the two devices of one session tie on nick TS in a
+classic collision (D8). v1 adds the switches `Lookup` and `ClassicTie` with the code's values
+taken from that run and from the source, and the property `NoSessionLoss` (P11). Each entry
+says which observation it rests on ("live run, item n").
+
 ## Switches and fixed choices
 
 | Name | Values | Kind | Text / code |
@@ -26,13 +33,15 @@ A property holds only under the settings it names. Nothing here claims more.
 | `InitPrim` | the session's primary at start is `dA` (on A) or `dB` (on B) | allowed, both checked | D6 |
 | `POrigin` | where P's account changes: `"home"` (A), `"services"` (B), `"both"` | `"both"` is what the code allows; each single origin is a restriction | `m_account.c:187-351`, D3 |
 | `SessSwitch` | the session's primary may re-authenticate to another account name | allowed (code: TRUE) | `m_authenticate.c:154-186`, AT:30-36, D4 |
-| `AliasFirst` | the primary's server sends `BX U account=` before `AC` | guaranteed order (code: TRUE); FALSE is a variant | `sasl_auth.c:933,941`, D5 |
+| `Lookup` | a session is found by its client's current account name (`"byName"`) or by the client (`"byRecord"`) | `"byName"` is the code (`bouncer_session.c:16822`, `:2172`); `"byRecord"` is a candidate change, not the code | D5, D8 |
+| `AliasFirst` | when a `BX U` is sent at all, it goes before `AC` | the code's order (TRUE); FALSE is a variant | `sasl_auth.c:933,941`, D5 |
 | `AliasReauth` | an alias device may re-authenticate on its own | allowed by the code (TRUE); FALSE is a restriction | `m_authenticate.c:154-186`, `bouncer_session.c:12293`, D5 |
 | `SessLogout` | a session face may be logged out (deauth) during a split | allowed | `sasl_webhook.c:186-219`, D4 |
 | `Joins` | P may PART and JOIN | allowed | EJ:20-37, D2 |
 | `LossAtSplit` | a split may cut lines still in flight | allowed (code: TRUE); FALSE (split only with empty links) is a restriction | D7 |
 | `PromoteNotify` | the split promote tells observers when the promoted device's account differs from the face they were shown | FALSE is the code (`bouncer_session.c:8617-8619`); TRUE is a candidate change, not the code | D7 |
 | `ReauthInBurst` | a device may change account while a burst `N` or a merge's `BX C` is unread | TRUE is what the code allows; FALSE is a restriction | `m_nick.c:655-658`, D8 |
+| `ClassicTie` | a classic collision kills one side or the other or both (`"any"`), exactly one (`"winner"`), or, for the session's two devices, both (`"code"`) | `"code"` is the code (D8); the others are abstractions | `m_nick.c:1068-1131`, D8 |
 | `BxcName` | a merge's `BX C` carries the session record's name (`"session"`) or the device's account (`"device"`) | `"session"` is the code (`bouncer_session.c:10397`, `:14518`); `"device"` is a restriction | D8 |
 | One channel; every user and both observers are in it | fixed | restriction | D2 |
 | Two servers, one link, at most `MaxSplits` splits | fixed | restriction | D6 |
@@ -64,7 +73,8 @@ is immediate and in order (the observer's socket), so the view changes in the st
 "deemed unnecessary". So a client may rely on the server's lines alone across a split and a
 heal. That is what makes convergence (P2) the server's job, not the client's.
 
-**Self (fixed, outside the model).** AN:20-21 and AN:68-69 include the user's own changes. The
+**Self (fixed, outside the model; confirmed by the live run, item 4: after an AuthServ AUTH the
+user got no ACCOUNT line, the observers did).** AN:20-21 and AN:68-69 include the user's own changes. The
 code passes the changed client as the `one` to skip in every account-notify send
 (`sasl_auth.c:936-938`, `m_account.c:209`, `:325`, `sasl_webhook.c:203`), and in
 `sendcmdto_common_channels_capab_butone` the client itself is sent to only when `from != one`
@@ -122,24 +132,47 @@ A logout destroys every session of the account on that server (`bounce_account_d
 session with a device across the link involves the alias-exit cascade (#12 of the skill,
 `bouncer_session.c:12138-12151`), which is out of this model.
 
-## D5. Aliases follow the primary (`AliasFirst`, `AliasReauth`)
+## D5. Aliases follow the primary only under the session's name (`Lookup`, `AliasFirst`, `AliasReauth`)
 
 `bounce_emit_alias_update` (`bouncer_session.c:12287-12330`) gives this server's copy of every
-alias the new account directly (12313-12315) and sends `BX U <alias> :account=<name>` to the
-other servers; the receiver applies it only to a client that is an alias (`bounce_alias_update`,
-around 15328). In step 7 it runs before the `AC` broadcast (`sasl_auth.c:933` before `941`), so
-on the wire `BX U` precedes `AC`: `AliasFirst` is the code; FALSE is checked as a variant.
+alias the new account directly (12313-12315) and sends `BX U <alias> :account=<name>`; the
+receiver applies it only to a client that is an alias (`bounce_alias_update`, around 15328).
+But it first finds the session by `bounce_get_session(primary)` and returns when there is none
+(12296-12297), and `bounce_get_session` looks the session up by the client's **current**
+account name (`bounce_find_by_account(cli_account(cptr))`, 16822-16824). A session is filed
+under the name it was created with (`hs_account`, set at create, 1964). Step 7 of a login sets
+the new name first (`sasl_auth.c:906`) and calls the emit after (933); a services `AC M` does
+the same (`m_account.c:267` sets it, 312 emits). So a change to **another** name finds no
+session: no local apply, no `BX U`; only the `AC` goes out. The same-name path sends no `AC` at
+all (`sasl_auth.c:897`, the else-branch at 953). The path is the same for an OAUTHBEARER re-auth after
+001 and for a services login; only the registration-time login (before any session) differs.
+Every other lookup by name misses the same way: `session_of_primary` (2172) for the same-nick
+verdict (D8), `bounce_get_session` for `/CHECK`'s session section.
 
-The function returns at once for a client that is itself an alias (12293:
-`if (!IsAccount(primary) || IsBouncerAlias(primary)) return;`). An alias device that
-re-authenticates (OAUTHBEARER is not refused for one, `m_authenticate.c:154-186`) changes its
-own account only; its `ACCOUNT` goes to the channels it is a member of, which are its primary's
-(the mirror rule, skill #17), under the session's nick; its `AC` reaches the peer, whose copy of
-the alias is a member there too and gets the same `ACCOUNT` (`m_account.c:325`).
+*Live run, item 2:* the face's re-auth on A sent only `AC <face> M <new>`, no `BX U`; B's alias
+kept the old name. *Item 3:* after it, `/CHECK` on both servers showed the new account and no
+session section.
 
-**Model.** `AliasReauth` (TRUE = the code) lets the alias device do that. The message source of
-an alias is rewritten to its primary (`ircd_relay.c:648-651`, `:913-918`), so the tag on its
-messages comes from the delivering server's copy of the primary (D2, Tag).
+**Model.** `Lookup = "byName"` (the code): `SessReauth` tells the alias only when the new name
+is the session's (`SessName`), i.e. only a change back. `"byRecord"` (a candidate change) tells
+it always. `AliasFirst` orders `BX U` and `AC` when both are sent.
+
+The function also returns at once for a client that is itself an alias (12293). An alias device
+that re-authenticates (OAUTHBEARER is not refused for one, `m_authenticate.c:154-186`) changes
+its own account only; its `ACCOUNT` goes to the channels it is a member of, which are its
+primary's (the mirror rule), under the session's nick; its `AC` reaches the peer, whose copy of
+the alias is a member there too and gets the same `ACCOUNT` (`m_account.c:325`). With
+host-hiding style 1 or 3 the alias's host changes too (`sasl_auth.c` step 7, `m_account.c:356`),
+shown as a QUIT and a JOIN that carries the new account; the view it leaves is the same.
+
+*Live run, item 1:* observers on both servers, and the face itself, got `ACCOUNT histc` and a
+QUIT/JOIN as the new host; every later message from the face and from the alias was tagged
+`account=histb`; WHOIS answered `histb`, also to the alias about itself; B sent only
+`AC <alias> M histc`.
+
+**Model.** `AliasReauth` (TRUE = the code) lets the alias device do that. The source of an
+alias's message is rewritten to its primary (`ircd_relay.c:648-651`, `:913-918`), so the tag
+comes from the delivering server's copy of the primary (D2, Tag), as observed.
 
 ## D6. The session across a split (code)
 
@@ -182,14 +215,36 @@ JOIN, and tells the links by `BX C` carrying `session->hs_account`
 (`:14518`, `:14561`). Otherwise the classic rules apply (`m_nick.c:1068-1135`): by nick TS one
 side or both are killed, the loser locally and by `KILL` on the wire.
 
+**Why a renamed session does not merge (live run, item 2).** The D.2 path needs both faces
+to show the same account (655-658), and our side's session is found by our face's current name
+(`bounce_nick_side_lookup` -> `session_of_primary`, `bouncer_session.c:2856`, 2172). After the
+face's rename without `BX U` (D5), the peer's alias, promoted at the split, still shows the old
+name: the accounts differ, so D.2 does not apply. (Had both shown the new name, the lookup by
+that name would find no session, `BOUNCE_DEMOTE_NO_SESSION`.) The classic rules then meet two
+clients with the same user and host (an alias copies the primary's, 14512-14515, 14556-14559:
+`differ` is 0) and the same nick TS (an alias takes the primary's `cli_lastnick`, 14387, 14533,
+14595, and a promote keeps it, 8556-8571). The same-account override needs equal accounts
+(1034-1043) and the account-asymmetry override needs an incoming client with no account
+(994-1016), so neither applies. `!differ && lastnick <= ours` kills the incoming client
+(1068-1069), and with equal TS the local one too (1111, 1131): each server kills both. *Live
+run, item 2:* after SQUIT and CONNECT, A burst the face with the new account and announced the
+session under the old name (`BS C <old>`, the old Keycloak id); both the face and the alias got
+`436` and `ERROR :Closing Link (nick collision from same user@host)`; the session was gone from
+both servers, in three of three runs.
+
 **Model.** The verdict's static inputs (nick TS, numerics, session ids) are one choice made at
 the heal, `win.merge` and `win.classic`, read by both servers alike: that is the code's
 contract. The dynamic inputs are read as the code reads them: the incoming side from the `N`
 (the snapshot at the burst), our side from our client now. `BxcName` picks what the `BX C` of a
-demote carries. `ReauthInBurst` lets a device change account between its server's `N` and the
+demote carries. With `Lookup = "byName"` the merge also needs the incoming account to be the
+session's name. `ClassicTie = "code"`: both devices die, except at a server whose own face has
+an account and the incoming one none, which refuses and KILLs the incoming (994-1016); the peer
+then kills both. `"any"` and `"winner"` abstract the TS comparison of unrelated clients.
+`ReauthInBurst` lets a device change account between its server's `N` and the
 peer's `N` (or the merge's `BX C`) being read; a face's server tells only the aliases on its
 roster (`bouncer_session.c:12287-12330`), and a merged alias joins the roster when its `BX C`
-is read.
+is read. *Live run, item 5:* a re-auth 0, 30 and 150 ms after CONNECT ended correct on both
+servers; the interleavings `W_BurstReauth` needs were not produced there.
 
 ## D9. Nick changes (restriction)
 
@@ -211,6 +266,7 @@ burst are D8's.
 | P7 | `CopiesAgree` | at quiescence: every server's copy of a live client equals its truth | guaranteed reading | D2 |
 | P8 | `OneFace` | at quiescence: both servers show the same live face (or none), every live device is its server's face or an alias of a session face there, and no copy names a dead client | guaranteed reading | skill "Burst & Convergence", D8 |
 | P10 | `VerdictsAgree` | the two servers take the same same-nick verdict (merge or classic) at a heal | guaranteed reading (the code's contract: "one keeps exactly when the other yields", `m_nick.c` comment above 655) | D8 |
+| P11 | `NoSessionLoss` | at quiescence, some device of the session is still connected (the session is not ended by a nick collision at the heal) | guaranteed reading (the bouncer's purpose: a persistent session, skill "Burst & Convergence") | D8 |
 | P9 | `NoStaleAfterSplitLogout` | is P2 for P after a logout during a split; covered by P2 and its cover `CoverSplitLogoutHealed` | guaranteed | AN:25-35, AN:63-66 |
 
 P1 and P2 together say: the view is what the server holds, and what the servers hold converges.

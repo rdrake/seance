@@ -33,9 +33,10 @@ each property is checked.
 - `ChangeP(o, a)`: P's account changes at A (SASL, webhook) or at B (services), as `POrigin`
   allows, to `X`, `Y` or `*`. ACCOUNT to the local observer; `AC` to the peer.
 - `PartJoinP`: with `Joins`, P parts or joins at A; extended JOIN or PART to oA; `J` to B.
-- `SessReauth(c, a)`: the face re-authenticates (with `SessSwitch`, to another name). Local copy
-  of the remote alias updated, `BX U` and `AC` in the `AliasFirst` order; ACCOUNT to the local
-  observer.
+- `SessReauth(c, a)`: the face re-authenticates (with `SessSwitch`, to another name). When the
+  session is found (`Lookup`: always for `"byRecord"`, only under the session's name for
+  `"byName"`), the local copy of the remote alias is updated and `BX U` goes with `AC`, in the
+  `AliasFirst` order; otherwise only `AC`. ACCOUNT to the local observer.
 - `AliasReauthA(c, a)`: with `AliasReauth`, an alias device re-authenticates: its own account,
   ACCOUNT under nick S to the local observer, `AC` to the peer.
 - `LogoutFace(c)`: with `SessLogout`, during a split only: the face is deauthed and leaves the
@@ -52,8 +53,9 @@ each property is checked.
 
 ## Properties
 
-P1 to P10 of `DECISIONS.md`. Quiescent = link up, both directions empty. P1, P3, P4, P5 and P10 are
-checked in every state (P3-P5 through `bad`, set when a delivery breaks one). P2 and P6 to P8
+P1 to P11 of `DECISIONS.md`, and `NoLossAfterLinkedRename` (P11 restricted to the live run's
+sequence: a rename while linked, no change during the split). Quiescent = link up, both directions empty. P1, P3, P4, P5 and P10 are
+checked in every state (P3-P5 through `bad`, set when a delivery breaks one). P2, P6 to P8 and P11
 are checked in quiescent states only: a view may lag while its correction is in flight.
 Convergence is a safety property at quiescence, not liveness: the model does not claim that
 quiescence is reached, and the covers show that it is, after a heal.

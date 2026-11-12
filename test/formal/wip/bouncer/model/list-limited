@@ -23,6 +23,14 @@ Bouncer W_BothOrigins fail
 Bouncer W_TagAtSend fail
 Bouncer W_RemoteTag fail
 Bouncer W_Code fail
+Bouncer W_CodeRename fail
+Bouncer CodeRecord pass
+Bouncer W_CodeView fail
+Bouncer W_LookupByName fail
+Bouncer W_LookupLoss fail
+Bouncer W_TieCode fail
+Bouncer BaseWinner pass
+Bouncer MidWinner pass
 Bouncer CoverPromote fail
 Bouncer CoverMerge fail
 Bouncer CoverClassic fail

@@ -11,10 +11,12 @@ import os
 
 BASE = dict(InitPrim='"dA"', POrigin='"home"', SessSwitch="TRUE", AliasFirst="TRUE",
             AliasReauth="FALSE", SessLogout="TRUE", Joins="FALSE", LossAtSplit="FALSE",
-            PromoteNotify="FALSE", BxcName='"device"', ReauthInBurst="FALSE", MaxChanges=2, MaxMsgs=1, MaxSplits=1)
+            PromoteNotify="FALSE", BxcName='"device"', ReauthInBurst="FALSE",
+            Lookup='"byRecord"', ClassicTie='"any"', MaxChanges=2, MaxMsgs=1, MaxSplits=1)
 # the code's values (DECISIONS.md, switch table)
 CODE = dict(POrigin='"both"', AliasReauth="TRUE", LossAtSplit="TRUE",
-            PromoteNotify="FALSE", BxcName='"session"', ReauthInBurst="TRUE")
+            PromoteNotify="FALSE", BxcName='"session"', ReauthInBurst="TRUE",
+            Lookup='"byName"', ClassicTie='"code"')
 
 SAFE = ("TypeOK ViewMatchesServer ViewConverges TagAgreesView TagAtSendPlain"
         " AliasesAgree CopiesAgree OneFace VerdictsAgree NoUnexpected")
@@ -50,7 +52,17 @@ CFGS = {
   "W_BothOrigins": (dict(POrigin='"both"'), "CopiesAgree", "fail", "limited"),
   "W_TagAtSend":   ({}, "TagAtSend", "fail", "limited"),
   "W_RemoteTag":   (dict(POrigin='"services"'), "TagAtSendPlain", "fail", "limited"),
-  "W_Code":        (CODE, "ViewMatchesServer", "fail", "limited"),
+  "W_Code":        (CODE, "NoSessionLoss", "fail", "limited"),
+  "W_CodeRename":  (dict(CODE, AliasReauth="FALSE", ReauthInBurst="FALSE", LossAtSplit="FALSE"), "NoLossAfterLinkedRename", "fail", "limited"),
+  # the same with the session found by its record: the rename reaches the alias, the heal merges
+  "CodeRecord":    (dict(CODE, AliasReauth="FALSE", ReauthInBurst="FALSE", LossAtSplit="FALSE", Lookup='"byRecord"'), "TypeOK NoLossAfterLinkedRename", "pass", "limited"),
+  "W_CodeView":    (CODE, "ViewMatchesServer", "fail", "limited"),
+  "W_LookupByName": (dict(Lookup='"byName"'), "AliasesAgree", "fail", "limited"),
+  "W_LookupLoss":  (dict(Lookup='"byName"', ClassicTie='"code"'), "NoSessionLoss", "fail", "limited"),
+  "W_TieCode":     (dict(ClassicTie='"code"'), "NoSessionLoss", "fail", "limited"),
+  # exactly one classic winner: the session is never lost
+  "BaseWinner":    (dict(ClassicTie='"winner"'), SAFE + " NoSessionLoss", "pass", "limited"),
+  "MidWinner":     (dict(ClassicTie='"winner"', MaxChanges=3, MaxMsgs=2, Joins="TRUE"), SAFE + " NoSessionLoss", "pass", "limited"),
   # covers on positives (each must be violated)
   "CoverPromote":   ({}, "CoverPromote", "fail", "limited"),
   "CoverMerge":     ({}, "CoverMerge", "fail", "limited"),
@@ -67,6 +79,8 @@ CFGS = {
                       Joins="TRUE"), SAFE, "pass", "big"),
   "BigRemote":  (dict(POrigin='"services"', MaxChanges=4, MaxMsgs=2, MaxSplits=2, Joins="TRUE"),
                  NOPLAIN, "pass", "big"),
+  "BigWinner":  (dict(ClassicTie='"winner"', MaxChanges=4, MaxMsgs=2, MaxSplits=2, Joins="TRUE"),
+                 SAFE + " NoSessionLoss", "pass", "big"),
   "BigCode":    (dict(CODE, MaxChanges=4, MaxMsgs=2, MaxSplits=2, Joins="TRUE"), "TypeOK NoUnexpected",
                  "pass", "big"),
 }
