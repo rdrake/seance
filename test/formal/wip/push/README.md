@@ -34,11 +34,11 @@ TLC stops at the first violation, so each rule a config is expected to break has
 | --- | --- | --- | --- |
 | `Today` | limited | nefarious2 and Seance as they are | `RuleNoSelfRelay`, `RuleNoOwnReadStub`, `RuleCloseOnlyRead`, `RuleRelayWherePushed` (it relays to everyone) |
 | `R1Conn` | limited | R1, bound to the connection | the same four: Mark read's throwaway connection, D3, and the account-wide gate |
-| `R1Dev` | limited | R1 by device id, `MergeTime = "newest"` | none |
+| `R1Dev` | limited | R1 by device id, `MergeTime = "newest"` | `RuleRelayWherePushed` (R1 without R2) |
 | `R1DevLate` | limited | `R1Dev` with `d2` subscribing late | `RuleRelayWherePushed` |
 | `R1R2Late` | limited | `R1DevLate` + R2 | none |
 | `R1R2R3` | limited | R1 + R2 + R3 | none |
-| `R1DevLossy3` | limited | `R1Dev`, lossy, 3 messages | none |
+| `R1DevLossy3` | limited | `R1Dev`, lossy, 3 messages | `RuleRelayWherePushed` (R1 without R2) |
 | `Reference` | **comprehensive, not now** | 3 devices, 2 conversations, 4 messages, lossy | none |
 
 ## Witnesses (each should report a violation, showing the situation is reachable)

@@ -44,11 +44,11 @@ ALL = INVS + PROPS
 EXPECT = {
     'Today': ['RuleNoSelfRelay', 'RuleNoOwnReadStub', 'RuleCloseOnlyRead', 'RuleRelayWherePushed'],
     'R1Conn': ['RuleNoSelfRelay', 'RuleNoOwnReadStub', 'RuleCloseOnlyRead', 'RuleRelayWherePushed'],
-    'R1Dev': [],
+    'R1Dev': ['RuleRelayWherePushed'],  # R1 without R2
     'R1DevLate': ['RuleRelayWherePushed'],
     'R1R2Late': [],
     'R1R2R3': [],
-    'R1DevLossy3': [],
+    'R1DevLossy3': ['RuleRelayWherePushed'],  # R1 without R2
     'Reference': [],
 }
 WIT = {  # witness -> base: each is expected to be violated (the situation is reachable)
