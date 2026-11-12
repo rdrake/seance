@@ -1,4 +1,4 @@
------------------------------- MODULE MU_PolicySavedPort ------------------------------
+------------------------------ MODULE MU_PolicyKeepsPort ------------------------------
 (***************************************************************************)
 (* IRCv3 STS (extensions/sts.md at 9ff58d13) together with Seance's        *)
 (* reconnect policy (transport.ts, client.ts, sts.ts at 4f5a4bd12).        *)
@@ -99,7 +99,7 @@ Act(k, n, r, how, sent) ==
    policy and saves the upgrade with the network (CL:1128-1140, MG:183-190). *)
 ConnectedWith(r, p) ==
     IF ~r.tls /\ Valid(p)
-    THEN [r EXCEPT !.tls = TRUE, !.port = SavedPort, !.sTls = TRUE, !.sPort = SavedPort]
+    THEN [r EXCEPT !.tls = TRUE, !.sTls = TRUE]
     ELSE r
 Connected(r) == ConnectedWith(r, pol)
 

@@ -5,7 +5,7 @@
 cd "$(dirname "$0")"
 LISTS=${*:-runs.txt mutants/runs-mutants.txt}
 OUT=results.summary
-echo "# $(git rev-parse --short HEAD) limited runs, TLC -workers 3, 6 min cap" > $OUT
+echo "# $(git rev-parse --short HEAD) limited runs, TLC -workers ${WORKERS:-3}, 6 min cap" > $OUT
 for L in $LISTS; do
   DIR=$(dirname $L)
   cp $L $L.running   # a snapshot: regenerating the list mid-run must not shift it

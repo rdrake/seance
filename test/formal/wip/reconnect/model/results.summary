@@ -1,15 +1,75 @@
-# 4a7445775 limited runs, TLC -workers 3, 6 min cap
-Upgrade | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 24s | expected pass | ok
-UpgradeSasl | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 27s | expected pass | ok
-Secure | Model checking completed. No error has been found.  | 2600969 distinct states found | Finished in 37s | expected pass | ok
-Schedule | Model checking completed. No error has been found.  | 1534470 distinct states found | Finished in 12s | expected pass | ok
-Two | Model checking completed. No error has been found.  | 459773 distinct states found | Finished in 05s | expected pass | ok
-TwoIpNoCount | Model checking completed. No error has been found.  | 49479 distinct states found | Finished in 01s | expected pass | ok
-TwoIp | Model checking completed. No error has been found.  | 69085 distinct states found | Finished in 01s | expected pass | ok
-LockoutTwoIp | Error: Invariant ReconnectsWithin is violated. Error: The behavior up to this point is:  | 58666 distinct states found | Finished in 01s | expected fail ReconnectsWithin | ok
-SeanceRetry | Error: Action property RuleNoPlainDialWithPolicy is violated. Error: The behavior up to this point is:  | 531 distinct states found | Finished in 00s | expected fail RuleNoPlainDialWithPolicy | ok
-SeanceAfterCaps | Error: Action property UpgradeBeforeRegistration is violated. Error: The behavior up to this point is:  | 59 distinct states found | Finished in 00s | expected fail UpgradeBeforeRegistration | ok
-SeanceAfterCapsSasl | Error: Action property RuleNothingAfterUpgrade is violated. Error: The behavior up to this point is:  | 71 distinct states found | Finished in 00s | expected fail RuleNothingAfterUpgrade | ok
-SeanceReschedule | Error: Action property RuleRescheduleOnClose is violated. Error: The behavior up to this point is:  | 190 distinct states found | Finished in 00s | expected fail RuleRescheduleOnClose | ok
-SeanceRestUpgrade | Model checking completed. No error has been found.  | 3103334 distinct states found | Finished in 38s | expected pass | ok
-RuleRescheduleOnClose | Error: TLC encountered the following error when trying to read the configuration file RuleRescheduleOnClose.cfg:  |  |  | expected  | MISMATCH
+# cbea076f5 limited runs, TLC -workers 1, 6 min cap
+Upgrade | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 45s | expected pass | ok
+UpgradeSasl | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 46s | expected pass | ok
+Secure | Model checking completed. No error has been found.  | 2600969 distinct states found | Finished in 50s | expected pass | ok
+Schedule | Model checking completed. No error has been found.  | 1534470 distinct states found | Finished in 22s | expected pass | ok
+Two | Model checking completed. No error has been found.  | 459773 distinct states found | Finished in 12s | expected pass | ok
+TwoIpNoCount | Model checking completed. No error has been found.  | 49479 distinct states found | Finished in 02s | expected pass | ok
+TwoIp | Model checking completed. No error has been found.  | 69085 distinct states found | Finished in 02s | expected pass | ok
+LockoutTwoIp | Error: Invariant ReconnectsWithin is violated. Error: The behavior up to this point is:  | 63160 distinct states found | Finished in 01s | expected fail ReconnectsWithin | ok
+SeanceRetry | Error: Action property RuleNoPlainDialWithPolicy is violated. Error: The behavior up to this point is:  | 260 distinct states found | Finished in 00s | expected fail RuleNoPlainDialWithPolicy | ok
+SeanceAfterCaps | Error: Action property UpgradeBeforeRegistration is violated. Error: The behavior up to this point is:  | 10 distinct states found | Finished in 00s | expected fail UpgradeBeforeRegistration | ok
+SeanceAfterCapsSasl | Error: Action property RuleNothingAfterUpgrade is violated. Error: The behavior up to this point is:  | 10 distinct states found | Finished in 00s | expected fail RuleNothingAfterUpgrade | ok
+SeanceReschedule | Error: Action property RuleRescheduleOnClose is violated. Error: The behavior up to this point is:  | 347 distinct states found | Finished in 01s | expected fail RuleRescheduleOnClose | ok
+SeanceRescheduleExpired | Error: Action property RuleRescheduleOnClose is violated. Error: The behavior up to this point is:  | 6899 distinct states found | Finished in 01s | expected fail RuleRescheduleOnClose | ok
+SeanceRestUpgrade | Model checking completed. No error has been found.  | 3103334 distinct states found | Finished in 52s | expected pass | ok
+SeanceRestUpgradeSasl | Model checking completed. No error has been found.  | 3103334 distinct states found | Finished in 51s | expected pass | ok
+SeanceRestSecure | Model checking completed. No error has been found.  | 2993033 distinct states found | Finished in 50s | expected pass | ok
+SeanceRestSchedule | Model checking completed. No error has been found.  | 1534470 distinct states found | Finished in 20s | expected pass | ok
+SeanceRestTwo | Model checking completed. No error has been found.  | 412919 distinct states found | Finished in 10s | expected pass | ok
+SeanceRestTwoIpNoCount | Model checking completed. No error has been found.  | 49479 distinct states found | Finished in 02s | expected pass | ok
+SeanceAfterCapsSaslEnd | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 27s | expected pass | ok
+W_UpgradeRegistered | Error: Invariant W_UpgradeRegistered is violated. Error: The behavior up to this point is:  | 210 distinct states found | Finished in 01s | expected fail W_UpgradeRegistered | ok
+W_PolicyDial | Error: Invariant W_PolicyDial is violated. Error: The behavior up to this point is:  | 260 distinct states found | Finished in 01s | expected fail W_PolicyDial | ok
+W_ExpiredPlain | Error: Invariant W_ExpiredPlain is violated. Error: The behavior up to this point is:  | 11084 distinct states found | Finished in 01s | expected fail W_ExpiredPlain | ok
+W_DurZero | Error: Invariant W_DurZero is violated. Error: The behavior up to this point is:  | 386 distinct states found | Finished in 01s | expected fail W_DurZero | ok
+W_NewDur | Error: Invariant W_NewDur is violated. Error: The behavior up to this point is:  | 345 distinct states found | Finished in 01s | expected fail W_NewDur | ok
+W_PortChange | Error: Invariant W_PortChange is violated. Error: The behavior up to this point is:  | 1719180 distinct states found | Finished in 21s | expected fail W_PortChange | ok
+W_NoFallback | Error: Invariant W_NoFallback is violated. Error: The behavior up to this point is:  | 4727 distinct states found | Finished in 01s | expected fail W_NoFallback | ok
+W_UpgradeFailsSecure | Error: Invariant W_UpgradeFailsSecure is violated. Error: The behavior up to this point is:  | 211 distinct states found | Finished in 01s | expected fail W_UpgradeFailsSecure | ok
+W_Throttled | Error: Invariant W_Throttled is violated. Error: The behavior up to this point is:  | 6 distinct states found | Finished in 01s | expected fail W_Throttled | ok
+W_QuickThenHold | Error: Invariant W_QuickThenHold is violated. Error: The behavior up to this point is:  | 49 distinct states found | Finished in 01s | expected fail W_QuickThenHold | ok
+W_StableAtOnce | Error: Invariant W_StableAtOnce is violated. Error: The behavior up to this point is:  | 155 distinct states found | Finished in 01s | expected fail W_StableAtOnce | ok
+W_CapWait | Error: Invariant W_CapWait is violated. Error: The behavior up to this point is:  | 3910 distinct states found | Finished in 01s | expected fail W_CapWait | ok
+W_IpRefused | Error: Invariant W_IpRefused is violated. Error: The behavior up to this point is:  | 130 distinct states found | Finished in 01s | expected fail W_IpRefused | ok
+W_CancelWait | Error: Invariant W_CancelWait is violated. Error: The behavior up to this point is:  | 4 distinct states found | Finished in 01s | expected fail W_CancelWait | ok
+W_Reschedule | Error: Invariant W_Reschedule is violated. Error: The behavior up to this point is:  | 342 distinct states found | Finished in 01s | expected fail W_Reschedule | ok
+W_RescheduleExpired | Error: Invariant W_RescheduleExpired is violated. Error: The behavior up to this point is:  | 9477 distinct states found | Finished in 01s | expected fail W_RescheduleExpired | ok
+W_TwoNets | Error: Invariant W_TwoNets is violated. Error: The behavior up to this point is:  | 843 distinct states found | Finished in 01s | expected fail W_TwoNets | ok
+W_SavedUpgrade | Error: Invariant W_SavedUpgrade is violated. Error: The behavior up to this point is:  | 2550 distinct states found | Finished in 01s | expected fail W_SavedUpgrade | ok
+W_Poke | Error: Invariant W_Poke is violated. Error: The behavior up to this point is:  | 12 distinct states found | Finished in 01s | expected fail W_Poke | ok
+W_UpgradeByNew | Error: Invariant W_UpgradeByNew is violated. Error: The behavior up to this point is:  | 1088 distinct states found | Finished in 01s | expected fail W_UpgradeByNew | ok
+W_Reconnected | Error: Invariant W_Reconnected is violated. Error: The behavior up to this point is:  | 87 distinct states found | Finished in 01s | expected fail W_Reconnected | ok
+CPHeld | Model checking completed. No error has been found.  | 1191064 distinct states found | Finished in 13s | expected pass | ok
+CPNotHeld | Model checking completed. No error has been found.  | 17292 distinct states found | Finished in 01s | expected pass | ok
+W_CPBatchJoin | Error: Invariant W_CPBatchJoin is violated. Error: The behavior up to this point is:  | 7 distinct states found | Finished in 00s | expected fail W_CPBatchJoin | ok
+W_CPTimerJoin | Error: Invariant W_CPTimerJoin is violated. Error: The behavior up to this point is:  | 218 distinct states found | Finished in 00s | expected fail W_CPTimerJoin | ok
+W_CPDeadline | Error: Invariant W_CPDeadline is violated. Error: The behavior up to this point is:  | 213738 distinct states found | Finished in 03s | expected fail W_CPDeadline | ok
+W_CPDeferred | Error: Invariant W_CPDeferred is violated. Error: The behavior up to this point is:  | 14 distinct states found | Finished in 00s | expected fail W_CPDeferred | ok
+W_CPBgWaited | Error: Invariant W_CPBgWaited is violated. Error: The behavior up to this point is:  | 30 distinct states found | Finished in 00s | expected fail W_CPBgWaited | ok
+W_CPClosedWaiting | Error: Invariant W_CPClosedWaiting is violated. Error: The behavior up to this point is:  | 12 distinct states found | Finished in 00s | expected fail W_CPClosedWaiting | ok
+MU_PlainFallback | Error: Action property RuleNoPlainDialWithPolicy is violated. Error: The behavior up to this point is:  | 8254 distinct states found | Finished in 01s | expected fail RuleNoPlainDialWithPolicy | ok
+MU_UpgradeLoop | Error: Invariant SessionStaysSecure is violated. Error: The behavior up to this point is:  | 1414 distinct states found | Finished in 01s | expected fail SessionStaysSecure | ok
+MU_StorePlainDur | Error: Action property RulePolicyOnlyFromSecure is violated. Error: The behavior up to this point is:  | 11 distinct states found | Finished in 00s | expected fail RulePolicyOnlyFromSecure | ok
+MU_PortOnSecure | Error: Action property RulePortIgnoredOnSecure is violated. Error: The behavior up to this point is:  | 598 distinct states found | Finished in 01s | expected fail RulePortIgnoredOnSecure | ok
+MU_IgnorePort | Error: Action property RuleUpgradeWhenPort is violated. Error: The behavior up to this point is:  | 10 distinct states found | Finished in 01s | expected fail RuleUpgradeWhenPort | ok
+MU_UpgradeOnDur | Error: Action property RuleIgnoreWithoutPort is violated. Error: The behavior up to this point is:  | 11 distinct states found | Finished in 01s | expected fail RuleIgnoreWithoutPort | ok
+MU_IgnoreZero | Error: Action property RuleDurationZero is violated. Error: The behavior up to this point is:  | 386 distinct states found | Finished in 01s | expected fail RuleDurationZero | ok
+MU_NoReset | Error: Action property RuleResetExpiry is violated. Error: The behavior up to this point is:  | 345 distinct states found | Finished in 01s | expected fail RuleResetExpiry | ok
+MU_NoRescheduleClose | Error: Action property RuleRescheduleOnClose is violated. Error: The behavior up to this point is:  | 342 distinct states found | Finished in 01s | expected fail RuleRescheduleOnClose | ok
+MU_DelRemoves | Error: Action property RuleIgnoreDel is violated. Error: The behavior up to this point is:  | 559 distinct states found | Finished in 01s | expected fail RuleIgnoreDel | ok
+MU_PolicyKeepsPort | Error: Action property RulePolicyPort is violated. Error: The behavior up to this point is:  | 260 distinct states found | Finished in 00s | expected fail RulePolicyPort | ok
+MU_UpgradeBackoff | Error: Action property RuleUpgradeNoPenalty is violated. Error: The behavior up to this point is:  | 10 distinct states found | Finished in 00s | expected fail RuleUpgradeNoPenalty | ok
+MU_NoHold | Error: Invariant RuleSpacing is violated. Error: The behavior up to this point is:  | 49 distinct states found | Finished in 01s | expected fail RuleSpacing | ok
+MU_NoHoldStorm | Error: Invariant NoStorm is violated. Error: The behavior up to this point is:  | 6752 distinct states found | Finished in 01s | expected fail NoStorm | ok
+MU_CapLow | Error: Invariant RuleCapFloor is violated. Error: The behavior up to this point is:  | 3826 distinct states found | Finished in 01s | expected fail RuleCapFloor | ok
+MU_NoThrottleWait | Error: Invariant RuleThrottleWait is violated. Error: The behavior up to this point is:  | 6 distinct states found | Finished in 01s | expected fail RuleThrottleWait | ok
+MU_DisconnectRetry | Error: Action property RuleDisconnectFinal is violated. Error: The behavior up to this point is:  | 28 distinct states found | Finished in 00s | expected fail RuleDisconnectFinal | ok
+MU_PokeKeepsAttempt | Error: Action property RuleAskRestarts is violated. Error: The behavior up to this point is:  | 12 distinct states found | Finished in 00s | expected fail RuleAskRestarts | ok
+MU_AfterCapsAlways | Error: Action property RuleNothingAfterUpgrade is violated. Error: The behavior up to this point is:  | 10 distinct states found | Finished in 01s | expected fail RuleNothingAfterUpgrade | ok
+MU_CPNoBudget | Error: Invariant BackgroundLeavesRoom is violated. Error: The behavior up to this point is:  | 31 distinct states found | Finished in 00s | expected fail BackgroundLeavesRoom | ok
+MU_CPNoDeadline | Error: Invariant AutojoinBounded is violated. Error: The behavior up to this point is:  | 285667 distinct states found | Finished in 03s | expected fail AutojoinBounded | ok
+MU_CPNoCancel | Error: Action property NoAutojoinAfterClose is violated. Error: The behavior up to this point is:  | 425 distinct states found | Finished in 00s | expected fail NoAutojoinAfterClose | ok
+MU_CPDoubleJoin | Error: Invariant AutojoinOnce is violated. Error: The behavior up to this point is:  | 30 distinct states found | Finished in 00s | expected fail AutojoinOnce | ok
+MU_CPPre001 | Error: Action property RuleNothingBefore001 is violated. Error: The behavior up to this point is:  | 3 distinct states found | Finished in 00s | expected fail RuleNothingBefore001 | ok
+MU_CPJoinEarly | Error: Action property AutojoinNotEarly is violated. Error: The behavior up to this point is:  | 2 distinct states found | Finished in 00s | expected fail AutojoinNotEarly | ok

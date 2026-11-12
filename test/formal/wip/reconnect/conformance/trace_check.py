@@ -86,6 +86,10 @@ def steps(sc):
         else:
             raise ValueError(k)
         out.append((r, d))
+    # Quiet to the end: a dial Seance did not make but the model must is caught here.
+    while now < sc['end']:
+        out.append((rec('tick'), 'tick to %d' % (now + 1)))
+        now += 1
     return out
 
 
@@ -97,6 +101,8 @@ Match(e) ==
     /\ e.k \notin {"tick", "env"} => act'.n = e.n
     /\ e.k = "dial" => /\ act'.tls = e.tls /\ act'.port = e.port /\ nw'[e.n].st = e.st
                        /\ (e.how = "poke" => act'.how = "poke")
+                       \* a dial the driver did not ask for is no user connect or poke
+                       /\ (e.how = "none" => env' = env)
     /\ e.k = "upgrade" => act'.port = e.port /\ act'.sent = e.sent
     /\ e.pc => PolIs(e)
     /\ e.k = "env" => CASE e.what = "dur" -> srvDur' = e.ival

@@ -8,7 +8,7 @@ MU_IgnoreZero MU_IgnoreZero fail RuleDurationZero
 MU_NoReset MU_NoReset fail RuleResetExpiry
 MU_NoRescheduleClose MU_NoRescheduleClose fail RuleRescheduleOnClose
 MU_DelRemoves MU_DelRemoves fail RuleIgnoreDel
-MU_PolicySavedPort MU_PolicySavedPort fail RulePolicyPort
+MU_PolicyKeepsPort MU_PolicyKeepsPort fail RulePolicyPort
 MU_UpgradeBackoff MU_UpgradeBackoff fail RuleUpgradeNoPenalty
 MU_NoHold MU_NoHold fail RuleSpacing
 MU_NoHoldStorm MU_NoHoldStorm fail NoStorm

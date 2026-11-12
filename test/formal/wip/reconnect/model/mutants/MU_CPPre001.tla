@@ -114,15 +114,18 @@ UserSend ==
     /\ act' = A("send", "user", "none", Line)
     /\ UNCHANGED <<now, phase, bgLeft, deferred, restore, timer, deadline, joined, regAt, activity>>
 
-(* A debounced MARKREAD falls due: before 001 it is kept (IL:51). *)
+(* A debounced MARKREAD falls due: before 001 it is kept (IL:51). After 001
+   it is a direct line like the user's own and counts against MaxUser, which
+   keeps the state space finite. *)
 MarkerDue ==
     /\ phase # "closed" /\ ~deferred
     /\ IF phase # "closed"
-         THEN /\ Direct(Line) /\ UNCHANGED deferred
+         THEN /\ users < MaxUser /\ users' = users + 1
+              /\ Direct(Line) /\ UNCHANGED deferred
               /\ act' = A("send", "marker", "none", Line)
-         ELSE /\ deferred' = TRUE /\ UNCHANGED <<clock, run>>
+         ELSE /\ deferred' = TRUE /\ UNCHANGED <<clock, run, users>>
               /\ act' = A("defer", "marker", "none", 0)
-    /\ UNCHANGED <<now, phase, bgLeft, users, restore, timer, deadline, joined, regAt, activity>>
+    /\ UNCHANGED <<now, phase, bgLeft, restore, timer, deadline, joined, regAt, activity>>
 
 (* The socket closes: a pending autojoin dies with it (PE:157-160). *)
 Close ==
@@ -146,7 +149,7 @@ CPNext == Reg \/ Activity \/ Batch \/ TimerFire \/ (\E c \in Costs : BgSend(c))
 CPSpec == CPInit /\ [][CPNext]_cpvars
 
 CPTypeOK == /\ phase \in {"pre", "reg", "closed"} /\ restore \in {"none", "wait", "done"}
-            /\ clock \in 0..(Ceiling * 3) /\ joined \in 0..3
+            /\ clock \in Nat /\ joined \in 0..3
 
 (* SC-13 *)
 BackgroundLeavesRoom ==
@@ -156,7 +159,7 @@ UserLinesParsed ==
 
 (* SC-14 *)
 AutojoinOnce == joined <= 1
-AutojoinBounded == (phase = "reg" /\ now - regAt >= MaxWait) => joined = 1
+AutojoinBounded == (phase = "reg" /\ now - regAt > MaxWait) => joined = 1  \* the due timer fires before time moves on
 NoAutojoinAfterClose == [][act'.cls = "join" => phase = "reg" \/ (phase = "pre" /\ ~Held)]_cpvars
 AutojoinNotEarly ==
     [][act'.cls = "join" /\ act'.k = "send" => (Held => act'.why \in {"batch", "timer"})]_cpvars

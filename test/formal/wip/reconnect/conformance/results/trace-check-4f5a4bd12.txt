@@ -1,0 +1,27 @@
+# trace_check.py results/seance-4f5a4bd12.jsonl against model/StsReconnect.tla, both switch settings
+upgrade | expect F2 | spec | STUCK at step 2 of 6 | upgrade n1@0 to S1, sent REQ,END,QUIT
+upgrade | expect F2 | seance | follows all 6 steps
+upgradeSecureFails | expect F2 | spec | STUCK at step 3 of 68 | upgrade n1@0 to S1, sent REQ,END,QUIT
+upgradeSecureFails | expect F2 | seance | follows all 68 steps
+durationZero | expect ok | spec | follows all 21 steps
+durationZero | expect ok | seance | follows all 21 steps
+newDuration | expect ok | spec | follows all 105 steps
+newDuration | expect ok | seance | follows all 105 steps
+reschedule | expect ok | spec | follows all 108 steps
+reschedule | expect ok | seance | follows all 108 steps
+rescheduleExpired | expect F3 | spec | STUCK at step 124 of 128 | drop n1@120 pol={'has': True, 'port': 'S1', 'exp': 60}
+rescheduleExpired | expect F3 | seance | follows all 128 steps
+twoNetworks | expect F1 | spec | STUCK at step 17 of 20 | dial n1@11 ws P -> open
+twoNetworks | expect F1 | seance | follows all 20 steps
+userFinal | expect ok | spec | follows all 129 steps
+userFinal | expect ok | seance | follows all 129 steps
+throttle | expect ok | spec | follows all 60 steps
+throttle | expect ok | seance | follows all 60 steps
+unreached | expect ok | spec | follows all 211 steps
+unreached | expect ok | seance | follows all 211 steps
+backoff | expect ok | spec | follows all 209 steps
+backoff | expect ok | seance | follows all 209 steps
+poke | expect ok | spec | follows all 9 steps
+poke | expect ok | seance | follows all 9 steps
+lockout | expect F5 | spec | follows all 453 steps
+lockout | expect F5 | seance | follows all 453 steps

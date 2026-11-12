@@ -170,7 +170,7 @@ for w, b in WIT.items():
 
 # --- ConnectPath --------------------------------------------------------------
 CP = dict(MaxTime=12, Costs='{2, 3}', Budget=4, Ceiling=10, UserMax=3, MaxBg=3, MaxUser=3,
-          Wait=2, Quiet=1, MaxWait=8, Held='TRUE', MaxActivity=3)
+          Wait=2, Quiet=1, MaxWait=8, Held='TRUE', MaxActivity=8)
 CP_INV = ['CPTypeOK', 'BackgroundLeavesRoom', 'UserLinesParsed', 'AutojoinOnce',
           'AutojoinBounded']
 CP_PROP = ['RuleNothingBefore001', 'AutojoinNotEarly', 'NoAutojoinAfterClose']
