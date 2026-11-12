@@ -1,0 +1,49 @@
+StsReconnect Upgrade pass
+StsReconnect UpgradeSasl pass
+StsReconnect Secure pass
+StsReconnect Schedule pass
+StsReconnect Two pass
+StsReconnect TwoIpNoCount pass
+StsReconnect TwoIp pass
+StsReconnect LockoutTwoIp fail ReconnectsWithin
+StsReconnect SeanceRetry fail RuleNoPlainDialWithPolicy
+StsReconnect SeanceAfterCaps fail UpgradeBeforeRegistration
+StsReconnect SeanceAfterCapsSasl fail RuleNothingAfterUpgrade
+StsReconnect SeanceReschedule fail RuleRescheduleOnClose
+StsReconnect SeanceRescheduleExpired fail RuleRescheduleOnClose
+StsReconnect SeanceRestUpgrade pass
+StsReconnect SeanceRestUpgradeSasl pass
+StsReconnect SeanceRestSecure pass
+StsReconnect SeanceRestSchedule pass
+StsReconnect SeanceRestTwo pass
+StsReconnect SeanceRestTwoIpNoCount pass
+StsReconnect SeanceAfterCapsSaslEnd pass
+StsReconnect W_UpgradeRegistered fail W_UpgradeRegistered
+StsReconnect W_PolicyDial fail W_PolicyDial
+StsReconnect W_ExpiredPlain fail W_ExpiredPlain
+StsReconnect W_DurZero fail W_DurZero
+StsReconnect W_NewDur fail W_NewDur
+StsReconnect W_PortChange fail W_PortChange
+StsReconnect W_NoFallback fail W_NoFallback
+StsReconnect W_UpgradeFailsSecure fail W_UpgradeFailsSecure
+StsReconnect W_Throttled fail W_Throttled
+StsReconnect W_QuickThenHold fail W_QuickThenHold
+StsReconnect W_StableAtOnce fail W_StableAtOnce
+StsReconnect W_CapWait fail W_CapWait
+StsReconnect W_IpRefused fail W_IpRefused
+StsReconnect W_CancelWait fail W_CancelWait
+StsReconnect W_Reschedule fail W_Reschedule
+StsReconnect W_RescheduleExpired fail W_RescheduleExpired
+StsReconnect W_TwoNets fail W_TwoNets
+StsReconnect W_SavedUpgrade fail W_SavedUpgrade
+StsReconnect W_Poke fail W_Poke
+StsReconnect W_UpgradeByNew fail W_UpgradeByNew
+StsReconnect W_Reconnected fail W_Reconnected
+ConnectPath CPHeld pass
+ConnectPath CPNotHeld pass
+ConnectPath W_CPBatchJoin fail W_CPBatchJoin
+ConnectPath W_CPTimerJoin fail W_CPTimerJoin
+ConnectPath W_CPDeadline fail W_CPDeadline
+ConnectPath W_CPDeferred fail W_CPDeferred
+ConnectPath W_CPBgWaited fail W_CPBgWaited
+ConnectPath W_CPClosedWaiting fail W_CPClosedWaiting

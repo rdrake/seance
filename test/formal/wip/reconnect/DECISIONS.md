@@ -83,7 +83,7 @@ The user connects (`Connect`: attempt 0, dial now, SC-1) and disconnects (`Disco
 
 ## D11. The server's two throttles
 
-- **Connection throttle (IPcheck).** Seance's notes describe it as: the n-th connection from an address is refused when each gap is within the window, and a refusal renews the window (IL:35, TR:16-19). The model keeps a chain over every dial to `H` from any network: a dial within `Window` of the previous one extends the chain, else it restarts at 1; a dial at chain length `IpLimit` is refused before it opens. Env kind `"ip"` turns it on. The `ERROR … throttled` from an open socket is env action `Throttled` (SC-5).
+- **Connection throttle (IPcheck).** Seance's notes describe it as: the n-th connection from an address is refused when each gap is within the window, and a refusal renews the window (IL:35, TR:16-19). nefarious2's `ip_registry_check_local` (`ircd/IPcheck.c:282-345`, branch `mesh` at `a59d1bf7`) does that: `attempts` restarts when the last connect is more than `IPCHECK_CLONE_PERIOD` (40) ago, the `IPCHECK_CLONE_LIMIT`-th (4) is refused, and with `FEAT_IPCHECK_COUNT_REFUSALS` (default on, `ircd_features.c:1046`) a refusal moves `last_connect` too; when the address's last connection closes, `last_connect` moves to the close (`IPcheck.c:470-485`). The model keeps that chain per host over the dials of every network that reach the server (a dial while the host is down never does): within `Window` of the last it extends, else restarts at 1; at `IpLimit` it is refused before it opens. `IpCountRefusals` is the feature; env kind `"ip"` turns the check on. The SASL refund (`IPcheck.c:580-618`) is out: it only lowers the count after a login. The `ERROR … throttled` from an open socket is env action `Throttled` (SC-5).
 - **Fake lag** is per connection after 001 and does not affect dialing; it is in `ConnectPath.tla` with the restore wait and the "nothing before 001" rule (D15).
 
 The connect timeout, offline waits and the probe are out: they keep the schedule or restart it in ways SC-1 and SC-3 already exercise (TR:446-474).
@@ -104,10 +104,15 @@ Time is bounded (`MaxTime`), so a temporal `<>` would be met by stuttering at th
 
 `ConnectPath.tla` models a single connection from registration to close: the server's fake-lag clock (`2 + bytes/120` s per line after 001, nothing parsed past 10 s ahead), the background queue (sends only while the clock leaves `Budget`), the user's lines (sent at once), a timer-driven sender (a debounced MARKREAD) that may fall due before 001, and the restore wait (`STATUS ON`: wait for the batch, or `Wait`, extended by `Quiet` after each sign of restoration, never past `MaxWait` from registration; cancelled by the close). Costs are whole seconds: 2 for a short line, 3 or more for a long one (FL:107-110).
 
+## D16. The "eventually reconnects" bound holds for one dialer per address, not two (finding F5)
+
+The scaled `LockoutTwoIp` config fails `ReconnectsWithin`, and so does Seance's own code at the real scale (trace `lockout`): two networks on one address whose retries are in their long waits (42-47 s) interleave, so the gap between consecutive dials from the address alternates around 20 and 27 s; every gap stays inside the 40 s window, each refusal renews it, and neither gets back in. Seance's notes argue that waits above 40 s let the window lapse (IL:35, TR:16-19, 126-131); that holds per dialer, but IPcheck counts per address. With `IpCountRefusals` off (`TwoIpNoCount`) the bound holds. Random jitter makes the phases drift, so in practice the lockout ends when the two dials happen to fall within about 2-7 s of each other (one gap then exceeds 40 s); the model pins the jitter ends, so it shows that no bound exists rather than how long it lasts. `TwoIp` checks every other property; `ReconnectsWithin` on two dialers is left to `LockoutTwoIp`.
+
 ## Open questions
 
 - **Q1 (D7).** Is "nothing after the upgrade policy but QUIT" the reading we want, or only "no `CAP END`"? The model checks both, as `RuleNothingAfterUpgrade` and `UpgradeBeforeRegistration`.
 - **Q2 (D8).** Should Seance reschedule while connected (STS:147-151) so a killed tab does not lose the policy? `pagehide` does not fire when a phone kills a hidden page.
+- **Q4 (D16).** Should Seance coordinate retries across networks and tabs on one host (one dialer per address in a long wait, or a wait that grows with the number of dialers), or is the drift of random jitter enough?
 - **Q3 (D6).** Multiple tabs: a policy learned in one tab is in the shared store, but another tab's live client only reads it at its next `connect()`. The conforming model reads it at every dial.
 
 ## Findings against Seance (4f5a4bd12; unchanged on develop ef782edf1)
@@ -116,3 +121,4 @@ Time is bounded (`MaxTime`), so a temporal `<>` would be met by stuttering at th
 - **F2 (STS-12, D7).** On an insecure connection, the final `CAP LS` with `sts=port=…` is answered with `CAP REQ :…` and, without SASL, `CAP END` before the QUIT, so the server may register the client on the plain connection.
 - **F3 (STS-18, D8).** A policy whose expiry passed during a long connection is dropped at the close instead of rescheduled.
 - **F4 (STS-18, D8).** A page unload sends QUIT but does not reschedule the expiry.
+- **F5 (SC-11, D16).** Two networks (or tabs) on one address can keep nefarious2's IPcheck window open for each other indefinitely: the long wait after unreached dials spaces one dialer's retries past the window, not the address's.

@@ -1,0 +1,15 @@
+# 4a7445775 limited runs, TLC -workers 3, 6 min cap
+Upgrade | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 24s | expected pass | ok
+UpgradeSasl | Model checking completed. No error has been found.  | 2369023 distinct states found | Finished in 27s | expected pass | ok
+Secure | Model checking completed. No error has been found.  | 2600969 distinct states found | Finished in 37s | expected pass | ok
+Schedule | Model checking completed. No error has been found.  | 1534470 distinct states found | Finished in 12s | expected pass | ok
+Two | Model checking completed. No error has been found.  | 459773 distinct states found | Finished in 05s | expected pass | ok
+TwoIpNoCount | Model checking completed. No error has been found.  | 49479 distinct states found | Finished in 01s | expected pass | ok
+TwoIp | Model checking completed. No error has been found.  | 69085 distinct states found | Finished in 01s | expected pass | ok
+LockoutTwoIp | Error: Invariant ReconnectsWithin is violated. Error: The behavior up to this point is:  | 58666 distinct states found | Finished in 01s | expected fail ReconnectsWithin | ok
+SeanceRetry | Error: Action property RuleNoPlainDialWithPolicy is violated. Error: The behavior up to this point is:  | 531 distinct states found | Finished in 00s | expected fail RuleNoPlainDialWithPolicy | ok
+SeanceAfterCaps | Error: Action property UpgradeBeforeRegistration is violated. Error: The behavior up to this point is:  | 59 distinct states found | Finished in 00s | expected fail UpgradeBeforeRegistration | ok
+SeanceAfterCapsSasl | Error: Action property RuleNothingAfterUpgrade is violated. Error: The behavior up to this point is:  | 71 distinct states found | Finished in 00s | expected fail RuleNothingAfterUpgrade | ok
+SeanceReschedule | Error: Action property RuleRescheduleOnClose is violated. Error: The behavior up to this point is:  | 190 distinct states found | Finished in 00s | expected fail RuleRescheduleOnClose | ok
+SeanceRestUpgrade | Model checking completed. No error has been found.  | 3103334 distinct states found | Finished in 38s | expected pass | ok
+RuleRescheduleOnClose | Error: TLC encountered the following error when trying to read the configuration file RuleRescheduleOnClose.cfg:  |  |  | expected  | MISMATCH

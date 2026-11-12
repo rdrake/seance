@@ -1,0 +1,5 @@
+logs/
+*.running
+runall.out
+*_TTrace_*
+__pycache__/
