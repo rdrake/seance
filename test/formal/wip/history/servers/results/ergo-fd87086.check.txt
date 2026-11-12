@@ -1,0 +1,255 @@
+server: ergo-fd87086  version: ['@time=2026-11-12T14:30:33.395Z :ergo.test 351 hnvcheq ergo-2.20.0-unreleased ergo.test']
+caps: batch draft/chathistory echo-message labeled-response message-tags server-time
+queries: 2224 (1031 follow-ups)
+events replayed in history (no event-playback) on: ['#hnvcheempty', '#hnvchehist', '#hnvchetlc']
+ties #hnvcheempty: []
+ties #hnvchehist: [['event:hnvchea', 'event:hnvcheb', 'event:hnvchec'], ['h04', 'h05', 'h06', 'h07'], ['h09', 'h10']]
+ties #hnvchenojoin: []
+ties #hnvcheother: []
+ties #hnvchetlc: [['t2', 't3']]
+ties dm: []
+order #hnvchehist: server ['h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13', 'h14']
+order #hnvchetlc: server ['t1', 't2', 't3', 't4']
+untagged last pages (SendsEnd is a SHOULD): 219
+TARGETS order: ['ascending']
+racing query #2220 (CHATHISTORY LATEST #hnvchehist * 5): fits the snapshot before the racing line was stored (failed checks before/after: [0, 1])
+walk walk-msgid 3 (7 pages): 18 lines retrieved, missing [], duplicates 0
+walk walk-msgid 4 (5 pages): 18 lines retrieved, missing [], duplicates 0
+walk walk-ts 3 (6 pages): 16 lines retrieved, missing ['h04', 'h05'], duplicates 0
+walk walk-ts 4 (4 pages): 13 lines retrieved, missing ['event:hnvchea', 'event:hnvcheb', 'h04', 'h05', 'h06'], duplicates 0
+
+property     pass   fail    n/a
+FRAME        2224      0      0
+MSGID        3810    477      0
+ELIG         1711    303      2
+EXACT        1829    349      2
+CONTIG       1709    303      2
+ORDER        2014      0      2
+END          1232      0    846
+ENDLIVE       297      0      0
+UNKNOWN        36      0      2
+AROUND        166      0      0
+TARGETS         6      0      0
+NOAUTO          1      0      0
+ISUPPORT        2      0      0
+AROUNDEMPTY      0      6      0
+FAILREPLY       0      2      0
+
+[AROUNDEMPTY] AROUND msgid  x4  (latitude (CH:69 lower-case; CH:103 sets no minimum))
+    e.g. #1087 CHATHISTORY AROUND #hnvchehist msgid=_bd3sw2hq7jgajc3yr7u2jgma7w 1  [AROUND msgid=replayed-oldest]
+    expected: lines around the selector (17 available)
+    observed: an empty batch tagged chathistory-end
+[AROUNDEMPTY] AROUND ts  x2  (latitude (CH:69 lower-case; CH:103 sets no minimum))
+    e.g. #452 CHATHISTORY AROUND #hnvchehist timestamp=2026-11-12T14:30:32.396Z 3  [AROUND ts=off-message]
+    expected: lines around the selector (18 available)
+    observed: an empty batch tagged chathistory-end
+[CONTIG] BETWEEN msgid,ts  x180  (D10 (no licence for holes))
+    e.g. #486 CHATHISTORY BETWEEN #hnvchehist msgid=tvrcjsbxrys7p7nw6b2mgf8ih6 timestamp=2026-11-12T14:30:33.396Z 19  [BETWEEN #13 #0 back]
+    expected: the 13 eligible lines nearest the selector: ['h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+    observed: ['h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+[CONTIG] BETWEEN ts,msgid  x63  (D10 (no licence for holes))
+    e.g. #469 CHATHISTORY BETWEEN #hnvchehist timestamp=2026-11-12T14:30:33.396Z msgid=tvrcjsbxrys7p7nw6b2mgf8ih6 1  [BETWEEN #0 #13 fwd]
+    expected: the 1 eligible lines nearest the selector: ['h02']
+    observed: ['h01']
+[CONTIG] BETWEEN ts,ts  x60  (D10 (no licence for holes))
+    e.g. #543 CHATHISTORY BETWEEN #hnvchehist timestamp=2026-11-12T14:30:33.421Z timestamp=2026-11-12T14:30:33.421Z 1  [BETWEEN #7 #7 fwd]
+    expected: the 1 eligible lines nearest the selector: []
+    observed: ['h08']
+[ELIG] BETWEEN msgid,ts  x180  (violation (D3: eligibility is mandatory))
+    e.g. #486 CHATHISTORY BETWEEN #hnvchehist msgid=tvrcjsbxrys7p7nw6b2mgf8ih6 timestamp=2026-11-12T14:30:33.396Z 19  [BETWEEN #13 #0 back]
+    expected: only eligible lines; eligible = ['h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+    observed: ineligible ['h01'] in ['h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+[ELIG] BETWEEN ts,msgid  x63  (violation (D3: eligibility is mandatory))
+    e.g. #469 CHATHISTORY BETWEEN #hnvchehist timestamp=2026-11-12T14:30:33.396Z msgid=tvrcjsbxrys7p7nw6b2mgf8ih6 1  [BETWEEN #0 #13 fwd]
+    expected: only eligible lines; eligible = ['h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+    observed: ineligible ['h01'] in ['h01']
+[ELIG] BETWEEN ts,ts  x60  (violation (D3: eligibility is mandatory))
+    e.g. #543 CHATHISTORY BETWEEN #hnvchehist timestamp=2026-11-12T14:30:33.421Z timestamp=2026-11-12T14:30:33.421Z 1  [BETWEEN #7 #7 fwd]
+    expected: only eligible lines; eligible = []
+    observed: ineligible ['h08'] in ['h08']
+[EXACT] AROUND msgid  x22  (latitude (CH:69 MAY return fewer))
+    e.g. #279 CHATHISTORY AROUND #hnvchehist msgid=4vwfjc77gwdkkpcc43tu4zynun 14  [AROUND msgid=#7]
+    expected: min(limit, available) = 14 (CH:69 lower-case 'should')
+    observed: 13: ['h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13', 'h14']
+[EXACT] AROUND ts  x30  (latitude (CH:69 MAY return fewer))
+    e.g. #48 CHATHISTORY AROUND #hnvchehist timestamp=2026-11-12T14:30:33.396Z 19  [AROUND ts=#0]
+    expected: min(limit, available) = 18 (CH:69 lower-case 'should')
+    observed: 17: ['event:hnvchea', 'event:hnvcheb', 'event:hnvchec', 'h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13', 'h14']
+[EXACT] BETWEEN msgid,ts  x180  (latitude (CH:69 MAY return more or fewer))
+    e.g. #486 CHATHISTORY BETWEEN #hnvchehist msgid=tvrcjsbxrys7p7nw6b2mgf8ih6 timestamp=2026-11-12T14:30:33.396Z 19  [BETWEEN #13 #0 back]
+    expected: 12 lines
+    observed: 13: ['h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+[EXACT] BETWEEN ts,msgid  x57  (latitude (CH:69 MAY return more or fewer))
+    e.g. #485 CHATHISTORY BETWEEN #hnvchehist timestamp=2026-11-12T14:30:33.396Z msgid=tvrcjsbxrys7p7nw6b2mgf8ih6 19  [BETWEEN #0 #13 fwd]
+    expected: 12 lines
+    observed: 13: ['h01', 'h02', 'h03', 'h04', 'h05', 'h06', 'h07', 'h08', 'h09', 'h10', 'h11', 'h12', 'h13']
+[EXACT] BETWEEN ts,ts  x60  (latitude (CH:69 MAY return more or fewer))
+    e.g. #543 CHATHISTORY BETWEEN #hnvchehist timestamp=2026-11-12T14:30:33.421Z timestamp=2026-11-12T14:30:33.421Z 1  [BETWEEN #7 #7 fwd]
+    expected: 0 lines
+    observed: 1: ['h08']
+[FAILREPLY] BEFORE ts  x1  (info: FAIL is a completion (CH-7))
+    e.g. #2206 CHATHISTORY BEFORE #hnvchenojoin timestamp=2026-11-12T14:31:33.908Z 10  [target not joined]
+    expected: a page
+    observed: @time=2026-11-12T14:30:33.909Z;label=L2206 :ergo.test FAIL CHATHISTORY INVALID_TARGET BEFORE #hnvchenojoin :Messages could not be retrieved
+[FAILREPLY] LATEST *  x1  (info: FAIL is a completion (CH-7))
+    e.g. #2205 CHATHISTORY LATEST #hnvchenojoin * 10  [target not joined]
+    expected: a page
+    observed: @time=2026-11-12T14:30:33.909Z;label=L2205 :ergo.test FAIL CHATHISTORY INVALID_TARGET LATEST #hnvchenojoin :Messages could not be retrieved
+[MSGID] AFTER msgid  x8  (event-as-PRIVMSG)
+    e.g. #1085 CHATHISTORY AFTER #hnvchehist msgid=_bd3sw2hq7jgajc3yr7u2jgma7w 1  [AFTER msgid=replayed-oldest]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _2gsnyu6923n4vwa666vvdtvexe (original 2gsnyu6923n4vwa666vvdtvexe)
+[MSGID] AFTER ts  x5  (event-as-PRIVMSG)
+    e.g. #451 CHATHISTORY AFTER #hnvchehist timestamp=2026-11-12T14:30:32.396Z 3  [AFTER ts=off-message]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _bd3sw2hq7jgajc3yr7u2jgma7w (original bd3sw2hq7jgajc3yr7u2jgma7w)
+[MSGID] AROUND msgid  x40  (event-as-PRIVMSG)
+    e.g. #31 CHATHISTORY AROUND #hnvchehist msgid=b73ay8u3p9my5dm8p4t65rmf8s 3  [AROUND msgid=#0]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _crwxy42qhmdzd64bhcfjsph9un (original crwxy42qhmdzd64bhcfjsph9un)
+[MSGID] AROUND ts  x47  (event-as-PRIVMSG)
+    e.g. #32 CHATHISTORY AROUND #hnvchehist timestamp=2026-11-12T14:30:33.396Z 3  [AROUND ts=#0]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _crwxy42qhmdzd64bhcfjsph9un (original crwxy42qhmdzd64bhcfjsph9un)
+[MSGID] BEFORE msgid  x221  (event-as-PRIVMSG)
+    e.g. #11 CHATHISTORY BEFORE #hnvchehist msgid=b73ay8u3p9my5dm8p4t65rmf8s 1  [BEFORE msgid=#0]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _crwxy42qhmdzd64bhcfjsph9un (original crwxy42qhmdzd64bhcfjsph9un)
+[MSGID] BEFORE ts  x130  (event-as-PRIVMSG)
+    e.g. #12 CHATHISTORY BEFORE #hnvchehist timestamp=2026-11-12T14:30:33.396Z 1  [BEFORE ts=#0]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _crwxy42qhmdzd64bhcfjsph9un (original crwxy42qhmdzd64bhcfjsph9un)
+[MSGID] BETWEEN msgid,msgid  x1  (event-as-PRIVMSG)
+    e.g. #2140 CHATHISTORY BETWEEN #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre msgid=_98arwqhsf58pkwytrpj8wx3u4e 3  [next page of #1099 (LATEST, end=False)]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _uznezeqan2dd5xcm2udp7226xn (original uznezeqan2dd5xcm2udp7226xn)
+[MSGID] BETWEEN msgid,ts  x2  (event-as-PRIVMSG)
+    e.g. #1944 CHATHISTORY BETWEEN #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre timestamp=2026-11-12T14:30:32.457Z 3  [next page of #920 (LATEST, end=False)]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _98arwqhsf58pkwytrpj8wx3u4e (original 98arwqhsf58pkwytrpj8wx3u4e)
+[MSGID] LATEST *  x23  (event-as-PRIVMSG)
+    e.g. #6 CHATHISTORY LATEST #hnvchehist * 15  [LATEST * 15]
+    expected: original msgid, time and text (CH:126)
+    observed: event event replayed as PRIVMSG with msgid _crwxy42qhmdzd64bhcfjsph9un (original crwxy42qhmdzd64bhcfjsph9un)
+
+TLC: 120 modelled queries on #hnvchetlc; running 120 (page <= 100); 0 left for the cluster
+  # 753 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 1
+  # 754 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 2
+  # 755 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 3
+  # 756 n=6 page=4 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 4
+  # 757 n=6 page=5 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 5
+  # 758 n=6 page=6 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 9
+  # 759 n=6 page=6 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 100
+  # 762 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 1
+  # 763 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.457Z 1
+  # 770 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 2
+  # 771 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.457Z 2
+  # 778 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 3
+  # 779 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.457Z 3
+  # 786 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 4
+  # 787 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.457Z 4
+  # 794 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 9
+  # 795 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.457Z 9
+  # 802 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 1
+  # 803 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 1
+  # 810 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 2
+  # 811 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 2
+  # 818 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 3
+  # 819 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 3
+  # 826 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 4
+  # 827 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 4
+  # 834 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 9
+  # 835 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 9
+  # 842 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 1
+  # 843 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 1
+  # 850 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 2
+  # 851 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 2
+  # 858 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 3
+  # 859 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 3
+  # 866 n=6 page=4 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 4
+  # 867 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 4
+  # 874 n=6 page=4 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 9
+  # 875 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.462Z 9
+  # 882 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 1
+  # 883 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.468Z 1
+  # 890 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 2
+  # 891 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.468Z 2
+  # 898 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 3
+  # 899 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.468Z 3
+  # 906 n=6 page=4 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 4
+  # 907 n=6 page=4 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.468Z 4
+  # 914 n=6 page=5 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 9
+  # 915 n=6 page=5 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.468Z 9
+  # 921 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:32.457Z 3
+  # 925 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:34.468Z 3
+  # 929 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.459Z 3
+  # 933 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.465Z 3
+  #1097 n=6 page=6 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY LATEST #hnvchetlc * 100
+  #1100 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 1
+  #1101 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1108 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 1
+  #1109 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 3
+  #1837 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2dh9rzjbu6hf4itq3z393p8i3e 1
+  #1838 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 2
+  #1839 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 3
+  #1840 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 4
+  #1841 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 5
+  #1842 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1843 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 100
+  #1846 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 1
+  #1847 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 1
+  #1852 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 2
+  #1853 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 2
+  #1858 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1859 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1864 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 4
+  #1865 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 4
+  #1870 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1871 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1876 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 1
+  #1877 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 1
+  #1882 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 2
+  #1883 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 2
+  #1888 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1889 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1894 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 4
+  #1895 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 4
+  #1900 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1901 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1906 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 1
+  #1907 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 1
+  #1912 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 2
+  #1913 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 2
+  #1918 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 3
+  #1919 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1924 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 4
+  #1925 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 4
+  #1930 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1931 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1934 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 1
+  #1935 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 1
+  #1936 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 2
+  #1937 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 2
+  #1938 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 3
+  #1939 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 3
+  #1940 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 4
+  #1941 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_uznezeqan2dd5xcm2udp7226xn 4
+  #1942 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1943 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 9
+  #1946 n=6 page=3 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=d76iq2zk6ny52xtwdz2dt4xkre 3
+  #1948 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=_98arwqhsf58pkwytrpj8wx3u4e 3
+  #1951 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 3
+  #2143 n=6 page=1 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=2ih9rpazd67ykzdfhj3at5r93i 1
+  #2144 n=6 page=2 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 3
+  #2186 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=zzzz-not-a-msgid-0000 5
+  #2192 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=jhd2fwa9ifhsurvh3pjf6yqp22 5
+  #2198 n=6 page=0 live=0 M_strict=match(3) I=holds(3)  CHATHISTORY BEFORE #hnvchetlc msgid=ysazrgw5jk88utg736zdavzd6i 5
+  #2221 n=7 page=2 live=1 M_strict=match(4) I=holds(4)  CHATHISTORY LATEST #hnvchetlc * 2
+  #2222 n=7 page=7 live=1 M_strict=match(4) I=holds(4)  CHATHISTORY LATEST #hnvchetlc * 10
+  #2223 n=7 page=2 live=1 M_strict=match(4) I=holds(4)  CHATHISTORY BEFORE #hnvchetlc msgid=p6dbsz9ndnv3gackbtxsk2tyaw 2
+  #2224 n=7 page=3 live=1 M_strict=match(4) I=holds(4)  CHATHISTORY BEFORE #hnvchetlc timestamp=2026-11-12T14:30:33.925Z 3
+  #900001 n=6 page=2 live=0 M_strict=NO MATCH(2) I=holds(3) M_loose=match  CONTROL reversed batch: CHATHISTORY LATEST #hnvchetlc * 2   [expected: M_strict NO MATCH (BatchAgrees)]
+  #900002 n=6 page=2 live=0 M_strict=NO MATCH(2) I=VIOLATES PageEligible(3) M_loose=NO MATCH  CONTROL anchor included: CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 1   [expected: I VIOLATES PageEligible]
+  #900003 n=6 page=1 live=0 M_strict=NO MATCH(2) I=VIOLATES EndNext(3) M_loose=NO MATCH  CONTROL false end tag: CHATHISTORY LATEST #hnvchetlc * 1   [expected: I VIOLATES EndNext/EndTruthful]
+  #900004 n=6 page=1 live=0 M_strict=NO MATCH(2) I=VIOLATES PageEligible(3) M_loose=NO MATCH  CONTROL unknown msgid answered with a line: CHATHISTORY BEFORE #hnvchetlc msgid=ccny2fbdeztn6frg24egxjyhs2 1   [expected: I VIOLATES (UnknownEmpty or PageEligible)]
+  #900005 n=6 page=2 live=0 M_strict=NO MATCH(2) I=holds(3) M_loose=match  CONTROL hole in page: CHATHISTORY LATEST #hnvchetlc * 2   [expected: M_strict NO MATCH (Contiguous)]
