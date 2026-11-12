@@ -8,7 +8,9 @@ a module HT_<name> EXTENDS History with Init pinned (ids in time order, times
 as ranks of the fixture's minutes, ord the store order) and a step sequence W.
 A page line that is neither held, gap nor live (belowHeld's o) was stored
 before everything held: it goes into History's Old prefix (NOld, D35), so the
-store is Old ++ Held ++ Gap ++ live
+store is Old ++ Held ++ Gap ++ live.  One at or above the oldest held line's
+time is a hole (D36): stored between held lines, placed among them by time
+(History's Holes, offsets into the held span)
 built from the fixture's wire template and the observed requests:
 
   Q  the client's next observed CHATHISTORY request (CQuery with that query)
@@ -36,7 +38,7 @@ from catchup_fixtures import FIXTURES  # noqa: E402
 JAR = os.environ.get("TLA_JAR", os.path.expanduser("~/tools/formal/tla2tools.jar"))
 JAVA = os.environ.get("TLC_JAVA", "java").split()
 
-BASE = dict(Mode='"reconnect"', MayFail="FALSE", NOld=0, Fuzz=0, BudgetKind='"pages"', BudgetN=5,
+BASE = dict(Mode='"reconnect"', MayFail="FALSE", NOld=0, Holes="{}", Skew=0, Fuzz=0, BudgetKind='"pages"', BudgetN=5,
             ExactCount="TRUE", Contiguous="TRUE", TimeOrdered="TRUE", BatchAgrees="TRUE",
             StableAcrossReconnect="TRUE", SendsEnd="FALSE", Dedupe="TRUE", MsgidAnchor="TRUE",
             StopOnHeld="TRUE", InsertMerge="TRUE")
@@ -53,9 +55,17 @@ def build(fx, obs):
     gap = fx["gap"]
     live = fx.get("live")
     known = set(held) | set(gap) | ({live[0]} if live else set())
-    old = sorted({m for page in fx["pages"] for m, _ in page if m not in known},
-                 key=lambda m: minute([t for page in fx["pages"] for x, t in page if x == m][0]))
-    names = old + held + gap + ([live[0]] if live else [])
+    pmin = lambda m: minute([t for page in fx["pages"] for x, t in page if x == m][0])
+    unknown = sorted({m for page in fx["pages"] for m, _ in page if m not in known}, key=pmin)
+    floor0 = min(minute(t) for _, t in fx["held"])
+    old = [m for m in unknown if pmin(m) < floor0]
+    # D36: held and holes by time, a held line first at a tie
+    hmin = {m: minute(t) for m, t in fx["held"]}
+    span = sorted([(hmin[m], 0, i, m) for i, m in enumerate(held)] +
+                  [(pmin(m), 1, i, m) for i, m in enumerate(unknown) if m not in old])
+    holes = [k + 1 for k, e in enumerate(span) if e[1] == 1]
+    assert all(1 < k < len(span) for k in holes), "a hole must lie between held lines"
+    names = old + [e[3] for e in span] + gap + ([live[0]] if live else [])
     mins = {}
     for m, t in fx["held"]:
         mins[m] = t
@@ -111,7 +121,7 @@ def build(fx, obs):
 
     final = [num[r["msgid"]] for r in obs["store"]
              if r["msgid"] and r["msgid"] in num]
-    consts = dict(BASE, NOld=len(old), NHeld=len(held), NGap=len(gap), LiveOn="TRUE" if live else "FALSE",
+    consts = dict(BASE, NOld=len(old), NHeld=len(held), Holes="{%s}" % ", ".join(map(str, holes)), NGap=len(gap), LiveOn="TRUE" if live else "FALSE",
                   Times="{%s}" % ", ".join(str(x) for x in sorted(set(times))), Limit=fx["limit"])
     consts.update(fx.get("model", {}))
     name = "HT_" + fx["name"]

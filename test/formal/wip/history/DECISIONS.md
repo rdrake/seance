@@ -797,3 +797,170 @@ Answers D34 item 1. Item 2 (the restore race) stays out of History.
     held), cannot be told apart in this model.
   - The model drops by `T < Cutoff` on server times only. clockFloor's local
     clock is still outside it (D31).
+
+## D36 History v1.3: holes in the held range, Skew, and msgid settling (2026-11-12)
+
+Answers D35's "still left": a missed line inside the held range, and floor
+alone against min(floor, oldest held). The W_FuzzBelow follow-up is filed as
+evilnet/seance#290.
+
+- **The cutoff, as the code has it.** Seance's resolve() (history.ts, #282):
+  `floorMs = floor.time - CATCHUP_FUZZ_MS`, then
+  `cutoff = Math.min(floorMs, holdsFrom)`. That is min(newest held - FUZZ,
+  oldest held), not min(floor, oldest held) - FUZZ. History.tla already
+  encoded this (`Floor == newest held - Fuzz`, `Cutoff == min(Floor,
+  HoldsFrom)`), and every mutant below replaces that one line. So
+  W_FuzzBelow's window exists only when the oldest held line is less than
+  FUZZ older than the newest: one held line, or a few a moment apart.
+  W_FuzzBelow2 shows the second case.
+- **What changed in History.tla.**
+  - New constant `Holes`: offsets inside the held span (strictly between its
+    first and last line) that are stored but not held. In reconnect mode the
+    store is `Old ++ Span ++ Gap`, where the span holds `NHeld` held lines and
+    the holes among them. `Held` is the span minus `HoleIds`. buf starts as
+    the held lines in store order (`HeldSeq`).
+  - New constant `Skew`: a line stored later may carry a time up to Skew
+    earlier (`TimeFns`). Skew = 0 is v1.2's non-decreasing store.
+  - `Floor` and `HoldsFrom` read the newest and oldest time among the held
+    lines (`MaxT`, `MinT`). That is what Seance reads (`catchupRef`,
+    `oldestTimeOf`). With Skew = 0 they equal v1.2's `time[NOld + NHeld]` and
+    `time[NOld + 1]`.
+  - New invariants (in SAFE):
+    - **HoleKept**: once a page carried a hole, it is in the buffer exactly
+      once (no loss, no duplicate);
+    - **HoleOrder**: no hole stands on the wrong side of a held line or another
+      hole with a different time. This is server order up to ties, since a
+      time-merging client cannot see the order inside a tie (D7). It is only
+      meaningful at Skew = 0;
+    - **OldByTime**: a stored line older than every held line is in Old. This
+      is the lemma msgid settling rests on. It holds by construction at
+      Skew = 0.
+  - New covers: CoverHoleKept, and CoverHoleBelowFloor (a kept hole below
+    newest held - FUZZ, where a cutoff of the floor alone would drop it).
+- **Where holes come from in Seance.** A walk that hits the page cap delivers
+  its newest pages and leaves the older part of the gap unloaded. At the next
+  reconnect, what is held has a hole: lines from before the first disconnect,
+  then the missing middle, then the delivered pages. The task brief's other
+  examples (a trimmed buffer, a dropped live line) give the same shape.
+- **Decision: what the client does with a hole (checked in the code).**
+  Seance keeps it and appends it; it does not place it by time.
+  - catchup.ts reserves the gap's ids (`IdAllocator.reserve`) when the
+    catch-up starts. That block is above every held row's id.
+  - deliverAppend pushes each kept line with an id from the block.
+  - The store's `insertMessage` (messageUpdates.ts) places a row by id
+    (`placeId`). So a hole lands below the newest held line, above the live
+    lines relayed during the walk, and never between its held neighbours.
+  - In the model that is `InsertMerge = FALSE`. HoleKept holds there
+    (HHoleSeance, HHoleSeanceFuzz), but HoleOrder does not:
+    **W_HoleAppend** (held 1@t1, hole 2@t1, held 3@t2, gap 4@t2 gives buf
+    <<1, 3, 2>>, with the hole shown below the newer held line).
+  - So #282's "a line below the floor but within what we hold is one we
+    missed, and still goes in" holds for loss and duplicates but not for
+    order. This is not filed yet. The fix is to place a kept hole by time,
+    which needs an id between its neighbours.
+  - With `InsertMerge = TRUE` both properties hold (HHole, HHoleFuzz,
+    HHoleFuzzHi, HHolePages, HHoleOld).
+- **Mutants (mkhist.py; each replaces the Cutoff line):**
+  - **HC_NewestCut**, `Cutoff == MaxT(Held)`: unknown lines inside the held
+    range are dropped, as if the cutoff were the newest held line.
+  - **HC_FloorCut**, `Cutoff == Floor`: the floor alone (newest held - FUZZ).
+
+| Config | correct rule | HC_NewestCut | HC_FloorCut |
+|---|---|---|---|
+| HHole (Fuzz 0, Times {1,2,3}) | pass, 1,116 | HoleKept violated, 577 | HoleKept violated, 577 |
+| HHoleSeance (the same, appending) | pass (SEANCE), 1,116 | HoleKept violated, 577 | HoleKept violated, 577 |
+| HHoleFuzz (Fuzz 1) | pass, 1,212 | HoleKept violated, 577 | HoleKept violated, 589 |
+| HHoleFuzzHi (Fuzz 1, Times {2,3}) | pass, 640 | HoleKept violated, 317 | pass (HoleKept), 640 |
+| HOld2 / HOldFuzz / HBelowHeld (no holes) | pass | not run | pass (SAFE), 58,496 / 139,472 / 152 |
+
+  - Any hole config separates both mutants from the correct rule.
+  - HHoleFuzzHi also separates the two mutants from each other. There the
+    floor (newest - 1) is never above the oldest time, so the floor alone drops
+    nothing, while the newest-held cutoff drops a hole at time 2 under a held
+    line at time 3.
+  - Without holes, HC_FloorCut passes SAFE with the same counts as the correct
+    rule. A floor-alone cutoff differs only on lines in [oldest held, floor),
+    and with a contiguous held range only ties of the oldest held line are
+    there. That is D35's "cannot be told apart", now confirmed.
+- **W_FuzzBelow (evilnet/seance#290), kept as a known weakness.**
+  - W_FuzzBelow: one old line, one held line, Fuzz 1, Times {1, 2}. HeldOrder
+    is violated (81 states, unchanged).
+  - New W_FuzzBelow2: two held lines with Times {1, 2, 3}. When they are tied,
+    or less than FUZZ apart, the old line inside the window is kept and
+    appended. HeldOrder violated, 955 states.
+- **Msgid settling (#290's proposal), HV_MsgidSettle.** Placed drops a page
+  line that is older than the oldest held line and is not itself held (by
+  msgid), whatever FUZZ says:
+  `~(reconnect /\ NHeld > 0 /\ (T(m) < Cutoff \/ (T(m) < HoldsFrom /\ m \notin Held)))`.
+  - **Skew = 0: sound in the model.** It passes HeldOrder on W_FuzzBelow (160)
+    and W_FuzzBelow2 (1,570), the two configs where the current rule fails.
+    It passes SAFE on HBelowHeld, HOld, HOld2, HOldFuzz, HHoleFuzz and
+    HHoleOld, and SEANCE on HHoleSeanceFuzz. NoLoss, HoleKept, NoDup and
+    Order all hold there.
+  - **What it needs.** OldByTime: a stored line's server time never falls
+    below that of a line stored before it (one monotone clock for the
+    channel's store, no skew between the servers that stamp it). It also
+    needs the held lines' times to be server stamps. Seance's `oldestTimeOf`
+    reads only msgid-bearing refs, so that part already holds. With Skew = 0,
+    T < oldest held implies Old, so the rule drops nothing that is a hole, a
+    gap line or a live line.
+  - **Skew 1: it loses.** HSkew: one held line @2, a gap line stamped @1 (one
+    behind), Fuzz 1. The current rule keeps the gap line, since its cutoff is
+    at most newest held - FUZZ and FUZZ ≥ skew (HSkew passes NoLoss, 40
+    states). HV_MsgidSettle drops it: NoLoss violated, 22 states.
+    CoverSkew shows that OldByTime fails at Init under Skew 1.
+  - So #290 is a trade:
+    - the current rule pays W_FuzzBelow (order) to tolerate skew up to FUZZ;
+    - msgid settling fixes the order, but loses a gap line stamped earlier
+      than the oldest held one.
+    It is sound only if the network's servers stamp history with clocks that
+    agree to better than the gap between the oldest held line and anything
+    stored after it.
+  - The current rule does not fully tolerate skew either. **W_SkewHole**
+    (HHoleFuzz with Skew 1): a hole stamped one below the oldest held line
+    falls under the cutoff and is dropped (HoleKept violated, 245 states).
+  - Not modelled: a rule that settles by position (a page line before the
+    oldest held msgid in the page's server order is old). It needs no clock
+    agreement, but only works when the page carries a held line.
+- **Trace harness.** history_trace.py passes `Holes = {}` and `Skew = 0`. A
+  page line that is neither held, gap nor live is a hole when its time is at
+  or above the oldest held line, and goes in among the held lines by time;
+  below that it is Old, as before. No fixture has a hole yet: one needs a
+  Seance checkout at #282 or later (sformal's client predates it). The stored
+  observations replay as in D35:
+  - 03a2f172a passes 5/5;
+  - d0322ffa7 passes 4 and fails belowHeld on SnapOK;
+  - final.jsonl passes 4/4;
+  - catchup-develop.jsonl fails 4/4 on SnapOK.
+  - Passing traces take 4, 7, 7, 10 and 10 states, as before.
+- **TLC runs, local** (-workers 1, three single-worker TLC processes side by
+  side). Every line is in `model/results-h13-local.summary`: 114 checks, all
+  as expected. The longest took 48 s.
+  - **No-holes regression.** All 77 v1.2 checks give the same result and the
+    same distinct-state count as `results-h12-local.summary`. This is the
+    count at a violation as well as for a pass, and there are no
+    differences. The configs gained `Holes = {}` and `Skew = 0`, and SAFE
+    gained HoleKept, HoleOrder and OldByTime, which are vacuous or true there.
+  - New positives: HHole 1,116; HHoleFuzz 1,212; HHoleFuzzHi 640; HHolePages
+    (Limit 2, live line) 23,006; HHoleOld 5,364; HHoleSeance 1,116;
+    HHoleSeanceFuzz 1,212; HSkew 40.
+  - New failures, as expected:
+    - CoverHoleKept 506;
+    - CoverHoleBelowFloor 589;
+    - CoverDone_HHole 506;
+    - CoverDone_HHoleSeance 506;
+    - CoverSkew (at Init);
+    - W_HoleAppend 577;
+    - W_FuzzBelow2 955;
+    - W_SkewHole 245.
+- **For the cluster (not run here):**
+  - two holes (NHeld 2, Holes {2, 3}), and NHeld 3 with one hole, at Limit 1
+    or 2 with LiveOn;
+  - HHolePages with Fuzz 1 and NOld 1;
+  - HV_MsgidSettle on HNoBatchAgrees-sized configs with a hole;
+  - Skew with `TimeOrdered = TRUE`: a server that keys its store by time
+    would put the skewed line among the held ones, which is a hole.
+- **Still left.**
+  - Seance's hole placement (W_HoleAppend) is not filed.
+  - No catch-up fixture has a hole.
+  - D34 item 2 (the restore race) is still out of History.

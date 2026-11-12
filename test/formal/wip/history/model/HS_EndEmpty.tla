@@ -11,6 +11,11 @@
 (* below min(floor, oldest held) is dropped, as Seance does since #282.  *)
 (* NOld = 0 is v1.1 exactly.                                              *)
 (*                                                                         *)
+(* v1.3 (D36): Holes, stored lines missing between two held lines (the    *)
+(* held span is no longer all held), and Skew, a server clock that may    *)
+(* stamp a later-stored line up to Skew earlier.  Holes = {} and Skew = 0 *)
+(* is v1.2 exactly.                                                        *)
+(*                                                                         *)
 (* v1 (HISTORY-REVIEW-3, D26): three request kinds, each with its own     *)
 (* obligation (Mode: reconnect catch-up, first JOIN's LATEST *, "more"'s  *)
 (* BEFORE <oldest held>); FAIL ends a request without recovering it; the *)
@@ -33,6 +38,8 @@ CONSTANTS
     MayFail,       \* the server may answer a query with FAIL (CH-7)
     NOld,          \* reconnect: stored lines older than every held one, not in buf (D35); else 0
     NHeld,         \* reconnect: messages held before the gap (1..2); more: held (newest); join: 0
+    Holes,         \* reconnect: offsets in the held span that are stored but not held (D36); else {}
+    Skew,          \* a later-stored line may carry a time up to Skew earlier (D36); 0: none
     NGap,          \* reconnect: stored during the gap; more: older than the held; join: the store
     LiveOn,        \* one more message stored during catch-up (D6)
     Times,         \* the time values, e.g. {1, 3}
@@ -50,23 +57,34 @@ CONSTANTS
     InsertMerge    \* insert each message by time, or append in arrival order
 
 ASSUME NOld = 0 \/ Mode = "reconnect"
+\* D36: a hole is strictly inside the held span, so the oldest and the newest
+\* line of the span are held (Floor and HoldsFrom read held lines).
+NHoles == Cardinality(Holes)
+Span == NHeld + NHoles               \* reconnect: held lines and the holes between them
+ASSUME Holes = {} \/ (Mode = "reconnect" /\ \A k \in Holes : 1 < k /\ k < Span)
+ASSUME Skew = 0 \/ Mode = "reconnect"
 
-NStored == NOld + NHeld + NGap
+NStored == NOld + Span + NGap
 N == NStored + (IF LiveOn THEN 1 ELSE 0)
 Ids == 1..N
 Mids == 1..(2 * N)                \* a message's msgid; N + c is a re-minted id for content c
 Content(x) == IF x > N THEN x - N ELSE x
 Replay(c) == c                    \* CH-18: a replayed message keeps its msgid
-\* reconnect: Old (never loaded), then the held messages, then the gap; more:
+\* reconnect: Old (never loaded), then the held span (held messages, with
+\* Holes among them: stored, never loaded, D36), then the gap; more:
 \* the held messages are the newest and the "gap" is the older history; join:
 \* nothing held.
 Old == 1..NOld
-Held == IF Mode = "more" THEN (NGap + 1)..NStored ELSE (NOld + 1)..(NOld + NHeld)
-Gap == IF Mode = "more" THEN 1..NGap ELSE (NOld + NHeld + 1)..NStored
+HoleIds == {NOld + k : k \in Holes}
+Held == IF Mode = "more" THEN (NGap + 1)..NStored ELSE ((NOld + 1)..(NOld + Span)) \ HoleIds
+Gap == IF Mode = "more" THEN 1..NGap ELSE (NOld + Span + 1)..NStored
+NotHole(x) == x \notin HoleIds
+HeldSeq == SelectSeq([i \in 1..Span |-> NOld + i], NotHole)   \* reconnect: held, in store order
 LiveId == N                       \* meaningful only when LiveOn
 
-\* Store times are non-decreasing along the store (D8, no skew).
-TimeFns == {f \in [Ids -> Times] : \A i \in Ids : \A j \in Ids : i < j => f[i] <= f[j]}
+\* Store times are non-decreasing along the store (D8), or, with Skew (D36),
+\* a later-stored line is at most Skew earlier.
+TimeFns == {f \in [Ids -> Times] : \A i \in Ids : \A j \in Ids : i < j => f[i] <= f[j] + Skew}
 
 Range(s) == {s[i] : i \in DOMAIN s}
 Perms(S) == {p \in [1..Cardinality(S) -> S] : Range(p) = S}
@@ -99,10 +117,16 @@ vars == <<time, ord, liveSt, liveRel, q, s2c, buf, pgSeen, liveSeen, phase, anch
 NoQ == [k |-> "none", form |-> "none", sel |-> 0, ts |-> 0]
 NoItem == [k |-> "none", ms |-> << >>, end |-> FALSE, qq |-> NoQ, el |-> {}, so |-> << >>]
 T(x) == time[Content(x)]            \* a msgid's time
-Floor == IF NHeld = 0 THEN 0 ELSE time[NOld + NHeld] - Fuzz   \* lower_bound - FUZZ_INTERVAL (CH-23); reconnect only
+\* lower_bound - FUZZ_INTERVAL (CH-23); reconnect only.  lower_bound is the
+\* newest held line (Seance: chan.catchupRef(), the newest server-stamped
+\* line); with Skew = 0 that is the last of the span, time[NOld + Span].
+MaxT(S) == CHOOSE t \in Times : (\E x \in S : time[x] = t) /\ \A x \in S : time[x] <= t
+MinT(S) == CHOOSE t \in Times : (\E x \in S : time[x] = t) /\ \A x \in S : time[x] >= t
+Floor == IF NHeld = 0 THEN 0 ELSE MaxT(Held) - Fuzz
 \* D35: the oldest held line's time (Seance: chan.oldestTimeOf(held)), and the
-\* cutoff below which a reconnect page line is never placed: min(floor, it).
-HoldsFrom == IF NHeld = 0 THEN 0 ELSE time[NOld + 1]
+\* cutoff below which a reconnect page line is never placed: Seance's
+\* Math.min(floorMs, holdsFrom), i.e. min(newest held - FUZZ, oldest held).
+HoldsFrom == IF NHeld = 0 THEN 0 ELSE MinT(Held)
 Cutoff == IF Floor < HoldsFrom THEN Floor ELSE HoldsFrom
 
 \* D7: the order on the new connection.
@@ -119,7 +143,7 @@ Init ==
     /\ liveSt = FALSE /\ liveRel = FALSE
     /\ q = NoQ /\ s2c = <<>>
     /\ buf = IF Mode = "more" THEN [i \in 1..NHeld |-> NGap + i]
-             ELSE [i \in 1..NHeld |-> NOld + i]   \* held in the old connection's order; join: empty
+             ELSE [i \in 1..NHeld |-> HeldSeq[i]]   \* held in the old connection's order; join: empty
     /\ pgSeen = {} /\ liveSeen = FALSE
     /\ phase = "query" /\ anchor = 0 /\ pages = 0 /\ got = 0 /\ why = "none"
     /\ pg1 = NoItem /\ unkEmpty = FALSE
@@ -302,6 +326,25 @@ MoreRecovers == (Mode = "more" /\ Done /\ why # "fail") =>
 HeldOrder == Mode = "reconnect" =>
                  \A i, j \in DOMAIN buf : (i < j /\ Content(buf[i]) \in Held) => T(buf[j]) >= HoldsFrom
 
+\* D36, a hole (a stored line between two held lines that the client never
+\* had): once a page carried it, it is in the buffer exactly once, whatever
+\* the walk did next (no loss, no duplicate).
+HoleKept == \A h \in HoleIds :
+               h \in pgSeen => Cardinality({i \in DOMAIN buf : Content(buf[i]) = h}) = 1
+\* D36, and in server order among the held lines: a hole never stands on the
+\* wrong side of a held line (or another hole) with a different time.  Up to
+\* ties: a time-merging client cannot see the server's order inside a tie
+\* (D7).  Meaningful with Skew = 0 only.
+HoleOrder == \A i, j \in DOMAIN buf :
+                 LET a == Content(buf[i])  b == Content(buf[j]) IN
+                 (i < j /\ {a, b} \subseteq Held \cup HoleIds /\ {a, b} \cap HoleIds # {})
+                     => T(buf[i]) <= T(buf[j])
+\* D36, the lemma msgid settling rests on: a stored line older than every
+\* held line is an Old one (never a hole, gap or live line).  True by
+\* construction with Skew = 0; Skew breaks it.
+OldByTime == (Mode = "reconnect" /\ NHeld > 0) =>
+                 \A m \in 1..N : time[m] < HoldsFrom => m \in Old
+
 \* NoDup: no msgid twice in the buffer.
 NoDup == \A i, j \in DOMAIN buf : i # j => buf[i] # buf[j]
 
@@ -367,5 +410,9 @@ CoverEndReversed == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ Len(s2c[i].ms) 
                         /\ s2c[i].ms[Len(s2c[i].ms)] = s2c[i].so[1] /\ s2c[i].ms[1] # s2c[i].so[1])
 \* D35: a page reached below everything held and the client dropped a line
 CoverOldDropped == ~(\E o \in Old : o \in pgSeen /\ o \notin Held1 /\ time[o] < Cutoff)
+\* D36: a page carried a hole and it is in the buffer; and the same for a
+\* hole below the floor (where a cutoff of the floor alone would drop it)
+CoverHoleKept == ~(Done /\ \E h \in HoleIds : h \in pgSeen /\ h \in Held1)
+CoverHoleBelowFloor == ~(Done /\ \E h \in HoleIds : h \in pgSeen /\ h \in Held1 /\ time[h] < Floor)
 CoverLiveInPage == ~(\E i \in DOMAIN s2c : s2c[i].k = "page" /\ LiveOn /\ LiveId \in {Content(x) : x \in Range(s2c[i].ms)})
 =============================================================================
