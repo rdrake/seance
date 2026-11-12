@@ -1,0 +1,25 @@
+Base | 889 distinct states found | Model checking completed. No error has been found.
+BaseActiveFree | 1013 distinct states found | Model checking completed. No error has been found.
+BaseNoCursor | 703 distinct states found | Model checking completed. No error has been found.
+BaseStatusOnOff | 889 distinct states found | Model checking completed. No error has been found.
+Big | 1441 distinct states found | Model checking completed. No error has been found.
+CoverCapFired | 1550 distinct states found | Error: Invariant NotCapFired is violated.
+CoverCapRaced | 209 distinct states found | Error: Invariant NotCapRaced is violated.
+CoverClosedFirst | 120 distinct states found | Error: Invariant NotClosedFirst is violated.
+CoverNestedHeld | 255 distinct states found | Error: Invariant NotNestedHeld is violated.
+EndlessCap | 499 distinct states found | Model checking completed. No error has been found.
+M_NoCapEndless | 496 distinct states found | Error: Temporal property Settles was violated.
+M_NoCapOpenStall | 1590 distinct states found | Error: Temporal property Settles was violated.
+M_NoCapStall | 1667 distinct states found | Model checking completed. No error has been found.
+M_NoCloseAct | 279 distinct states found | Error: Invariant NoRace is violated.
+M_Pre282 | 59 distinct states found | Error: Invariant NoRace is violated.
+M_Pre282Double | 576 distinct states found | Error: Invariant NoDouble is violated.
+M_Pre282NoCursor | 1438 distinct states found | Model checking completed. No error has been found.
+OpenGap | 6665 distinct states found | Model checking completed. No error has been found.
+OpenStall | 1597 distinct states found | Model checking completed. No error has been found.
+Small | 336 distinct states found | Model checking completed. No error has been found.
+Stall | 1667 distinct states found | Model checking completed. No error has been found.
+W_Gap | 53 distinct states found | Error: Invariant NoRace is violated.
+W_OpenEarly | 37 distinct states found | Error: Invariant NoEarlyJoin is violated.
+W_SlowServer | 530 distinct states found | Error: Invariant NoDouble is violated.
+W_StallRace | 108 distinct states found | Error: Invariant NoRace is violated.
