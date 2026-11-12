@@ -16,6 +16,10 @@
 (* stamp a later-stored line up to Skew earlier.  Holes = {} and Skew = 0 *)
 (* is v1.2 exactly.                                                        *)
 (*                                                                         *)
+(* v1.4 (D38): PlacedOrder, the order a client that places page lines by  *)
+(* server time can promise under Skew; not in SAFE.  The candidate rule   *)
+(* itself is the variant HV_PlaceByTime (mkhist.py).                      *)
+(*                                                                         *)
 (* v1 (HISTORY-REVIEW-3, D26): three request kinds, each with its own     *)
 (* obligation (Mode: reconnect catch-up, first JOIN's LATEST *, "more"'s  *)
 (* BEFORE <oldest held>); FAIL ends a request without recovering it; the *)
@@ -344,6 +348,19 @@ HoleOrder == \A i, j \in DOMAIN buf :
 \* construction with Skew = 0; Skew breaks it.
 OldByTime == (Mode = "reconnect" /\ NHeld > 0) =>
                  \A m \in 1..N : time[m] < HoldsFrom => m \in Old
+
+\* D38, the order a client that places page lines by server time can promise,
+\* skew or not: around every line it placed (neither held nor the live line),
+\* the row just before it is no newer, and no later row (the live line
+\* aside) is older.  Store order cannot be promised: a client sees times,
+\* not the store, and with Skew the two differ.  Nor can the whole buffer be
+\* sorted: held rows arrived in store order and may already be out of time
+\* order (Skew), which no placement repairs.  With Skew = 0 and no live line
+\* it is Order.  Not in SAFE (D38).
+Placer(x) == Content(x) \notin Held /\ ~(LiveOn /\ Content(x) = LiveId)
+PlacedOrder == \A i \in DOMAIN buf : Placer(buf[i]) =>
+                   /\ (i > 1 => T(buf[i - 1]) <= T(buf[i]))
+                   /\ \A j \in DOMAIN buf : (j > i /\ ~(LiveOn /\ Content(buf[j]) = LiveId)) => T(buf[j]) >= T(buf[i])
 
 \* NoDup: no msgid twice in the buffer.
 NoDup == \A i, j \in DOMAIN buf : i # j => buf[i] # buf[j]

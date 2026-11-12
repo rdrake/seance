@@ -1,0 +1,154 @@
+OK History HTiny expect=pass got=pass distinct=3140 
+OK History HTiny2 expect=pass got=pass distinct=10278 
+OK History HHeldStop expect=pass got=pass distinct=508 
+OK History HMsgs expect=pass got=pass distinct=2898 
+OK History W_EmptyPage expect=fail got=fail distinct=183 Error: Invariant NoLoss is violated.
+OK History W_TimeOrdered expect=fail got=fail distinct=290 Error: Invariant NoLoss is violated.
+OK History W_D7Reorder expect=fail got=fail distinct=543 Error: Invariant NoLoss is violated.
+OK History W_TsTie expect=fail got=fail distinct=558 Error: Invariant NoLoss is violated.
+OK History W_Budget expect=fail got=fail distinct=449 Error: Invariant NoLoss is violated.
+OK History W_Holes expect=fail got=fail distinct=235 Error: Invariant NoLoss is violated.
+OK History HNoBatchAgrees expect=pass got=pass distinct=58722 
+OK History HBatchAgreesBudget expect=pass got=pass distinct=424 
+OK History W_BatchBudget expect=fail got=fail distinct=682 Error: Invariant NoLoss is violated.
+OK History W_NoDedupe expect=fail got=fail distinct=529 Error: Invariant NoDupLive is violated.
+OK History W_Append expect=fail got=fail distinct=1252 Error: Invariant Order is violated.
+OK History HFuzz expect=pass got=pass distinct=13858 
+OK History CoverDone expect=fail got=fail distinct=1112 Error: Invariant CoverDone is violated.
+OK History CoverMultiPage expect=fail got=fail distinct=1112 Error: Invariant CoverMultiPage is violated.
+OK History CoverFloor expect=fail got=fail distinct=7372 Error: Invariant CoverFloor is violated.
+OK History CoverEmpty expect=fail got=fail distinct=1923 Error: Invariant CoverEmpty is violated.
+OK History CoverEnd expect=fail got=fail distinct=1112 Error: Invariant CoverEnd is violated.
+OK History CoverLiveInPage expect=fail got=fail distinct=135 Error: Invariant CoverLiveInPage is violated.
+OK History CoverLiveBoth expect=fail got=fail distinct=529 Error: Invariant CoverLiveBoth is violated.
+OK History CoverBudget expect=fail got=fail distinct=249 Error: Invariant CoverBudget is violated.
+OK History HFail expect=pass got=pass distinct=4604 
+OK History W_FailLoss expect=fail got=fail distinct=161 Error: Invariant NoLossEvenOnFail is violated.
+OK History CoverFail expect=fail got=fail distinct=161 Error: Invariant CoverFail is violated.
+OK History HJoin expect=pass got=pass distinct=500 
+OK History HJoinFail expect=pass got=pass distinct=698 
+OK History W_JoinHoles expect=fail got=fail distinct=233 Error: Invariant JoinRecovers is violated.
+OK History CoverJoinDone expect=fail got=fail distinct=137 Error: Invariant CoverJoinDone is violated.
+OK History HMore expect=pass got=pass distinct=158 
+OK History W_MoreHoles expect=fail got=fail distinct=79 Error: Invariant MoreRecovers is violated.
+OK History W_MoreTsTie expect=fail got=fail distinct=54 Error: Invariant MoreRecovers is violated.
+OK History CoverMoreDone expect=fail got=fail distinct=47 Error: Invariant CoverMoreDone is violated.
+OK History HMoreFail expect=pass got=pass distinct=221 
+OK History CoverFail_HJoinFail expect=fail got=fail distinct=161 Error: Invariant CoverFail is violated.
+OK History CoverFail_HMoreFail expect=fail got=fail distinct=56 Error: Invariant CoverFail is violated.
+OK History CoverJoinDone_HJoinFail expect=fail got=fail distinct=160 Error: Invariant CoverJoinDone is violated.
+OK History CoverMoreDone_HMoreFail expect=fail got=fail distinct=55 Error: Invariant CoverMoreDone is violated.
+OK History W_TieReconnect expect=fail got=fail distinct=4562 Error: Invariant NoLoss is violated.
+OK History CoverEndReversed expect=fail got=fail distinct=2475 Error: Invariant CoverEndReversed is violated.
+OK History CoverHeldStop expect=fail got=fail distinct=303 Error: Invariant CoverHeldStop is violated.
+OK History HOld expect=pass got=pass distinct=14206 
+OK History HOld2 expect=pass got=pass distinct=58496 
+OK History HOldFuzz expect=pass got=pass distinct=139472 
+OK History W_OldTieBudget expect=fail got=fail distinct=57115 Error: Invariant NoLoss is violated.
+OK History HBelowHeld expect=pass got=pass distinct=152 
+OK History HOldHeldStop expect=pass got=pass distinct=594 
+OK History CoverOldDropped expect=fail got=fail distinct=7420 Error: Invariant CoverOldDropped is violated.
+OK History CoverOldDropped_HBelowHeld expect=fail got=fail distinct=81 Error: Invariant CoverOldDropped is violated.
+OK History W_FuzzBelow expect=fail got=fail distinct=81 Error: Invariant HeldOrder is violated.
+OK History W_FuzzBelow2 expect=fail got=fail distinct=955 Error: Invariant HeldOrder is violated.
+OK History HHole expect=pass got=pass distinct=1116 
+OK History HHoleFuzz expect=pass got=pass distinct=1212 
+OK History HHoleFuzzHi expect=pass got=pass distinct=640 
+OK History HHolePages expect=pass got=pass distinct=23006 
+OK History HHoleOld expect=pass got=pass distinct=5364 
+OK History HHoleSeance expect=pass got=pass distinct=1116 
+OK History HHoleSeanceFuzz expect=pass got=pass distinct=1212 
+OK History W_HoleAppend expect=fail got=fail distinct=577 Error: Invariant HoleOrder is violated.
+OK History CoverHoleKept expect=fail got=fail distinct=506 Error: Invariant CoverHoleKept is violated.
+OK History CoverHoleBelowFloor expect=fail got=fail distinct=589 Error: Invariant CoverHoleBelowFloor is violated.
+OK History HSkew expect=pass got=pass distinct=40 
+OK History CoverSkew expect=fail got=fail distinct=? Error: Invariant OldByTime is violated by the initial state:
+OK History W_SkewHole expect=fail got=fail distinct=245 Error: Invariant HoleKept is violated.
+OK History HHoleSeancePages expect=pass got=pass distinct=24102 
+OK History W_FuzzBelowPages expect=fail got=fail distinct=975 Error: Invariant HeldOrder is violated.
+OK History HSkew2 expect=pass got=pass distinct=192 
+OK History HSkewLive expect=pass got=pass distinct=736 
+OK History W_SkewLive expect=fail got=fail distinct=86 Error: Invariant HeldOrder is violated.
+OK History HSkewHole expect=pass got=pass distinct=160 
+OK History CoverDone_HTiny2 expect=fail got=fail distinct=2212 Error: Invariant CoverDone is violated.
+OK History CoverDone_HHeldStop expect=fail got=fail distinct=303 Error: Invariant CoverDone is violated.
+OK History CoverDone_HMsgs expect=fail got=fail distinct=1112 Error: Invariant CoverDone is violated.
+OK History CoverDone_HFuzz expect=fail got=fail distinct=6708 Error: Invariant CoverDone is violated.
+OK History CoverDone_HNoBatchAgrees expect=fail got=fail distinct=3802 Error: Invariant CoverDone is violated.
+OK History CoverDone_HBatchAgreesBudget expect=fail got=fail distinct=162 Error: Invariant CoverDone is violated.
+OK History CoverDone_HFail expect=fail got=fail distinct=1644 Error: Invariant CoverDone is violated.
+OK History CoverDone_HOld expect=fail got=fail distinct=6744 Error: Invariant CoverDone is violated.
+OK History CoverDone_HOld2 expect=fail got=fail distinct=12693 Error: Invariant CoverDone is violated.
+OK History CoverDone_HBelowHeld expect=fail got=fail distinct=66 Error: Invariant CoverDone is violated.
+OK History CoverDone_HHole expect=fail got=fail distinct=506 Error: Invariant CoverDone is violated.
+OK History CoverDone_HHoleSeance expect=fail got=fail distinct=506 Error: Invariant CoverDone is violated.
+OK HS_NewId HS_NewId_HTiny expect=fail got=fail distinct=152 Error: Invariant ContentOnce is violated.
+OK HS_NewIdR HS_NewIdR_HTiny expect=fail got=fail distinct=69 Error: Invariant ReplayIdStable is violated.
+OK HS_NewIdAnchor HS_NewIdAnchor_HTiny expect=fail got=fail distinct=561 Error: Invariant NoLoss is violated.
+OK HS_NewIdUnknown HS_NewIdUnknown_HTiny expect=fail got=fail distinct=402 Error: Invariant CoverUnknownSel is violated.
+OK HS_NewIdChain HS_NewIdChain_HTiny expect=fail got=fail distinct=561 Error: Invariant CoverUnknownLoss is violated.
+OK HS_UnknownLatest HS_UnknownLatest_HTiny expect=fail got=fail distinct=402 Error: Invariant UnknownEmpty is violated.
+OK HS_EndLast HS_EndLast_HNoBatchAgrees expect=fail got=fail distinct=2475 Error: Invariant EndNext is violated.
+OK HS_EndEmpty HS_EndEmpty_W_EmptyPage expect=fail got=fail distinct=70 Error: Invariant EndNext is violated.
+OK HC_MoreNewest HC_MoreNewest_HMore expect=fail got=fail distinct=47 Error: Invariant MoreRecovers is violated.
+OK HS_Anchor HS_Anchor_HTiny expect=fail got=fail distinct=402 Error: Invariant PageEligible is violated.
+OK HS_FalseEnd HS_FalseEnd_HTiny expect=fail got=fail distinct=70 Error: Invariant EndTruthful is violated.
+OK HC_OnePage HC_OnePage_HTiny expect=fail got=fail distinct=137 Error: Invariant NoLoss is violated.
+OK HC_FloorLe HC_FloorLe_HTiny expect=fail got=fail distinct=137 Error: Invariant NoLoss is violated.
+OK HC_KeepOld HC_KeepOld_HBelowHeld expect=fail got=fail distinct=81 Error: Invariant HeldOrder is violated.
+OK HC_KeepOldOrder HC_KeepOldOrder_HBelowHeld expect=fail got=fail distinct=81 Error: Invariant Order is violated.
+OK HC_NewestCut HC_NewestCut_HHole expect=fail got=fail distinct=577 Error: Invariant HoleKept is violated.
+OK HC_NewestCut HC_NewestCut_HHoleFuzz expect=fail got=fail distinct=577 Error: Invariant HoleKept is violated.
+OK HC_NewestCut HC_NewestCut_HHoleFuzzHi expect=fail got=fail distinct=317 Error: Invariant HoleKept is violated.
+OK HC_NewestCut HC_NewestCut_HHoleSeance expect=fail got=fail distinct=577 Error: Invariant HoleKept is violated.
+OK HC_FloorCut HC_FloorCut_HHole expect=fail got=fail distinct=577 Error: Invariant HoleKept is violated.
+OK HC_FloorCut HC_FloorCut_HHoleFuzz expect=fail got=fail distinct=589 Error: Invariant HoleKept is violated.
+OK HC_FloorCut HC_FloorCut_HHoleFuzzHi expect=pass got=pass distinct=640 
+OK HC_FloorCut HC_FloorCut_HHoleSeance expect=fail got=fail distinct=577 Error: Invariant HoleKept is violated.
+OK HC_FloorCut HC_FloorCut_HOld2 expect=pass got=pass distinct=58496 
+OK HC_FloorCut HC_FloorCut_HOldFuzz expect=pass got=pass distinct=139472 
+OK HC_FloorCut HC_FloorCut_HBelowHeld expect=pass got=pass distinct=152 
+OK HV_MsgidSettle HV_MsgidSettle_W_FuzzBelow expect=pass got=pass distinct=160 
+OK HV_MsgidSettle HV_MsgidSettle_W_FuzzBelow2 expect=pass got=pass distinct=1570 
+OK HV_MsgidSettle HV_MsgidSettle_HBelowHeld expect=pass got=pass distinct=152 
+OK HV_MsgidSettle HV_MsgidSettle_HOld expect=pass got=pass distinct=14206 
+OK HV_MsgidSettle HV_MsgidSettle_HOld2 expect=pass got=pass distinct=58496 
+OK HV_MsgidSettle HV_MsgidSettle_HOldFuzz expect=pass got=pass distinct=139472 
+OK HV_MsgidSettle HV_MsgidSettle_HHoleFuzz expect=pass got=pass distinct=1212 
+OK HV_MsgidSettle HV_MsgidSettle_HHoleOld expect=pass got=pass distinct=5364 
+OK HV_MsgidSettle HV_MsgidSettle_HHoleSeanceFuzz expect=pass got=pass distinct=1212 
+OK HV_MsgidSettle HV_MsgidSettle_HSkew expect=fail got=fail distinct=22 Error: Invariant NoLoss is violated.
+OK HV_MsgidSettle HV_MsgidSettle_W_HoleAppend expect=fail got=fail distinct=577 Error: Invariant PlacedOrder is violated.
+OK HV_MsgidSettle HV_MsgidSettle_HHoleSeancePages expect=fail got=fail distinct=5627 Error: Invariant PlacedOrder is violated.
+OK HV_MsgidSettle HV_MsgidSettle_W_FuzzBelowPages expect=pass got=pass distinct=1590 
+OK HV_MsgidSettle HV_MsgidSettle_HSkew2 expect=fail got=fail distinct=104 Error: Invariant NoLoss is violated.
+OK HV_MsgidSettle HV_MsgidSettle_HSkewLive expect=fail got=fail distinct=91 Error: Invariant NoLoss is violated.
+OK HV_MsgidSettle HV_MsgidSettle_HSkewHole expect=fail got=fail distinct=85 Error: Invariant HoleKept is violated.
+OK HR_Current HR_Current_W_HoleAppend expect=fail got=fail distinct=577 Error: Invariant PlacedOrder is violated.
+OK HR_Current HR_Current_HHoleSeancePages expect=fail got=fail distinct=5627 Error: Invariant PlacedOrder is violated.
+OK HR_Current HR_Current_W_FuzzBelow expect=fail got=fail distinct=81 Error: Invariant PlacedOrder is violated.
+OK HR_Current HR_Current_HSkew expect=fail got=fail distinct=21 Error: Invariant PlacedOrder is violated.
+OK HR_Current HR_Current_HSkew2 expect=fail got=fail distinct=87 Error: Invariant PlacedOrder is violated.
+OK HR_Current HR_Current_HSkewLive expect=fail got=fail distinct=89 Error: Invariant PlacedOrder is violated.
+OK HR_Current HR_Current_HSkewHole expect=fail got=fail distinct=69 Error: Invariant PlacedOrder is violated.
+OK HV_PlaceByTime HV_PlaceByTime_W_FuzzBelow expect=pass got=pass distinct=160 
+OK HV_PlaceByTime HV_PlaceByTime_W_FuzzBelow2 expect=pass got=pass distinct=1570 
+OK HV_PlaceByTime HV_PlaceByTime_W_HoleAppend expect=pass got=pass distinct=1116 
+OK HV_PlaceByTime HV_PlaceByTime_HHole expect=pass got=pass distinct=1116 
+OK HV_PlaceByTime HV_PlaceByTime_HHoleSeance expect=pass got=pass distinct=1116 
+OK HV_PlaceByTime HV_PlaceByTime_HHoleSeanceFuzz expect=pass got=pass distinct=1212 
+OK HV_PlaceByTime HV_PlaceByTime_HHoleFuzz expect=pass got=pass distinct=1212 
+OK HV_PlaceByTime HV_PlaceByTime_HHoleFuzzHi expect=pass got=pass distinct=640 
+OK HV_PlaceByTime HV_PlaceByTime_HHoleOld expect=pass got=pass distinct=5364 
+OK HV_PlaceByTime HV_PlaceByTime_HHolePages expect=pass got=pass distinct=23006 
+OK HV_PlaceByTime HV_PlaceByTime_HHoleSeancePages expect=pass got=pass distinct=23006 
+OK HV_PlaceByTime HV_PlaceByTime_HOld expect=pass got=pass distinct=14206 
+OK HV_PlaceByTime HV_PlaceByTime_HOld2 expect=pass got=pass distinct=58496 
+OK HV_PlaceByTime HV_PlaceByTime_HOldFuzz expect=pass got=pass distinct=139472 
+OK HV_PlaceByTime HV_PlaceByTime_HBelowHeld expect=pass got=pass distinct=152 
+OK HV_PlaceByTime HV_PlaceByTime_W_FuzzBelowPages expect=pass got=pass distinct=1590 
+OK HV_PlaceByTime HV_PlaceByTime_HSkew expect=pass got=pass distinct=40 
+OK HV_PlaceByTime HV_PlaceByTime_HSkew2 expect=pass got=pass distinct=192 
+OK HV_PlaceByTime HV_PlaceByTime_HSkewLive expect=pass got=pass distinct=706 
+OK HV_PlaceByTime HV_PlaceByTime_HSkewHole expect=pass got=pass distinct=160 
+OK HV_PlaceByTime HV_PlaceByTime_W_SkewHole expect=fail got=fail distinct=245 Error: Invariant HoleKept is violated.

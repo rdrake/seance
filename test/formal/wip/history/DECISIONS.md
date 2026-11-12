@@ -1175,3 +1175,168 @@ only by its author's edit. This section models that rule.
   - E_Mentions with TrimOn (507k-903k states before the first violation;
     a full pass after a fix of finding 1 would be several million);
   - MaxRen 3, and MaxAcc 2.
+
+## D38 A hole fixture, and placing page lines by server time (#290, #292) (2026-11-12)
+
+Answers D36's "no catch-up fixture has a hole" and evaluates the candidate
+fix for evilnet/seance#290 and #292: keep the drop (a page line below
+min(newest held - FUZZ, oldest held) is not placed), but place every kept
+page line by server time among the rows, instead of appending it with an
+id from the reserved block.
+
+- **Fixture `hole` (catchup_fixtures.py).** Held h@12:10 and i@12:14; x@12:12
+  was stored between them and never reached the client; gap a@12:16;
+  Limit 4, one LATEST page `h, x, i, a` that holds a held msgid, so the
+  walk stops on it. Run against /home/claude/sfix, develop 9a831568f (with
+  #282), stored as `results/9a831568f.jsonl`:
+  - the five earlier fixtures PASS;
+  - `hole` FAILS: `Order: h,i,x,a`. Store rows (id, msgid): 6 h, 7 i, 13 x,
+    14 a. x is kept (no loss, no duplicate) but takes id 13 from the
+    reserved block, and insertMessage places it below i. This is #292 on
+    this sha. IdsRise passes, since the ids rise in that wrong order.
+- **TLC trace (history_trace.py, local, -workers 1).**
+  - 9a831568f.jsonl: liveStop, liveStopControl, gapOrder, clockFloor and
+    belowHeld PASS; `hole` FAILS SnapOK at the last step (4 distinct
+    states). The harness maps x to a hole (`Holes = {2}`) and runs
+    `InsertMerge = TRUE`, so the model's buffer is `<<1, 2, 3, 4>>`
+    (h, x, i, a) and Seance's is `<<1, 3, 2, 4>>`.
+  - One-off, not in the harness: the same HT_hole module with
+    `InsertMerge = FALSE` (an appending client) passes NotStuck and SnapOK
+    (4 states), and with HoleOrder added it violates HoleOrder (4 states).
+    So Seance at 9a831568f behaves as History's appending client,
+    and that client is W_HoleAppend.
+  - Replays after the model change below: 03a2f172a 5/5 PASS; d0322ffa7
+    fails belowHeld on SnapOK, as in D35.
+- **What changed in History.tla (v1.4).** Only a new invariant,
+  **PlacedOrder** (not in SAFE): around every line a page placed (neither
+  held nor the live line), the row just before it is no newer, and no
+  later row other than the live line is older. Placer and PlacedOrder are
+  additive; the 114 v1.3 checks give the same results and distinct-state
+  counts as `results-h13-local.summary`.
+- **The variant, HV_PlaceByTime (mkhist.py).** `Placed` and the cutoff are
+  unchanged. A page's kept lines go through `Merge1P`: dedupe by msgid,
+  else insert after the last row whose time is at most the line's
+  (`PlaceAt`). Live lines are still merged by `InsertMerge` (Seance appends
+  them). In Seance this means giving a kept page line an id between the
+  ids of its time neighbours, not the next id of the reserved block.
+- **New configs (mkhist.py):**
+  - `HHoleSeancePages`: a hole, Limit 2, a live line, appending;
+  - `W_FuzzBelowPages`: #290 over two pages (NOld 1, NHeld 2, Limit 2,
+    Fuzz 1, appending);
+  - `HSkew2` (Skew 1, two held lines, Times {1, 2, 3}), `HSkewLive` (HSkew
+    plus a live line), `HSkewHole` (a hole, Fuzz 1, Skew 1, Times {2, 3}:
+    the cutoff cannot reach the hole);
+  - `W_SkewLive`: under Skew a live line can be stamped below the oldest
+    held one; it is appended, so HeldOrder fails whatever the page rule.
+  - `HR_Current` is History unchanged under another module name, to run
+    the current rule against the same invariant sets.
+  - Invariant sets: SKEWINV = TypeOK NoLoss NoDup ContentOnce HoleKept
+    PlacedOrder HeldOrder; SKEWINVL drops HeldOrder (live-line configs, see
+    W_SkewLive); LOSS = NoLoss NoDup ContentOnce HoleKept.
+- **TLC runs, local** (-workers 1, three TLC processes side by side;
+  `model/results-h14-local.summary`, 154 checks, all as expected; the
+  whole list took about 5.5 minutes, the largest 139,472 states).
+
+| Config | HV_PlaceByTime | current rule (History / HR_Current) | HV_MsgidSettle |
+|---|---|---|---|
+| W_FuzzBelow (#290, one held) | SAFE+PlacedOrder pass, 160 | HeldOrder violated, 81; PlacedOrder violated, 81 | HeldOrder pass, 160 (D36) |
+| W_FuzzBelow2 (#290, two held) | SAFE+PlacedOrder pass, 1,570 | HeldOrder violated, 955 | HeldOrder pass, 1,570 (D36) |
+| W_FuzzBelowPages (#290, Limit 2) | SAFE+PlacedOrder pass, 1,590 | HeldOrder violated, 975 | HeldOrder pass, 1,590 |
+| W_HoleAppend (#292) | SAFE+PlacedOrder pass, 1,116 | HoleOrder violated, 577; PlacedOrder violated, 577 | PlacedOrder violated, 577 |
+| HHoleSeancePages (hole, live, Limit 2) | SAFE+PlacedOrder pass, 23,006 | SEANCE pass, 24,102; PlacedOrder violated, 5,627 | PlacedOrder violated, 5,627 |
+| HHole / HHoleSeance / HHoleSeanceFuzz | SAFE+PlacedOrder pass, 1,116 / 1,116 / 1,212 | pass (HHole SAFE; Seance ones SEANCE only) | HHoleSeanceFuzz SEANCE pass (D36) |
+| HHoleFuzz / HHoleFuzzHi / HHoleOld / HHolePages | SAFE+PlacedOrder pass, 1,212 / 640 / 5,364 / 23,006 | SAFE pass (D36) | HHoleFuzz, HHoleOld SAFE pass (D36) |
+| HOld / HOld2 / HOldFuzz / HBelowHeld | SAFE+PlacedOrder pass, 14,206 / 58,496 / 139,472 / 152 | SAFE pass (D35) | SAFE pass (D36) |
+| HSkew (Skew 1; msgid settling's loss) | SKEWINV pass, 40 | LOSS pass, 40; PlacedOrder violated, 21 | NoLoss violated, 22 |
+| HSkew2 | SKEWINV pass, 192 | LOSS pass, 192; PlacedOrder violated, 87 | NoLoss violated, 104 |
+| HSkewLive | SKEWINVL pass, 706 | LOSS pass, 736; PlacedOrder violated, 89 | NoLoss violated, 91 |
+| HSkewHole | SKEWINV pass, 160 | LOSS pass, 160; PlacedOrder violated, 69 | HoleKept violated, 85 |
+| W_SkewHole (hole below the cutoff) | HoleKept violated, 245 | HoleKept violated, 245 (D36) | not run |
+| W_SkewLive (live line under Skew) | not run as such (SKEWINVL leaves HeldOrder out) | HeldOrder violated, 86 | not run |
+
+  - The current rule's "LOSS pass" entries are the History configs
+    (invariants NoLoss NoDup HoleKept, with Terminates), not HR_Current.
+  - **Expectation corrected after the first run.** The first run expected
+    HR_Current to pass SKEWINV on HSkew, HSkew2 and HSkewLive. It fails
+    PlacedOrder (21, 87 states): the current rule appends a gap line stamped
+    one below the held line after it. The first run also used SKEWINV
+    (with HeldOrder) on HSkewLive, and all three rules violated HeldOrder
+    at 86 states. The trace is the live line stamped @1 under a held line
+    @2, relayed and appended: not a page placement. That case is now
+    W_SkewLive, and HSkewLive runs SKEWINVL. A second bug in the first
+    list gave two HV_MsgidSettle runs the same config file name; mkhist.py
+    now asserts names are unique, and HV_MsgidSettle's skew rows above are
+    the LOSS runs. The table is the final list's run, except where it
+    names the first run.
+  - **One-off runs** (not in list-h1, configs deleted after): on
+    HV_PlaceByTime, HSkew2 with `INVARIANT Order HoleOrder` violates Order
+    (98 states: held @2 then @1, already out of time order, gap @1 placed
+    after them); HSkewHole with `INVARIANT HoleOrder` violates HoleOrder
+    (81 states: held 1@3, hole 2@2, held 3@2, gap 4@2 gives
+    `<<1, 3, 2, 4>>`: by time the hole goes after the held line stamped
+    like it, against store order).
+- **Answers.**
+  - **#290 and #292 together: yes, at Skew = 0.** HV_PlaceByTime passes
+    the whole SAFE set (Order, HeldOrder, HoleOrder, NoLoss, NoDup,
+    HoleKept) and PlacedOrder on every Skew 0 config above, including the
+    appending ones (W_FuzzBelow, W_FuzzBelow2, W_FuzzBelowPages,
+    W_HoleAppend, HHoleSeance*, HHoleSeancePages, HBelowHeld). The #290 line
+    is kept, as now, and goes above the held lines; the #292 hole goes
+    between its held neighbours. Distinct-state counts equal the
+    time-merging client's (for example HHolePages and HHoleSeancePages both
+    23,006).
+  - **Skew 1: nothing lost or duplicated that the current rule keeps.**
+    NoLoss, NoDup, ContentOnce and HoleKept pass on HSkew, HSkew2, HSkewLive
+    and HSkewHole. The drop is unchanged, so the drop's own weakness
+    stays: W_SkewHole (a hole stamped below the oldest held line, under
+    the cutoff) loses the hole under both place-by-time and the current
+    rule. Msgid settling loses a gap line on HSkew, HSkew2 and HSkewLive and
+    a hole on HSkewHole.
+  - **Ordering under Skew.** Neither store order (HoleOrder) nor a sorted
+    buffer (Order) can be promised. A client sees times and not the store;
+    held rows arrived in store order and may already be out of time order,
+    and the one-off runs show both properties failing. The right property
+    is PlacedOrder: every line the catch-up placed sits after a row no newer
+    than it and before rows no older (live lines aside). It is local time
+    order around what the client inserted, and it says nothing about held
+    rows it never moved. It holds for place-by-time on every config here,
+    with or without Skew. It fails for the current rule (appending), and for
+    msgid settling, which also appends, wherever a kept line is older than
+    a row already shown. With Skew = 0, PlacedOrder plus the held rows'
+    own order gives Order.
+  - Live lines are outside every rule here: under Skew a live line stamped
+    below a held one is appended (W_SkewLive), as relayed lines always
+    are in Seance.
+
+| | current rule (#282) | msgid settling (#290 proposal) | place by time (D38) |
+|---|---|---|---|
+| #290 order (W_FuzzBelow, W_FuzzBelow2, W_FuzzBelowPages) | fails HeldOrder | passes | passes |
+| #292 hole order (W_HoleAppend, HHoleSeancePages) | fails HoleOrder / PlacedOrder | fails PlacedOrder (still appends) | passes |
+| Skew 0, loss and duplicates | none | none | none |
+| Skew 1, loss (HSkew, HSkew2, HSkewLive, HSkewHole) | none | loses a gap line or a hole | none |
+| Skew 1, hole stamped below the cutoff (W_SkewHole) | lost | not run | lost (same drop) |
+| Skew 1, PlacedOrder | fails | fails (first run, SKEWINV: HSkew2 87, HSkewHole 69 states) | passes |
+| Needs | nothing | one monotone clock for the channel's store | an id between two existing rows' ids |
+
+- **Verdict.** Place-by-time is the fix to prefer. It fixes #290's order and
+  #292 together. It keeps the current rule's tolerance of skew up to FUZZ
+  (no new loss), and it gives the one order guarantee that holds under
+  skew. Msgid settling fixes only #290, and buys that with a loss under
+  skew. Place-by-time leaves W_SkewHole (a hole skewed below the cutoff) as
+  it is, as does the current rule. In Seance the change is in how a kept page
+  line gets its id (catch-up's reserved block, `IdAllocator.reserve`, and
+  `insertMessage`'s `placeId`). It needs an id between the neighbours' ids,
+  or a placement by time that does not read ids.
+- **Not done.**
+  - No Seance code changed, so no fixture runs place-by-time. The fixture
+    passing on a fix would be the check: `hole` with Order and SnapOK.
+  - Not modelled: a #290 line kept above the held rows under Skew can leave
+    a stored-later line below the cutoff dropped. A later "more" then asks
+    BEFORE that kept line's msgid, which skips the dropped line, because it
+    was stored after the kept one. That is a loss in the Old range, which
+    NoLoss does not cover.
+  - No place-by-time-plus-msgid-settling variant was run.
+- **For the cluster (not run here):** HV_PlaceByTime on two holes (NHeld 2,
+  Holes {2, 3}) and NHeld 3 with one hole, at Limit 1-2 with LiveOn; on
+  HNoBatchAgrees-sized configs with a hole; and with Skew 1 plus NOld 1
+  and MayFail.

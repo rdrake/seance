@@ -157,6 +157,16 @@ FIXTURES = [
          expect=["CHATHISTORY LATEST #seance * 3"],
          # TLC trace: o is History's Old (NOld = 1, D35)
          wire="Q A C"),
+    # #292: a hole. x (12:12) was stored between the two held lines (12:10,
+    # 12:14) but never reached the client. LATEST's page carries it with the
+    # held lines and the gap line a; it is at or above min(newest held -
+    # FUZZ, oldest held), so it is kept, and must go between h and i, not
+    # below i. The page holds a held msgid, so the walk stops on it.
+    # TLC trace: x is History's hole (Holes = {2}, D36)
+    dict(name="hole", limit=4, held=[["h", "10"], ["i", "14"]], gap=["a"],
+         pages=[[["h", "10"], ["x", "12"], ["i", "14"], ["a", "16"]]],
+         expect=["CHATHISTORY LATEST #seance * 4"],
+         wire="Q A C"),
 ]
 
 def check(fx, obs):

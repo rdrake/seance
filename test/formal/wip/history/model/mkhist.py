@@ -148,11 +148,43 @@ CFGS = {
   # Skew against the current rule: a hole stamped up to Skew below the oldest
   # held line is under min(newest held - FUZZ, oldest held) and is dropped
   "W_SkewHole": (dict(HOLE, Fuzz=1, Skew=1, StableAcrossReconnect="TRUE", TimeOrdered="FALSE"), "HoleKept", None, "fail"),
+  # ---- D38: configs for HV_PlaceByTime (each also run on the current rule) ----
+  # Seance's appending client over several pages, a live line and a hole
+  "HHoleSeancePages": (dict(HOLE, Limit=2, LiveOn="TRUE", InsertMerge="FALSE"), SEANCE, "Terminates", "pass"),
+  # #290 over two pages: Seance's appending client, an old line inside the
+  # FUZZ window, two held lines, Limit 2
+  "W_FuzzBelowPages": (dict(NOld=1, NHeld=2, Limit=2, Fuzz=1, Times="{1, 2, 3}", InsertMerge="FALSE", LiveOn="FALSE", NGap=1), "HeldOrder", None, "fail"),
+  # Skew with two held lines (which may arrive out of time order), Times {1, 2, 3}
+  "HSkew2": (dict(SKEW, NHeld=2, Times="{1, 2, 3}", Limit=3), "NoLoss NoDup HoleKept", "Terminates", "pass"),
+  # Skew with a live line, relayed before or after the page
+  "HSkewLive": (dict(SKEW, LiveOn="TRUE"), "NoLoss NoDup HoleKept", "Terminates", "pass"),
+  # a live line stamped below the oldest held line is appended (live lines are
+  # not placed): HeldOrder breaks under Skew whatever the page rule
+  "W_SkewLive": (dict(SKEW, LiveOn="TRUE"), "HeldOrder", None, "fail"),
+  # Skew with a hole and Fuzz 1 but times the cutoff cannot reach (Times {2, 3})
+  "HSkewHole": (dict(HOLE, Fuzz=1, Skew=1, Times="{2, 3}", StableAcrossReconnect="TRUE", TimeOrdered="FALSE", InsertMerge="FALSE"), "NoLoss NoDup HoleKept", "Terminates", "pass"),
 }
 KEEP = ('Placed(m) == ~(Mode = "reconnect" /\\ NHeld > 0 /\\ T(m) < Cutoff)', 'Placed(m) == TRUE')
 # D36, the cutoff in Seance's resolve(): Math.min(floorMs, holdsFrom), floorMs = floor - FUZZ
 CUT = 'Cutoff == IF Floor < HoldsFrom THEN Floor ELSE HoldsFrom'
 PLACED = KEEP[0]
+# D38: page lines placed by time (after the last row no newer than the line)
+MERGEALL = ('MergeAll(b, ms) == IF ms = <<>> THEN b ELSE MergeAll(Merge1(b, Head(ms)), Tail(ms))\n',
+            'MergeAll(b, ms) == IF ms = <<>> THEN b ELSE MergeAll(Merge1(b, Head(ms)), Tail(ms))\n'
+            'PlaceAt(b, m) == IF \\E i \\in DOMAIN b : T(b[i]) <= T(m)\n'
+            '                 THEN CHOOSE i \\in DOMAIN b : T(b[i]) <= T(m) /\\ \\A j \\in DOMAIN b : j > i => T(b[j]) > T(m)\n'
+            '                 ELSE 0\n'
+            'Merge1P(b, m) == IF Dedupe /\\ m \\in Range(b) THEN b\n'
+            '                 ELSE SubSeq(b, 1, PlaceAt(b, m)) \\o <<m>> \\o SubSeq(b, PlaceAt(b, m) + 1, Len(b))\n'
+            'RECURSIVE MergeAllP(_, _)\n'
+            'MergeAllP(b, ms) == IF ms = <<>> THEN b ELSE MergeAllP(Merge1P(b, Head(ms)), Tail(ms))\n')
+RECV = "buf' = MergeAll(buf, Kept(it))"
+# D38: what can hold under Skew (HoleOrder and Order compare against store order or a sorted start)
+SKEWINV = "TypeOK NoLoss NoDup ContentOnce HoleKept PlacedOrder HeldOrder"
+# with a live line: HeldOrder is left out, since a live line stamped below the
+# oldest held line is appended whatever the page rule (W_SkewLive)
+SKEWINVL = "TypeOK NoLoss NoDup ContentOnce HoleKept PlacedOrder"
+LOSS = "NoLoss NoDup ContentOnce HoleKept"
 MINT = ('Replay(c) == c ', 'Replay(c) == c + N ')
 MUTS = {
   # CH-18: the server mints a new msgid on replay; a deduping client then
@@ -205,7 +237,39 @@ MUTS = {
                       ("HBelowHeld", SAFE, "pass"), ("HOld", SAFE, "pass"), ("HOld2", SAFE, "pass"),
                       ("HOldFuzz", SAFE, "pass"), ("HHoleFuzz", SAFE, "pass"), ("HHoleOld", SAFE, "pass"),
                       ("HHoleSeanceFuzz", SEANCE, "pass"),
-                      ("HSkew", "NoLoss", "fail")]),
+                      ("HSkew", "NoLoss", "fail"),
+                      # D38: the same comparison configs as HV_PlaceByTime
+                      ("W_HoleAppend", "PlacedOrder", "fail"), ("HHoleSeancePages", "PlacedOrder", "fail"),
+                      ("W_FuzzBelowPages", "HeldOrder", "pass"),
+                                            # under Skew it loses before order matters (one config file per base)
+                      ("HSkew2", LOSS, "fail"), ("HSkewLive", LOSS, "fail"), ("HSkewHole", LOSS, "fail")]),
+  # D38: the current rule, unchanged, on the D38 comparison runs
+  "HR_Current": ([],
+                 [("W_HoleAppend", "PlacedOrder", "fail"), ("HHoleSeancePages", "PlacedOrder", "fail"),
+                  ("W_FuzzBelow", "PlacedOrder", "fail"),
+                  # D38's first run expected these three to pass: the current rule
+                  # appends a gap line stamped below the held line (PlacedOrder)
+                  ("HSkew", SKEWINV, "fail"), ("HSkew2", SKEWINV, "fail"), ("HSkewLive", SKEWINVL, "fail"),
+                  ("HSkewHole", SKEWINV, "fail")]),
+  # D38, the candidate fix for #290 and #292: the drop is unchanged (below
+  # min(newest held - FUZZ, oldest held)), but every page line kept is placed
+  # by server time among the rows (after the last row no newer than it), not
+  # appended by its reserved id.  Live lines are still appended (InsertMerge).
+  "HV_PlaceByTime": ([MERGEALL, (RECV, 'buf\' = IF it.k = "page" THEN MergeAllP(buf, Kept(it)) ELSE MergeAll(buf, Kept(it))')],
+                     [("W_FuzzBelow", SAFE + " PlacedOrder", "pass"), ("W_FuzzBelow2", SAFE + " PlacedOrder", "pass"),
+                      ("W_HoleAppend", SAFE + " PlacedOrder", "pass"),
+                      ("HHole", SAFE + " PlacedOrder", "pass"), ("HHoleSeance", SAFE + " PlacedOrder", "pass"),
+                      ("HHoleSeanceFuzz", SAFE + " PlacedOrder", "pass"), ("HHoleFuzz", SAFE + " PlacedOrder", "pass"),
+                      ("HHoleFuzzHi", SAFE + " PlacedOrder", "pass"), ("HHoleOld", SAFE + " PlacedOrder", "pass"),
+                      ("HHolePages", SAFE + " PlacedOrder", "pass"), ("HHoleSeancePages", SAFE + " PlacedOrder", "pass"),
+                      ("HOld", SAFE + " PlacedOrder", "pass"), ("HOld2", SAFE + " PlacedOrder", "pass"),
+                      ("HOldFuzz", SAFE + " PlacedOrder", "pass"), ("HBelowHeld", SAFE + " PlacedOrder", "pass"),
+                      ("W_FuzzBelowPages", SAFE + " PlacedOrder", "pass"),
+                      # Skew 1: the msgid-settling loss config, and skew with two held lines and with a live line
+                      ("HSkew", SKEWINV, "pass"), ("HSkew2", SKEWINV, "pass"), ("HSkewLive", SKEWINVL, "pass"),
+                      ("HSkewHole", SKEWINV, "pass"),
+                      # the drop is unchanged, so a hole stamped below the oldest held line is still dropped
+                      ("W_SkewHole", "HoleKept", "fail")]),
 }
 def cfg(over, inv, prop, spec_fair):
     c = dict(BASE, **over)
@@ -223,6 +287,8 @@ lst = []
 for n, (over, inv, prop, exp) in CFGS.items():
     open(n + ".cfg", "w").write(cfg(over, inv, prop, prop is not None))
     lst.append(f"History {n} {exp}")
+import os
+seen = set()
 src = open("History.tla").read()
 for n, (reps, *runs) in MUTS.items():
     m = src
@@ -234,6 +300,8 @@ for n, (reps, *runs) in MUTS.items():
     runs = [(runs[0], runs[1], "fail")] if isinstance(runs[0], str) else runs[0]
     for base, prop, exp in runs:
         over, _, _, _ = CFGS[base]
+        assert not os.path.exists(n + "_" + base + ".cfg") or n + "_" + base not in seen, (n, base)
+        seen.add(n + "_" + base)
         open(n + "_" + base + ".cfg", "w").write(cfg(over, prop, None, False))
         lst.append(f"{n} {n}_{base} {exp}")
 open("list-h1", "w").write("\n".join(lst) + "\n")
