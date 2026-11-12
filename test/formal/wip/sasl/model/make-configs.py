@@ -20,56 +20,77 @@ def defined(name):
 
 S = lambda *xs: '{' + ', '.join('"%s"' % x for x in xs) + '}'
 
+# Defaults for the v0.1 switches; a base overrides what it exercises.
+V01 = dict(AnyOrder908='FALSE', AcctEarly='FALSE', NoAbandon='FALSE')
+
 BASE = {
-    # Mechanism lists, 908, retry with another mechanism.
+    # Mechanism lists, 908 (before or after its 904), retry with another mechanism.
     'TinyMechs': dict(Mechs=S('P', 'E', 'X'), CliMechs=S('P', 'E'), TwoRound='{}',
                       Accounts=S('a1'), MaxChunks=1, MaxLen=2, MaxAtt=2, MaxReq=1,
                       MaxEnv=0, Reauth='"none"', ClientReauth='FALSE', AdvertValue='TRUE',
-                      Send908='TRUE', PickListed='FALSE', SilentChange='FALSE'),
-    # Chunking both ways, the length limit, a SCRAM-shaped mechanism.
+                      Send908='TRUE', PickListed='FALSE', SilentChange='FALSE',
+                      **dict(V01, AnyOrder908='TRUE')),
+    # Chunking both ways, the length limit (MaxLen 1), a SCRAM-shaped mechanism.
     'TinyChunks': dict(Mechs=S('P', 'S'), CliMechs=S('P', 'S'), TwoRound=S('S'),
                        Accounts=S('a1'), MaxChunks=2, MaxLen=1, MaxAtt=1, MaxReq=1,
                        MaxEnv=0, Reauth='"none"', ClientReauth='FALSE', AdvertValue='TRUE',
-                       Send908='FALSE', PickListed='TRUE', SilentChange='FALSE'),
-    # Reauthentication allowed (S2-6 SHOULD), account changes, 901.
+                       Send908='FALSE', PickListed='TRUE', SilentChange='FALSE', **V01),
+    # Reauthentication allowed (S2-6 SHOULD), account changes, 901; the account
+    # may be set before a late 900 (AcctEarly, R1).
     'TinyReauth': dict(Mechs=S('P'), CliMechs=S('P'), TwoRound='{}',
                        Accounts=S('a1', 'a2'), MaxChunks=1, MaxLen=2, MaxAtt=2, MaxReq=1,
                        MaxEnv=1, Reauth='"full"', ClientReauth='TRUE', AdvertValue='TRUE',
-                       Send908='FALSE', PickListed='TRUE', SilentChange='FALSE'),
+                       Send908='FALSE', PickListed='TRUE', SilentChange='FALSE',
+                       **dict(V01, AcctEarly='TRUE')),
     # S1 server (907), with a client that tries to reauthenticate.
     'TinyS1': dict(Mechs=S('P'), CliMechs=S('P'), TwoRound='{}',
                    Accounts=S('a1', 'a2'), MaxChunks=1, MaxLen=2, MaxAtt=2, MaxReq=1,
                    MaxEnv=1, Reauth='"none"', ClientReauth='TRUE', AdvertValue='TRUE',
-                   Send908='FALSE', PickListed='TRUE', SilentChange='FALSE'),
-    # cap-notify: NEW/DEL of sasl, new lists, silent changes (stale lists).
+                   Send908='FALSE', PickListed='TRUE', SilentChange='FALSE', **V01),
+    # cap-notify: NEW/DEL of sasl, silent changes (stale lists), 908.
     'TinyNotify': dict(Mechs=S('P', 'E'), CliMechs=S('P', 'E'), TwoRound='{}',
                        Accounts=S('a1'), MaxChunks=1, MaxLen=2, MaxAtt=2, MaxReq=2,
                        MaxEnv=2, Reauth='"none"', ClientReauth='FALSE', AdvertValue='TRUE',
-                       Send908='TRUE', PickListed='TRUE', SilentChange='TRUE'),
+                       Send908='TRUE', PickListed='TRUE', SilentChange='TRUE', **V01),
 }
+# v0.1 (#6): sasl advertised with NO value (S2:44-46).
+BASE['TinyNoValue'] = dict(BASE['TinyMechs'], AdvertValue='FALSE', PickListed='TRUE',
+                           AnyOrder908='FALSE')
+# v0.1 (#7): list updates by NEW only, so MechListAgrees is live.
+BASE['TinyNotifyList'] = dict(BASE['TinyNotify'], SilentChange='FALSE', Send908='FALSE')
+# v0.1 (#12): room for FULL + SHORT to be accepted (MaxLen 2).
+BASE['TinyChunks2'] = dict(BASE['TinyChunks'], MaxLen=2)
+# v0.1 (#15): server-driven completion: no abort, give-up or quit.
+BASE['TinyNoAbandon'] = dict(BASE['TinyMechs'], NoAbandon='TRUE')
 # Rests on D9 (an open question): limited, but in its own list.
 BASE['TinySame'] = dict(BASE['TinyReauth'], Reauth='"same"')
 # Comprehensive: NOT for now (see README).
 BASE['Reference'] = dict(Mechs=S('P', 'S', 'X'), CliMechs=S('P', 'S'), TwoRound=S('S'),
                          Accounts=S('a1', 'a2'), MaxChunks=2, MaxLen=2, MaxAtt=3, MaxReq=2,
                          MaxEnv=2, Reauth='"full"', ClientReauth='TRUE', AdvertValue='TRUE',
-                         Send908='TRUE', PickListed='FALSE', SilentChange='TRUE')
+                         Send908='TRUE', PickListed='FALSE', SilentChange='TRUE',
+                         **dict(V01, AnyOrder908='TRUE', AcctEarly='TRUE'))
 BASE['RefNone'] = dict(BASE['Reference'], Reauth='"none"')
 
 INV = ['TypeOK', 'DelCancels', 'SuccAccounting', 'RuleClientFraming',
-       'AccountAgrees', 'EnabledAgrees', 'MechListAgrees']
+       'ClientPayloadDone', 'AccountAgrees', 'EnabledAgrees', 'MechListAgrees']
 SAFE = ['Rule907', 'Rule907NoChange', 'RuleAccountNotified', 'Rule906',
-        'RuleOpenerAnswered', 'RuleVerdictAfterLast', 'RuleSrvChalFramed', 'Rule908',
-        'RuleValueIsMechs', 'RuleNakIfDown', 'RuleFailCloseReason',
+        'RuleReauthRefused', 'RuleOpenerAnswered', 'RuleVerdictAfterLast',
+        'RuleSrvChalFramed', 'Rule908', 'RuleValueIsMechs', 'RuleNakIfDown',
+        'RuleFailCloseReason', 'RuleDelCancelsOutput',
         'RuleClientAuthOnlyEnabled', 'RuleClientPostReg', 'RuleClientLineLen',
-        'RuleClientEmptyFinal', 'RuleClientMech']
-LIVE = ['ExchangeEnds', 'OwedSent']
+        'RuleClientSendsPayload', 'RuleClientEmptyFinal', 'RuleClientMech',
+        'RuleExitByServerLine']
+LIVE = ['ExchangeEnds', 'OwedEventuallyClears']
+
+LIMITED = ['TinyMechs', 'TinyChunks', 'TinyChunks2', 'TinyReauth', 'TinyS1',
+           'TinyNotify', 'TinyNotifyList', 'TinyNoValue', 'TinyNoAbandon', 'TinySame']
 
 # name -> (base constants, spec, invariants, properties, view, header comment)
 CFGS = {}
-for b in ['TinyMechs', 'TinyChunks', 'TinyReauth', 'TinyS1', 'TinyNotify', 'TinySame']:
+for b in LIMITED:
     CFGS[b] = (b, 'Spec', INV, SAFE + LIVE, None, 'LIMITED run (now)')
-CFGS['TinyEnv'] = ('TinyMechs', 'EnvSpec', INV, SAFE + ['OwedSent'], None,
+CFGS['TinyEnv'] = ('TinyMechs', 'EnvSpec', INV, SAFE + ['OwedEventuallyClears'], None,
                    'LIMITED run (now): server fairness only')
 CFGS['Reference'] = ('Reference', 'Spec', INV, SAFE + LIVE, None,
                      'COMPREHENSIVE: not for now')
@@ -80,14 +101,16 @@ CFGS['RefNone'] = ('RefNone', 'Spec', INV, SAFE + LIVE, None,
 
 # Witnesses: W_x -> base config whose constants make it reachable.
 WIT = {
-    'W_LoggedIn': 'TinyMechs', 'W_Retry908': 'TinyMechs',
-    'W_MultiChunk': 'TinyChunks', 'W_ExactPlus': 'TinyChunks', 'W_Limit': 'TinyChunks',
+    'W_LoggedIn': 'TinyMechs', 'W_Retry908': 'TinyMechs', 'W_Late908': 'TinyMechs',
+    'W_MultiChunk': 'TinyChunks2', 'W_ExactPlus': 'TinyChunks', 'W_Limit': 'TinyChunks',
     'W_TwoRound': 'TinyChunks', 'W_ChalChunked': 'TinyChunks', 'W_AbortMid': 'TinyChunks',
     'W_AccountChange': 'TinyReauth', 'W_PostReg': 'TinyReauth',
     'W_FailLogout': 'TinyReauth', 'W_Relogin': 'TinyReauth', 'W_903First': 'TinyReauth',
+    'W_AcctEarly': 'TinyReauth',
     'W_Late907': 'TinyS1', 'W_PostRegErr': 'TinyS1',
-    'W_NewList': 'TinyNotify', 'W_NewThenAuth': 'TinyNotify', 'W_DelMid': 'TinyNotify',
+    'W_NewList': 'TinyNotifyList', 'W_NewThenAuth': 'TinyNotify', 'W_DelMid': 'TinyNotify',
     'W_StaleList': 'TinyNotify',
+    'W_NoValueLogin': 'TinyNoValue',
     'W_Refuse907': 'TinySame',
 }
 for w, b in WIT.items():
@@ -108,7 +131,7 @@ def render(name):
 
 def check():
     consts = set(constants())
-    assert len(consts) == 15, consts
+    assert len(consts) == 18, consts
     errs = []
     for name, (base, spec, inv, props, view, _) in CFGS.items():
         if set(BASE[base]) != consts:

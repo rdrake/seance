@@ -33,22 +33,32 @@
 (*    account able to change; "same" = reauth allowed but a change of     *)
 (*    account refused with 907, D9 here).  The CLIENT may reauthenticate  *)
 (*    (ClientReauth), which the handshake model scoped out (handshake D2).*)
-(*  - Accounts are values: 900 carries the account, 901 unsets it, and    *)
-(*    the server's account changes exactly in the step that sends the     *)
-(*    900 or 901 (D3).  The handshake model has a login flag only.        *)
-(*  - 900 and 903 may come in either order (handshake D20), but here the  *)
-(*    account changes with the 900, so a 903-first success owes a 900     *)
-(*    that carries the account.                                           *)
+(*  - Accounts are values: 900 carries the account, 901 unsets it (D3).  *)
+(*    The handshake model has a login flag only.                          *)
+(*  - 900 and 903 may come in either order (handshake D20).               *)
 (*  - 902/904/905 are distinct (handshake D6 folded them into 904).       *)
 (* DIFFERS deliberately from the handshake model:                         *)
 (*  - A data line that finds no exchange is ignored (or gets 907, handshake *)
 (*    D21); handshake D24's "read it as an opener" branch is not repeated *)
 (*    here (D12 here).  An AUTHENTICATE <mech> line that arrives during an *)
 (*    exchange is a data line on the wire and is read as a short chunk.   *)
-(*  - BOUND: the server reads no AUTHENTICATE line while a 900, 903 or a  *)
-(*    904 that follows a 908 is still owed (SRecv's guard).  This only    *)
-(*    delays reads; handshake D20/M2Owe covers owed lines that overlap a  *)
-(*    later exchange.                                                     *)
+(*                                                                         *)
+(* EXPLORATION RESTRICTIONS (D17): choices the spec text does NOT impose, *)
+(* which narrow the server behaviours explored.  A pass under them says   *)
+(* nothing about the interleavings they remove.                           *)
+(*  R1 The account changes in the step that sends its 900 or 901.  With   *)
+(*     AcctEarly, a 903-first success may set it first, 900 owed (S1:199 *)
+(*     ties the 900 to the change but not to the same instant).           *)
+(*  R2 After an unsupported mechanism, 908 comes before 904; with         *)
+(*     AnyOrder908 the 904 may also come first and the 908 after it.      *)
+(*  R3 READ BARRIER: the server reads no AUTHENTICATE line while a 900,   *)
+(*     903, 908 or 904 of an earlier opener is still owed (SRecv's guard).*)
+(*     This removes every interleaving in which a new exchange overlaps   *)
+(*     owed lines of the last one, including with DEL and reauth; it is   *)
+(*     not relaxed here (handshake D20 / M2Owe check that overlap for the *)
+(*     single-mechanism case).                                            *)
+(*  R4 A DEL of sasl cancels the owed 903 and 908/904 (CN:456-457) but    *)
+(*     not an owed 900, which reports account state (D13).                *)
 (*                                                                         *)
 (* OUT OF SCOPE: server-first mechanisms (every mechanism here is client- *)
 (* first, S1:50-51); the Base64 content and the bytes of a payload (sizes *)
@@ -79,7 +89,11 @@ CONSTANTS
     AdvertValue,    \* server lists mechanisms as the sasl value (S2:38-39 SHOULD)
     Send908,        \* server MAY send 908 for an unsupported mechanism (S1:231; D4)
     PickListed,     \* client picks from the advertised list when it can (S2:73 SHOULD)
-    SilentChange    \* the mechanism set may change without a NEW (D11)
+    SilentChange,   \* the mechanism set may change without a NEW (D11)
+    AnyOrder908,    \* v0.1: 904 may also come first and the 908 after it (D4, D17)
+    AcctEarly,      \* v0.1: a 903-first success may set the account before its 900 (D3, D17)
+    NoAbandon       \* v0.1: the client never aborts, gives up or quits (D15): the
+                    \* server-driven-completion scenario
 
 ASSUME Reauth \in {"none", "full", "same"}
 ASSUME CliMechs \subseteq Mechs /\ TwoRound \subseteq Mechs
@@ -142,20 +156,23 @@ Init ==
                 sasl |-> "idle", mech |-> "", round |-> 0, got |-> 0, cout |-> <<>>,
                 account |-> "", succeeded |-> FALSE, succN |-> 0,
                 owe900 |-> "", owe903 |-> FALSE, owe904 |-> FALSE,
+                owe908 |-> FALSE, l908 |-> {},
                 failed |-> FALSE, closed |-> FALSE, peerQuit |-> FALSE, envN |-> 0]
     /\ cli = [lsDone |-> FALSE, avail |-> FALSE, known |-> NoVal, enabled |-> FALSE,
               reqOut |-> FALSE, reqs |-> 0,
               sasl |-> "idle", mech |-> "", round |-> 0, cin |-> 0, out |-> <<>>,
-              att |-> 0, account |-> "", endSent |-> FALSE, welcomed |-> FALSE,
+              pay |-> Empty, att |-> 0, account |-> "", endSent |-> FALSE, welcomed |-> FALSE,
               quit |-> FALSE, closed |-> FALSE]
     /\ gm = [en |-> FALSE, cliLast |-> "none", srvLast |-> "none",
-             sTerm |-> FALSE, sResp |-> 0, n900 |-> 0, n903 |-> 0]
+             sTerm |-> FALSE, sResp |-> 0, n900 |-> 0, n903 |-> 0, x903 |-> 0,
+             exp |-> <<>>]
     /\ gw = [mech908 |-> "", okMech |-> "", multi |-> FALSE, exactPlus |-> FALSE,
              limit |-> FALSE, twoRound |-> FALSE, chalChunk |-> FALSE,
-             abortMid |-> FALSE, acctChange |-> FALSE, postReg |-> FALSE,
+             abortMid |-> FALSE, sentN |-> 0, acctChange |-> FALSE, postReg |-> FALSE,
              failLogout |-> FALSE, out901 |-> FALSE, relogin |-> FALSE,
              refuse907 |-> FALSE, late907 |-> FALSE, postRegErr |-> FALSE,
-             newList |-> FALSE, newSasl |-> FALSE, delMid |-> FALSE, stale |-> FALSE]
+             newList |-> FALSE, nts |-> 0, lsNoVal |-> FALSE, delMid |-> FALSE,
+             stale |-> FALSE, late908 |-> FALSE]
 
 -----------------------------------------------------------------------------
 (* Server: handlers for one client line.  Each fixes srv' and sout'.      *)
@@ -176,9 +193,10 @@ SrvEnd == sout' = sout /\ srv' = [srv EXCEPT !.endSeen = TRUE]      \* CN-16 aft
 \* login that finds no exchange gets 907.
 Late907 == srv.succeeded /\ Reauth = "none" /\ srv.sasl \notin Active
 
-\* S1:64: no numeric is named for the total-length limit; 904 or 905 (D6).
+\* S1:64: no numeric is named for the total-length limit.  905 is defined
+\* for one over-long parameter (S1:219), so the limit gets 904 (D6, v0.1).
 LimitFail ==
-    /\ \E n \in {"904", "905"} : sout' = Append(sout, M(n))
+    /\ sout' = Append(sout, M("904"))
     /\ srv' = [srv EXCEPT !.sasl = "idle", !.got = 0, !.cout = <<>>, !.failed = TRUE]
 
 \* One line of a client response (S1:55-63).  Reassembly: FULL lines are
@@ -203,8 +221,9 @@ SrvChunk(t) ==
 \* An opener (S1:45-51, S2-6).  Checked in this order: an exchange running
 \* (then the line is data, D12); 907 after a login without reauth (S1-13,
 \* hs D3); sasl not enabled (hs D7: drop or 904); after 001 without reauth
-\* support (S2:63-65, D8: 904); an unsupported mechanism (904, or 908 now
-\* and 904 later, D4); else association may fail (904, S1:45-48) or the
+\* support (S2:63-65, D8: 904); an unsupported mechanism (904; or 908 now
+\* and 904 later; or, with AnyOrder908, 904 now and 908 later, D4); else
+\* association may fail (904, S1:45-48) or the
 \* exchange opens and the challenge follows in a later step (hs D23).
 SrvMech(mech) ==
     IF srv.sasl \in Active
@@ -221,6 +240,9 @@ SrvMech(mech) ==
          \/ /\ Send908
             /\ sout' = Append(sout, ListMsg("908", srv.supp))         \* S1:231
             /\ srv' = [srv EXCEPT !.failed = TRUE, !.owe904 = TRUE]
+         \/ /\ Send908 /\ AnyOrder908
+            /\ sout' = Append(sout, M("904"))
+            /\ srv' = [srv EXCEPT !.failed = TRUE, !.owe908 = TRUE, !.l908 = srv.supp]
     ELSE \/ sout' = Append(sout, M("904")) /\ srv' = [srv EXCEPT !.failed = TRUE]
          \/ /\ sout' = sout
             /\ srv' = [srv EXCEPT !.sasl = "open", !.mech = mech, !.round = 1,
@@ -233,9 +255,9 @@ SrvAbort ==
          /\ srv' = [srv EXCEPT !.sasl = "idle", !.got = 0, !.cout = <<>>]
     ELSE srv' = srv /\ sout' \in {sout, Append(sout, M("906"))}       \* hs D10
 
-\* BOUND (header): AUTHENTICATE lines wait while a success's or a 908's
-\* lines are owed.
-SuccOwed == srv.owe900 # "" \/ srv.owe903 \/ srv.owe904
+\* R3, the read barrier (header, D14): AUTHENTICATE lines wait while a
+\* success's or an unsupported opener's lines are owed.
+SuccOwed == srv.owe900 # "" \/ srv.owe903 \/ srv.owe904 \/ srv.owe908
 
 SRecv ==
     /\ c2s # <<>> /\ ~srv.closed
@@ -278,7 +300,8 @@ SrvChalLine ==
 
 \* Services act on a complete response.  Not the last round: a non-empty
 \* (final, S1:69-70) challenge.  Last round: success with some account
-\* (900 now and 903 owed, or 903 now and 900 owed, hs D20, D3), a refused
+\* (900 now and 903 owed, or 903 now and 900 owed, hs D20, D3; with
+\* AcctEarly the 903-first branch may also set the account now, R1), a refused
 \* change of account under "same" (907, D9), failure (902 or 904,
 \* S1:207-217), or (after an earlier login, with reauth) failure that also
 \* logs out: 901 now and 904 owed (D10).
@@ -299,6 +322,10 @@ SrvDecide ==
                       \/ /\ sout' = Append(sout, M("903"))
                          /\ srv' = [idle EXCEPT !.owe900 = a,
                                       !.succeeded = TRUE, !.succN = @ + 1]
+                      \/ /\ AcctEarly
+                         /\ sout' = Append(sout, M("903"))
+                         /\ srv' = [idle EXCEPT !.owe900 = a, !.account = a,
+                                      !.succeeded = TRUE, !.succN = @ + 1]
             \/ \E n \in {"902", "904"} :
                  sout' = Append(sout, M(n)) /\ srv' = [idle EXCEPT !.failed = TRUE]
             \/ /\ srv.account # "" /\ Reauth # "none"
@@ -306,7 +333,8 @@ SrvDecide ==
                /\ srv' = [idle EXCEPT !.account = "", !.failed = TRUE, !.owe904 = TRUE]
     /\ UNCHANGED <<c2s, s2c, cli>>
 
-\* The account changes in the step that sends 900 (D3).
+\* The account changes in the step that sends 900 (D3), unless AcctEarly
+\* already set it (then this is the late notification, R1).
 Srv900 ==
     /\ ~srv.closed /\ srv.owe900 # ""
     /\ sout' = Append(sout, AccMsg("900", srv.owe900))
@@ -317,6 +345,13 @@ Srv903 ==
     /\ ~srv.closed /\ srv.owe903
     /\ sout' = Append(sout, M("903"))
     /\ srv' = [srv EXCEPT !.owe903 = FALSE]
+    /\ UNCHANGED <<c2s, s2c, cli>>
+
+\* The 908 after a 904 (AnyOrder908, D4): it lists the set the opener met.
+Srv908 ==
+    /\ ~srv.closed /\ srv.owe908
+    /\ sout' = Append(sout, ListMsg("908", srv.l908))
+    /\ srv' = [srv EXCEPT !.owe908 = FALSE, !.l908 = {}]
     /\ UNCHANGED <<c2s, s2c, cli>>
 
 \* The 904 after a 908 (D4) or after a 901 (D10), in a later step.
@@ -362,7 +397,9 @@ SrvFailClose ==
 
 \* Environment (bounded by MaxEnv), after LS was handled (CN-17):
 \*  - DEL sasl: the auth layer goes; the exchange is cancelled silently
-\*    (CN-21, hs D5); owed lines of a decided exchange stay owed (D13);
+\*    (CN-21, hs D5), and so is its SASL-specific owed output: the 903,
+\*    the 908 and the 904 (CN:456-457).  An owed 900 stays: it reports
+\*    account state, "whether by SASL or otherwise" (S1:199; D13, R4);
 \*  - NEW sasl with a list (S2:53-58, S2:103-108);
 \*  - NEW sasl with a new list while offered: a value update (CN:420,
 \*    CN:442-443; D11); sasl stays enabled;
@@ -373,7 +410,8 @@ EnvChange ==
     /\ \/ /\ srv.offered
           /\ sout' = Append(sout, CapMsg("DEL", FALSE, {}))
           /\ srv' = [srv EXCEPT !.offered = FALSE, !.enabled = FALSE, !.envN = @ + 1,
-                       !.cout = <<>>, !.sasl = "idle", !.got = 0]
+                       !.cout = <<>>, !.sasl = "idle", !.got = 0,
+                       !.owe903 = FALSE, !.owe904 = FALSE, !.owe908 = FALSE]
        \/ /\ ~srv.offered
           /\ \E S \in MechSets :
                /\ sout' = Append(sout, CapMsg("NEW", TRUE, S))
@@ -399,7 +437,9 @@ Known(m) == [hv |-> m.hv, L |-> m.L]
 
 \* A challenge line.  FULL: more to come.  SHORT or PLUS: the challenge is
 \* complete; the client answers with a payload (the final challenge of a
-\* TwoRound mechanism with an empty one, S1-9) or aborts (S1-4, hs D27).
+\* TwoRound mechanism with an empty one, S1-9) or aborts (S1-10, hs D27).
+\* The chosen payload is kept in cli.pay; the monitor compares what is sent
+\* with the reference chunker Lines(pay), not with the client's own plan.
 CData(t) ==
     IF cli.sasl \notin {"mech", "wait"}
     THEN c2s' = c2s /\ cli' = cli
@@ -409,8 +449,9 @@ CData(t) ==
          \/ /\ c2s' = c2s
             /\ \E p \in (IF cli.mech \in TwoRound /\ r = 2 THEN {Empty} ELSE Payloads) :
                  cli' = [cli EXCEPT !.sasl = "resp", !.round = r, !.cin = 0,
-                                    !.out = CliLines(p)]
-         \/ /\ c2s' = Append(c2s, M("STAR"))
+                                    !.out = CliLines(p), !.pay = p]
+         \/ /\ ~NoAbandon
+            /\ c2s' = Append(c2s, M("STAR"))
             /\ cli' = [cli EXCEPT !.sasl = "abort", !.round = r, !.cin = 0, !.out = <<>>]
 
 CHandle(m) ==
@@ -481,15 +522,21 @@ CMech ==
                                !.cin = 0, !.out = <<>>, !.att = @ + 1]
     /\ UNCHANGED <<s2c, sout, srv>>
 
-\* S1-4: abort at any time during an exchange, also between chunks.
+\* S1-10 (S1:72-73): the client may abort at any time during an exchange,
+\* also between chunks.  (S1:39-40's timeout preparedness is the client
+\* reading SrvTimeout's 904 in every exchange state, not this action.)
 CAbort ==
-    /\ CLive /\ cli.sasl \in {"mech", "resp", "wait"}
+    /\ CLive /\ ~NoAbandon /\ cli.sasl \in {"mech", "resp", "wait"}
     /\ c2s' = Append(c2s, M("STAR"))
     /\ cli' = [cli EXCEPT !.sasl = "abort", !.out = <<>>]
     /\ UNCHANGED <<s2c, sout, srv>>
 
+\* LOCAL ABANDONMENT (D19): an explicit assumption, not a spec rule.  The
+\* client stops waiting for the 906 of its abort and may open again; the
+\* 906 (or another reply) may then arrive late and end the NEXT exchange
+\* (hs D12).  Off under NoAbandon.
 CGiveUp ==
-    /\ CLive /\ cli.sasl = "abort"
+    /\ CLive /\ ~NoAbandon /\ cli.sasl = "abort"
     /\ cli' = EndEx
     /\ UNCHANGED <<c2s, s2c, sout, srv>>
 
@@ -501,7 +548,7 @@ CEnd ==
     /\ UNCHANGED <<s2c, sout, srv>>
 
 CQuit ==
-    /\ CLive
+    /\ CLive /\ ~NoAbandon
     /\ c2s' = Append(c2s, M("QUIT"))
     /\ cli' = [cli EXCEPT !.quit = TRUE]
     /\ UNCHANGED <<s2c, sout, srv>>
@@ -530,6 +577,17 @@ GNext ==
                  /\ (sin.t \in Data \/ sin.t = "AUTHMECH")
         sterm == sin.t \in Term \/ sin.t = "AUTHMECH"
         succ == srv'.succN > srv.succN
+        \* the client chose a response this step / sent a data line
+        chose == cli.sasl \in {"mech", "wait"} /\ cli'.sasl = "resp"
+        sent == \E i \in 1..Len(NewC2S) : NewC2S[i].t \in Data
+        \* NEW -> REQ -> ACK -> opener -> 903 after an LS without sasl (#13)
+        nts == CASE gw.nts = 0 /\ CCons /\ cin.t = "LS" /\ ~cin.on -> 1
+                 [] gw.nts = 1 /\ CCons /\ cin.t = "NEW" -> 2
+                 [] gw.nts = 2 /\ Has(NewC2S, "REQ") -> 3
+                 [] gw.nts = 3 /\ CCons /\ cin.t = "ACK" -> 4
+                 [] gw.nts = 4 /\ Has(NewC2S, "AUTHMECH") -> 5
+                 [] gw.nts = 5 /\ CCons /\ cin.t = "903" /\ InExchange -> 6
+                 [] OTHER -> gw.nts
     IN
     /\ gm' = [en |-> IF CCons /\ cin.t = "ACK" THEN TRUE
                      ELSE IF CCons /\ cin.t = "DEL" THEN FALSE ELSE gm.en,
@@ -540,18 +598,33 @@ GNext ==
                         ELSE IF sdata /\ sterm /\ gm.sResp < 3 THEN gm.sResp + 1
                         ELSE gm.sResp,
               n900 |-> gm.n900 + Count(NewOut, "900"),
-              n903 |-> gm.n903 + Count(NewOut, "903")]
+              n903 |-> gm.n903 + Count(NewOut, "903"),
+              \* 903s cancelled by a DEL (R4)
+              x903 |-> gm.x903 + (IF Has(NewOut, "DEL") /\ srv.owe903 /\ ~srv'.owe903
+                                  THEN 1 ELSE 0),
+              \* expected remaining lines of the response being sent
+              exp |-> IF chose THEN Lines(cli'.pay)
+                      ELSE IF sent THEN (IF gm.exp = <<>> THEN <<>> ELSE Tail(gm.exp))
+                      ELSE IF cli'.sasl # "resp" THEN <<>>
+                      ELSE gm.exp]
     /\ gw' = [mech908 |-> IF CCons /\ cin.t = "908" /\ InExchange THEN cli.mech ELSE gw.mech908,
               okMech |-> IF CCons /\ cin.t = "903" /\ InExchange /\ gw.mech908 # ""
                          THEN cli.mech ELSE gw.okMech,
-              multi |-> gw.multi \/ (SCons /\ sin.t \in Term /\ srv.sasl = "resp" /\ srv.got >= 1),
-              exactPlus |-> gw.exactPlus \/ (SCons /\ sin.t = "PLUS" /\ srv.sasl = "resp" /\ srv.got >= 1),
+              \* FULL then SHORT, ACCEPTED as one response (#12)
+              multi |-> gw.multi \/ (sdata /\ sin.t = "SHORT" /\ srv.got >= 1
+                                     /\ srv'.sasl = "decide"),
+              exactPlus |-> gw.exactPlus \/ (sdata /\ sin.t = "PLUS" /\ srv.got >= 1
+                                             /\ srv'.sasl = "decide"),
               limit |-> gw.limit \/ (SCons /\ sin.t \in {"FULL", "SHORT"} /\ srv.sasl = "resp"
                                      /\ srv'.sasl = "idle"),
               twoRound |-> gw.twoRound \/ (succ /\ srv.mech \in TwoRound),
               chalChunk |-> gw.chalChunk \/ (CCons /\ cin.t \in Term
                                              /\ cli.sasl \in {"mech", "wait"} /\ cli.cin >= 1),
-              abortMid |-> gw.abortMid \/ (Has(NewC2S, "STAR") /\ cli.out # <<>>),
+              \* "*" after at least one chunk sent and with one still unsent (#11)
+              abortMid |-> gw.abortMid \/ (Has(NewC2S, "STAR") /\ cli.sasl = "resp"
+                                           /\ gw.sentN >= 1 /\ cli.out # <<>>),
+              sentN |-> IF chose THEN 0 ELSE IF sent /\ gw.sentN < 3 THEN gw.sentN + 1
+                        ELSE gw.sentN,
               acctChange |-> gw.acctChange \/ (srv.account # "" /\ srv'.account \notin {"", srv.account}),
               postReg |-> gw.postReg \/ (succ /\ srv.reg),
               failLogout |-> gw.failLogout \/ (Has(NewOut, "901") /\ srv.sasl = "decide"),
@@ -562,8 +635,13 @@ GNext ==
               postRegErr |-> gw.postRegErr \/ (SCons /\ sin.t = "AUTHMECH" /\ srv.reg
                                                /\ srv.enabled /\ ~srv.succeeded
                                                /\ Reauth = "none" /\ Has(NewOut, "904")),
-              newList |-> gw.newList \/ (CCons /\ cin.t = "NEW" /\ cli.avail),
-              newSasl |-> gw.newSasl \/ (CCons /\ cin.t = "NEW" /\ ~cli.avail),
+              \* a valued NEW that CHANGES and installs the client's list (#14)
+              newList |-> gw.newList \/ (CCons /\ cin.t = "NEW" /\ cli.avail /\ cin.hv
+                                         /\ cli.known.hv /\ cin.L # cli.known.L
+                                         /\ cli'.known = [hv |-> TRUE, L |-> cin.L]),
+              nts |-> nts,
+              lsNoVal |-> gw.lsNoVal \/ (CCons /\ cin.t = "LS" /\ cin.on /\ ~cin.hv),
+              late908 |-> gw.late908 \/ (Has(NewOut, "908") /\ srv.owe908),
               delMid |-> gw.delMid \/ (CCons /\ cin.t = "DEL" /\ InExchange),
               stale |-> gw.stale \/ (SCons /\ sin.t = "AUTHMECH" /\ srv.sasl \notin Active
                                      /\ srv.enabled /\ sin.m \notin srv.supp
@@ -573,7 +651,7 @@ G(A) == A /\ GNext
 
 Next ==
     \/ G(SRecv) \/ G(SrvSend) \/ G(SrvChallenge) \/ G(SrvChalLine) \/ G(SrvDecide)
-    \/ G(Srv900) \/ G(Srv903) \/ G(Srv904) \/ G(SrvTimeout) \/ G(SrvRegister)
+    \/ G(Srv900) \/ G(Srv903) \/ G(Srv904) \/ G(Srv908) \/ G(SrvTimeout) \/ G(SrvRegister)
     \/ G(Srv001) \/ G(SrvFailClose) \/ G(EnvChange)
     \/ G(CRecv) \/ G(CSend) \/ G(CReq) \/ G(CMech) \/ G(CAbort) \/ G(CGiveUp)
     \/ G(CEnd) \/ G(CQuit)
@@ -581,12 +659,16 @@ Next ==
 \* SrvFair: the server and the network make progress (lines read and
 \* delivered, challenges finished, services answer, owed lines sent).
 \* CliFair: the client reads, and finishes sending a response it started.
-\* No fairness on timeouts or aborts on either side, so ExchangeEnds says
-\* the exchange ends because the SERVER answers, not because someone gives up.
+\* No fairness on timeouts or aborts on either side.  That does not make
+\* them impossible: ExchangeEnds only says the client's exchange state is
+\* eventually left, by whatever means (D15).  Server-driven completion is
+\* the NoAbandon scenario (no abort, give-up or quit), with
+\* RuleExitByServerLine.
 SrvFair ==
     /\ WF_vars(G(SRecv)) /\ WF_vars(G(SrvSend)) /\ WF_vars(G(SrvChallenge))
     /\ WF_vars(G(SrvChalLine)) /\ WF_vars(G(SrvDecide)) /\ WF_vars(G(Srv900))
-    /\ WF_vars(G(Srv903)) /\ WF_vars(G(Srv904)) /\ WF_vars(G(SrvRegister))
+    /\ WF_vars(G(Srv903)) /\ WF_vars(G(Srv904)) /\ WF_vars(G(Srv908))
+    /\ WF_vars(G(SrvRegister))
     /\ WF_vars(G(Srv001))
 CliFair == WF_vars(G(CRecv)) /\ WF_vars(G(CSend))
 
@@ -609,15 +691,27 @@ TypeOK ==
     /\ cli.sasl \in {"idle", "mech", "resp", "wait", "abort"}
     /\ cli.account \in {""} \cup Accounts
     /\ cli.att \in 0..MaxAtt /\ cli.reqs \in 0..MaxReq
-    /\ cli.known.L \subseteq Mechs
+    /\ cli.known.L \subseteq Mechs /\ cli.pay \in Payloads
 
-\* CN-21, hs D5: no exchange survives a DEL of sasl (or runs without it).
-DelCancels == ~srv.enabled => (srv.sasl = "idle" /\ srv.cout = <<>>)
+\* CN-21 (CN:456-457), hs D5, D13: no exchange and no SASL-specific owed
+\* output (903, 908, 904) survives a DEL of sasl.
+DelCancels ==
+    ~srv.enabled => /\ srv.sasl = "idle" /\ srv.cout = <<>>
+                    /\ ~srv.owe903 /\ ~srv.owe904 /\ ~srv.owe908
+\* ... and nothing SASL-specific is sent while sasl is not enabled, except
+\* in reply to a line the server reads (hs D7, D21).  An owed 900 may still
+\* go out (R4).
+RuleDelCancelsOutput ==
+    [][(~srv.enabled /\ ~SCons) =>
+         \A i \in 1..Len(NewOut) :
+            NewOut[i].t \notin {"902", "903", "904", "905", "906", "907", "908",
+                                "FULL", "SHORT", "PLUS"}]_vars
 
-\* S1:79, S1:199-213: each success sends exactly one 900 and one 903.
+\* S1:79, S1:199-213: each success sends exactly one 900 and one 903, except
+\* that a DEL cancels an owed 903 (counted in gm.x903, only in a DEL step).
 SuccAccounting ==
     /\ gm.n900 + (IF srv.owe900 # "" THEN 1 ELSE 0) = srv.succN
-    /\ gm.n903 + (IF srv.owe903 THEN 1 ELSE 0) = srv.succN
+    /\ gm.n903 + (IF srv.owe903 THEN 1 ELSE 0) + gm.x903 = srv.succN
 
 \* S1-13 (hs D21): without reauth, every AUTHENTICATE line read after a
 \* successful login, outside an exchange, gets 907.
@@ -626,12 +720,14 @@ Rule907 ==
         /\ srv.sasl \notin Active) => Has(NewOut, "907")]_vars
 \* S2:64-65: 907 refuses a change: a step that sends 907 changes no account.
 Rule907NoChange == [][Has(NewOut, "907") => srv'.account = srv.account]_vars
-\* S1:199-205 (D3): the account changes exactly with a 900 naming the new
-\* account or a 901, and those numerics say what the account now is.
+\* S1:199-205 (D3): the account changes with a 900 naming the new account
+\* or a 901 (R1: or, with AcctEarly, with that 900 owed), and those
+\* numerics say what the account now is.
 RuleAccountNotified ==
     [][/\ srv'.account # srv.account =>
             IF srv'.account = "" THEN Has(NewOut, "901")
-            ELSE \E i \in 1..Len(NewOut) : NewOut[i].t = "900" /\ NewOut[i].a = srv'.account
+            ELSE \/ \E i \in 1..Len(NewOut) : NewOut[i].t = "900" /\ NewOut[i].a = srv'.account
+                 \/ AcctEarly /\ srv'.owe900 = srv'.account
        /\ \A i \in 1..Len(NewOut) :
             /\ NewOut[i].t = "900" => srv'.account = NewOut[i].a
             /\ NewOut[i].t = "901" => srv'.account = ""]_vars
@@ -639,7 +735,16 @@ RuleAccountNotified ==
 Rule906 ==
     [][(SCons /\ Head(c2s).t = "STAR" /\ srv.sasl \in Active /\ ~Late907)
        => Has(NewOut, "906")]_vars
-\* S2:62-65: once sasl is enabled, an opener is never silently dropped.
+\* S2:63-65 (D8): when reauthentication is not available ("none": after a
+\* login, or after 001), an opener gets the appropriate error, 907 after a
+\* login and 904 otherwise, and changes neither exchange nor account.
+RuleReauthRefused ==
+    [][(SCons /\ Head(c2s).t = "AUTHMECH" /\ srv.enabled /\ srv.sasl \notin Active
+        /\ Reauth = "none" /\ (srv.succeeded \/ srv.reg))
+       => /\ Has(NewOut, IF srv.succeeded THEN "907" ELSE "904")
+          /\ srv'.sasl = "idle" /\ srv'.account = srv.account]_vars
+\* Progress sanity check (weaker): once sasl is enabled, an opener is
+\* never silently dropped.
 RuleOpenerAnswered ==
     [][(SCons /\ Head(c2s).t = "AUTHMECH" /\ srv.enabled /\ srv.sasl \notin Active)
        => (NewOut # <<>> \/ srv'.sasl = "open")]_vars
@@ -651,14 +756,17 @@ RuleVerdictAfterLast ==
 \* S1:58-63 (server side): a success never follows an unterminated challenge.
 RuleSrvChalFramed ==
     [][(srv'.succN > srv.succN \/ Has(NewOut, "903")) => gm.srvLast # "FULL"]_vars
-\* S1:231 (D4): 908 only for an opener naming an unsupported mechanism,
-\* and it lists the supported ones.
+\* S1:231 (D4): 908 only for an opener naming an unsupported mechanism, and
+\* it lists the mechanisms supported when that opener was read (sent then,
+\* or owed after the 904 with AnyOrder908).
 Rule908 ==
-    [][Has(NewOut, "908") =>
-         /\ SCons /\ Head(c2s).t = "AUTHMECH" /\ Head(c2s).m \notin srv.supp
-         /\ \A i \in 1..Len(NewOut) : NewOut[i].t = "908" => NewOut[i].L = srv.supp]_vars
-\* S2:38-42, CN:270-271: a sasl value lists the supported mechanisms, and
-\* only LS and NEW carry values.
+    [][\A i \in 1..Len(NewOut) : NewOut[i].t = "908" =>
+         \/ /\ SCons /\ Head(c2s).t = "AUTHMECH" /\ Head(c2s).m \notin srv.supp
+            /\ NewOut[i].L = srv.supp
+         \/ srv.owe908 /\ NewOut[i].L = srv.l908]_vars
+\* S2:38-39 SHOULD plus the model's exact-advertisement POLICY (D18): a
+\* value, when sent, is exactly the supported set.  S2:41-42's MUST (comma
+\* syntax) is out of scope.  CN:270-271: only LS and NEW carry values.
 RuleValueIsMechs ==
     [][\A i \in 1..Len(NewOut) :
          /\ (NewOut[i].t \in {"LS", "NEW"} /\ NewOut[i].hv) => NewOut[i].L = srv'.supp
@@ -676,15 +784,28 @@ RuleClientAuthOnlyEnabled ==
 \* S1-2 / S2-6 (D7): no opener after 001 unless the client reauthenticates.
 RuleClientPostReg ==
     [][Has(NewC2S, "AUTHMECH") => (~cli.welcomed \/ ClientReauth)]_vars
-\* S1:58-63: a client that has finished a response ended it with a short
-\* chunk or "+" (so "+" follows an exact multiple of 400).
+\* S1:58-63, weak form: a client that has finished a response ended it
+\* with a short chunk or "+".
 RuleClientFraming == cli.sasl = "wait" => gm.cliLast \in Term
+\* S1:58-63, strong form (#9): every data line the client sends is the next
+\* line of the reference chunking Lines(p) of the payload it chose, and a
+\* finished response has sent all of it.
+RuleClientSendsPayload ==
+    [][\A i \in 1..Len(NewC2S) : NewC2S[i].t \in Data =>
+         gm.exp # <<>> /\ NewC2S[i].t = Head(gm.exp)]_vars
+ClientPayloadDone == cli.sasl = "wait" => gm.exp = <<>>
 \* S1:58-60: no client line is over 400 bytes.
 RuleClientLineLen == [][~Has(NewC2S, "LONG")]_vars
-\* S1-9: after the final (non-empty) challenge, the response is empty.
+\* S1-9 (#8): after the final (non-empty) challenge, what the client SENDS
+\* is the empty response: every data line it sends then is "+" (and "+"
+\* ends the response, so it is exactly one "+").
 RuleClientEmptyFinal ==
-    [][(cli.sasl \in {"mech", "wait"} /\ cli'.sasl = "resp"
-        /\ cli'.mech \in TwoRound /\ cli'.round = 2) => cli'.out = <<"PLUS">>]_vars
+    [][(cli.mech \in TwoRound /\ cli.round = 2) =>
+         \A i \in 1..Len(NewC2S) : NewC2S[i].t \in Data => NewC2S[i].t = "PLUS"]_vars
+\* NoAbandon scenario (D15): the client leaves an exchange only by reading
+\* a server line (902-907, DEL, ERROR).
+RuleExitByServerLine ==
+    [][(NoAbandon /\ InExchange /\ cli'.sasl = "idle") => CCons]_vars
 \* S2:48-49: the client opens only mechanisms it implements; S2:73 (with
 \* PickListed): one from the list when the list names one it implements.
 RuleClientMech ==
@@ -694,13 +815,17 @@ RuleClientMech ==
 
 (* Liveness. *)
 
-\* Every exchange the client starts ends: in 902-907, a DEL of sasl, or a
-\* closed connection; under Spec (the client reads and sends what it
-\* started; nobody is forced to time out or abort).
+\* The client's exchange state is eventually left (D15): by reading
+\* 902-907, a DEL of sasl, or ERROR; by its own give-up (CGiveUp) or quit.
+\* Under Spec.  It does not say WHO ended the exchange; with NoAbandon only
+\* a server line can (RuleExitByServerLine).
 ExchangeEnds == [](InExchange => <>(~InExchange \/ cli.closed \/ cli.quit))
-\* Owed lines are sent (a challenge in progress, 900/903, the 904 after a
-\* 908 or a 901, the 001 after 906); only the client's QUIT excuses them.
-OwedSent == [](Owed => <>(~Owed \/ srv.peerQuit))
+\* (v0.1, renamed from OwedSent; #16) Owed obligations (a challenge in
+\* progress, 900/903, the 908 or 904 owed after an opener or a 901, the 001
+\* after 906) eventually CLEAR: by being sent, or by a DEL cancelling the
+\* SASL-specific ones (R4).  This does not show that each line was sent;
+\* SuccAccounting does that for 900/903 (safety).
+OwedEventuallyClears == [](Owed => <>(~Owed \/ srv.peerQuit))
 
 (* Design invariants: once quiet, both ends agree. *)
 
@@ -720,12 +845,12 @@ SafetyView == <<c2s, s2c, sout, srv, cli, gm>>
 (* exercised.  Check each alone (W_*.cfg).                                *)
 W_LoggedIn      == ~(cli.account # "" /\ cli.welcomed)
 W_Retry908      == ~(gw.mech908 # "" /\ gw.okMech # "" /\ gw.okMech # gw.mech908)
-W_MultiChunk    == ~gw.multi        \* a response of 2+ lines reassembled
+W_MultiChunk    == ~gw.multi        \* FULL then SHORT accepted as one response
 W_ExactPlus     == ~gw.exactPlus    \* "+" after an exact multiple of 400
 W_Limit         == ~gw.limit        \* server length limit hit (S1:64)
 W_TwoRound      == ~gw.twoRound     \* SCRAM-shaped success, empty final response
 W_ChalChunked   == ~gw.chalChunk    \* client reassembled a multi-line challenge
-W_AbortMid      == ~gw.abortMid     \* "*" between chunks of a response
+W_AbortMid      == ~gw.abortMid     \* "*" after a chunk, with chunks still unsent
 W_AccountChange == ~gw.acctChange   \* reauth moved the account a1 -> a2
 W_PostReg       == ~gw.postReg      \* success after 001
 W_FailLogout    == ~gw.failLogout   \* failed reauth logs out (901, D10)
@@ -733,9 +858,14 @@ W_Relogin       == ~gw.relogin      \* 901, then logged in again
 W_Refuse907     == ~gw.refuse907    \* "same": change of account refused (D9)
 W_Late907       == ~gw.late907      \* S1-13 907
 W_PostRegErr    == ~gw.postRegErr   \* "none": opener after 001 gets 904 (D8)
-W_NewList       == ~gw.newList      \* NEW sasl=<new list> while offered
-W_NewThenAuth   == ~(gw.newSasl /\ cli.account # "")   \* NEW sasl, REQ, login
+W_NewList       == ~gw.newList      \* NEW sasl=<new list> changes the client's list
+W_NewThenAuth   == gw.nts # 6       \* LS without sasl, NEW, REQ, ACK, opener, 903
+W_NoValueLogin  == ~(gw.lsNoVal /\ cli.account # "")   \* sasl with no value, then login
 W_DelMid        == ~gw.delMid       \* DEL of sasl during an exchange
 W_StaleList     == ~gw.stale        \* opener of a listed mech no longer supported
 W_903First      == ~(srv.owe900 # "")                  \* 903 sent before its 900
+W_Late908       == ~gw.late908      \* AnyOrder908: 904 first, 908 after it (R2)
+\* AcctEarly: the account is set while its 900 is still owed (R1).  On a
+\* first login the account was "", so equality here means it was set early.
+W_AcctEarly     == ~(srv.owe900 # "" /\ srv.account = srv.owe900 /\ srv.succN = 1)
 =============================================================================

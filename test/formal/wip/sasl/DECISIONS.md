@@ -20,6 +20,8 @@ Inherited from the handshake model unchanged:
 
 Extended or changed here: hs D2 (scope, D7), hs D6 (failure numerics, D16), and hs D24 (stray data, D12).
 
+**v0.1** (after an independent review of v0, 16 findings) changed D3, D4, D6, D13, D14 and D15, and added D17 (exploration restrictions R1-R4), D18 (the exact-advertisement policy) and D19 (local abandonment). The README's "v0.1 changes" maps each finding to its change.
+
 ## D1. Payloads are counted in chunks, the same way in both directions
 
 > "A set of regular AUTHENTICATE messages transmits a response from client to server or vice versa. ... The response is encoded in Base64 ..., then split to 400-byte chunks, and each chunk is sent as a separate `AUTHENTICATE` command. Empty (zero-length) responses are sent as `AUTHENTICATE +`. If the last chunk was exactly 400 bytes long, it must also be followed by `AUTHENTICATE +` to signal end of response." (S1:55-63)
@@ -60,6 +62,8 @@ A success either:
 
 This keeps hs D20's freedom of order (`W_903First`). `RuleAccountNotified` checks both directions: no silent account change, and no 900 or 901 that misreports the account.
 
+**v0.1:** "the account changes in the same step as its 900" is a choice the text does not impose. S1:199 ties the 900 to the change, not to the same instant. It is now labelled restriction **R1** (D17). With switch `AcctEarly`, a 903-first success may set the account at the verdict while its 900 is still owed (`W_AcctEarly`). `RuleAccountNotified` then also accepts an account change whose 900 is owed in that same step.
+
 ## D4. 908, and the 904 after it
 
 > "`908` aka `RPL_SASLMECHS` MAY be sent in reply to an `AUTHENTICATE` command which requests an unsupported mechanism." (S1:231)
@@ -70,6 +74,7 @@ The text never says whether an opener that names an unsupported mechanism also g
 **Model:**
 - An unsupported mechanism always ends the exchange with 904, read as a failed association (S1:46-48).
 - With `Send908`, the 908 comes first. It lists the supported set (`Rule908`), and the 904 is owed and sent in a later step (hs v4 convention: no two numerics in one step).
+- **v0.1:** "908 before 904" is restriction **R2** (D17): S1:231 orders nothing. With switch `AnyOrder908`, the 904 may come first, with the 908 owed after it. That 908 lists the set the opener met (`srv.l908`; `W_Late908`). The client reads a 908 outside an exchange as list information only.
 - The client does not treat 908 as terminal. It replaces its mechanism list with the 908's and waits for the 904.
 - The client may then retry with another mechanism (`W_Retry908`).
 
@@ -95,13 +100,15 @@ With `PickListed`, if its list has a value naming one of its own mechanisms, it 
 
 The two are different limits. Only the per-line one has a named numeric.
 
-**Model:**
+S1:219 also says "when credentials are valid". The model does not track whether the credentials are valid at the moment a line is too long, so that condition is abstracted away. An over-long line gets 905 whatever the credentials would have been.
+
+**Model (v0.1):**
 - A LONG line inside a response gets 905.
-- A response that grows past `MaxLen` chunks ends the exchange with 904 or 905 (free): 904 is "other errors" (S1:215), and 905 is the nearest named meaning.
+- A response that grows past `MaxLen` chunks, each line legal, ends the exchange with **904 only**: "other errors not explicitly mentioned" (S1:215). v0 also allowed 905 there as "the nearest named meaning". That reused 905 without its defined condition, so v0.1 drops it.
 
-The model client never sends a LONG line (`RuleClientLineLen`). The spec's 905 is therefore reached only through `MaxLen`, or through a non-conforming client such as the mutant `MU_Chunk401`.
+The model client never sends a LONG line (`RuleClientLineLen`). The spec's 905 is therefore reached only through a non-conforming client, such as the mutant `MU_Chunk401`.
 
-**Open (Q2):** which numeric should a server send when S1:64's limit is exceeded?
+**Open (Q2):** is 904 what S1:64's limit should produce? Or does the spec mean 905 to cover it too?
 
 ## D7. Client SASL after 001 (extends hs D2)
 
@@ -120,7 +127,8 @@ sasl-3.2 says it "updates" sasl-3.1 (S2:4-5). S1:89-90 leaves the registered sta
 **Model:** this is hs D3's "Reauth FALSE":
 - After a successful login, every AUTHENTICATE line that finds no exchange gets 907 (S1-13, hs D21).
 - An unauthenticated client that opens after 001 gets 904: 907 would claim a login that never happened, and 904 is the catch-all failure (S1:215). `W_PostRegErr` reaches this.
-- The server never stays silent (`RuleOpenerAnswered`).
+- The server never stays silent (`RuleOpenerAnswered`, a progress check).
+- **v0.1:** `RuleReauthRefused` checks the error itself. Under "none", an opener read with sasl enabled after a login gets 907, and after 001 without a login gets 904. The exchange does not open, and the account does not change. `RuleOpenerAnswered` accepted any output at all.
 
 **Open (Q3):** is 904 the "appropriate error" for an unauthenticated client after registration, or should a server that cannot authenticate in registered state stop offering sasl after 001?
 
@@ -179,32 +187,69 @@ hs D24 also let a stray response open a new exchange. This model drops that bran
 
 > "Servers MUST cancel any capability-specific behavior for a client after sending the `CAP DEL` message to the client." (CN:456-457)
 
-**Model:**
+**Model (v0.1; v0 kept every owed line, which CN:456-457 does not allow):**
 - As hs D5, the exchange is dropped silently on both sides (`DelCancels`, `W_DelMid`), together with any challenge chunks not yet sent.
-- Lines already owed for a decided exchange (900, 903, the 904 after 908 or 901) are still sent. The verdict was reached before the DEL, and 900 reports the account "whether by SASL or otherwise" (S1:199).
+- **SASL-specific owed output is cancelled at the DEL:** the 903 of a decided success, the 908, and the 904 owed after a 908 or a 901. These are sasl-cap behaviour, and "having decided the exchange earlier" is no exception CN states. `DelCancels` now covers these obligations. `RuleDelCancelsOutput` checks that nothing SASL-specific (902-908, challenge lines) is sent while sasl is not enabled, except in reply to a line the server reads (hs D7, D21). `SuccAccounting` counts a 903 cancelled in a DEL step.
+- **An owed 900 survives (restriction R4, D17).** S1:199 defines 900 as account notification "whether by SASL or otherwise". The account change itself was decided before the DEL, and the 900 reports account state, not the progress of a SASL exchange. Leaving it unsent would leave the client's view of its account wrong. This is the one exception, and it is a reading, not text.
 - The login survives the DEL: an account is not sasl-cap behaviour.
+- A client may therefore see a 900 with no 903 after a DEL. It must take its account from 900/901, and treat the exchange as ended by the DEL.
 
-**Open (Q7):** may a server log the client out (901) because sasl was DELed? S2:22-23 speaks of "reauthentication if authentication is lost via the cap-notify capability", which could be read either way.
+**Open (Q7):** may a server log the client out (901) because sasl was DELed? And may it send the owed 900, as here, or must that be cancelled too? S2:22-23 speaks of "reauthentication if authentication is lost via the cap-notify capability", which could be read either way.
 
 ## D14. Bound: the server reads AUTHENTICATE lines only once owed lines are out
 
 This is not a reading of the spec but a bound on the model, stated here so it is not mistaken for one.
 
-**Model:** while a 900, 903, or a 904 owed after 908 or 901 is still unsent, the server leaves the next AUTHENTICATE line unread (`SRecv`'s guard). This delays reads and drops no behaviour of the lines themselves. But a new exchange can no longer overlap an owed 903; that overlap is hs D20 / `M2Owe` territory and the handshake model checks it.
+**Model:** while a 900, 903, 908, or a 904 owed after 908 or 901 is still unsent, the server leaves the next AUTHENTICATE line unread (`SRecv`'s guard). This is restriction **R3** (D17).
 
-## D15. What "an exchange ends" means, and under which fairness
+v0 said this "drops no behaviour of the lines themselves". That understated it. It removes every interleaving in which a new exchange (its opener, challenge, abort or verdict) overlaps owed output of the previous one. With reauthentication, account changes and DEL, those interleavings matter: for example, a reauth verdict and its 900 racing an owed 900 of the previous login. Those runs are **not explored** here. The handshake model (hs D20, `M2Owe`) covers the single-mechanism, no-account case. Relaxing R3 needs per-exchange owed queues and is left for a later version.
+
+## D15. What "an exchange ends" means, and under which fairness (rewritten in v0.1)
 
 **Model:**
-- `ExchangeEnds`: once the client is in an exchange (opener sent, sending, waiting, or aborting), it eventually leaves it. It may do so by reading 902-907, by a DEL of sasl, or by the connection closing.
+- `ExchangeEnds`: once the client is in an exchange (opener sent, sending, waiting, or aborting), its exchange state is eventually left. It may be left by reading 902-907, a DEL of sasl, or ERROR; by its own give-up (`CGiveUp`, D19); or by quitting.
 - 908 is not an ending (D4); 900 alone is not one (D3).
 - It is checked under `Spec`, which has two fairness parts:
   - SrvFair: the server reads, delivers, challenges, decides, and sends what it owes.
   - CliFair: the client reads, and finishes sending a response it started.
-- Neither side has fairness on timing out or aborting. So the property says that the exchange ends because the server answers, not because someone gives up.
-- `OwedSent` is also checked under `EnvSpec` (server fairness only).
+- Neither side has fairness on timing out or aborting. **That does not exclude them.** v0 claimed that the property shows "the exchange ends because the server answers". It does not: aborts, give-ups and quits are still possible, and `ExchangeEnds` accepts them. It is only eventual exit from the client's exchange state.
+- **Server-driven completion** is a separate scenario. Switch `NoAbandon` disables `CAbort`, `CGiveUp`, the abort branch of answering a challenge, and `CQuit`. `RuleExitByServerLine` checks that the client then leaves an exchange only by reading a server line, and config `TinyNoAbandon` checks `ExchangeEnds` under it. Even there, hs D12 remains: SASL lines carry no exchange identifier, so "this exchange's" verdict is the next terminal numeric. Without aborts and give-ups no stale terminal is produced in the model, but the property does not track exchange identity.
+- `OwedEventuallyClears` (v0's `OwedSent`, renamed; see the README) is checked under `Spec` and `EnvSpec`. It says only that obligations eventually clear, by being sent or by a DEL cancelling them (D13). It does not show that each owed line was sent; `SuccAccounting` does that for 900/903, as a safety invariant.
 
 ## D16. 902 (extends hs D6)
 
 > "`902` ... is sent when the SASL authentication fails because the account is currently locked out, held, or otherwise administratively made unavailable." (S1:207)
 
 **Model:** 902 is a failure verdict that services may give instead of 904. The client treats both as the end of the exchange, and may retry. hs D6 folded 902 and 905 into 904. This model keeps them apart (D6 for 905).
+
+## D17. Exploration restrictions R1-R4 (v0.1)
+
+These are choices the spec text does **not** impose. They narrow the server behaviours this model explores. Each is also listed in the module header. A pass under them says nothing about the interleavings they remove.
+
+| | Restriction | Spec lines that do not impose it | Relaxed by |
+| --- | --- | --- | --- |
+| R1 | The account changes in the step that sends its 900 or 901. | S1:79, S1:199-205 | switch `AcctEarly` (903-first success sets the account at the verdict, 900 owed) |
+| R2 | After an unsupported mechanism, 908 comes before 904. | S1:46-48, S1:231 | switch `AnyOrder908` (904 first, 908 owed) |
+| R3 | Read barrier: no AUTHENTICATE line is read while 900/903/908/904 of the last opener are owed. | S1:79, S2:62-63 | not relaxed (D14) |
+| R4 | A DEL cancels SASL-specific owed output but not an owed 900. | CN:456-457 vs S1:199 | not a switch; the reading is D13, open as Q7 |
+
+The limited configs turn on `AnyOrder908` (`TinyMechs`) and `AcctEarly` (`TinyReauth`, `TinySame`), so both orders are explored now. R3 is the restriction with the largest cost in coverage.
+
+## D18. The exact-advertisement policy (v0.1)
+
+> "Servers SHOULD advertise the available SASL authentication mechanisms in the value of the `sasl` client capability in `CAP LS`." (S2:38-39)
+> "The value, if present, MUST be a comma (`,`) separated list of SASL authentication mechanisms." (S2:41-42)
+
+S2:41-42's MUST is about syntax. The model has no syntax, so that rule is **out**.
+
+v0 attributed `RuleValueIsMechs` (a value equals the supported set exactly) to S2:41-42. That is stronger than the MUST, and is not what it says.
+
+**Model:** the model server follows a **policy**: when it sends a value (switch `AdvertValue`, S2:38-39's SHOULD, extended to NEW by CN:426-428), the value is exactly the supported set at that moment. `RuleValueIsMechs` checks that policy. It is not a spec MUST: a server that lists a subset, or a superset with stale entries, breaks the policy, not S2:41-42. Clients must cope with a list that differs from what is supported anyway (S2:77-78, D11).
+
+## D19. Local abandonment of an abort (`CGiveUp`, v0.1)
+
+S1:39-40 asks clients to be "prepared for timeouts at all times". In the model that is the client reading `SrvTimeout`'s 904 in every exchange state: before the challenge, between chunks, and while waiting. Client abort is a separate rule (S1:72-73, `CAbort`).
+
+`CGiveUp` is neither of these. It is an **explicit local-abandonment assumption**: a client that has sent `*` stops waiting for its 906, and may open a new exchange. The spec does not describe this. It is kept because real clients time out locally.
+
+Its consequence is hs D12's: the abandoned exchange's 906 (or another of its replies) can arrive later and end the next exchange early. `ExchangeEnds` accepts give-ups. The `NoAbandon` scenario (D15) turns `CGiveUp` off.

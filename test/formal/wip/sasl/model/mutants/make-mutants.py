@@ -15,6 +15,17 @@ Expected (predictions; nothing has been run):
   MU_KeepAfterDel   (TinyNotify) client keeps its exchange (and keeps sending)
                                  after DEL sasl                -> RuleClientAuthOnlyEnabled
   MU_SrvKeepAfterDel(TinyNotify) server keeps the exchange after DEL sasl -> DelCancels
+  MU_DelKeepOwed    (TinyNotify) v0.1: DEL leaves an owed 903 alive (CN:456-457)
+                                                               -> DelCancels
+  MU_FinalShort     (TinyChunks) v0.1: client sends SHORT where the empty final
+                                 response "+" is due (S1-9)    -> RuleClientEmptyFinal
+                                 (RuleClientFraming and the v0 plan-based check pass)
+  MU_ExactShort     (TinyChunks) v0.1: client ends an exact-400 payload with SHORT
+                                 instead of "+"                 -> RuleClientSendsPayload
+                                 (RuleClientFraming passes: SHORT ends a response)
+  MU_PostRegWrongErr(TinyS1)     v0.1: S1 server answers an unauthenticated opener
+                                 after 001 with 906, not an error -> RuleReauthRefused
+                                 (RuleOpenerAnswered passes: something was sent)
   MU_ChangeOn907    (TinyS1)     server logs the client out while sending 907
                                                                -> Rule907NoChange
   MU_No907          (TinyS1)     S1 server lets an authenticated client
@@ -45,8 +56,21 @@ mut('MU_KeepAfterDel', 'TinyNotify',
     '!.sasl = IF InExchange THEN "idle" ELSE @, !.out = IF InExchange THEN <<>> ELSE @,',
     '!.sasl = @, !.out = @,')
 mut('MU_SrvKeepAfterDel', 'TinyNotify',
-    '!.cout = <<>>, !.sasl = "idle", !.got = 0]',
-    '!.got = @]')
+    '!.cout = <<>>, !.sasl = "idle", !.got = 0,',
+    '!.got = @,')
+mut('MU_DelKeepOwed', 'TinyNotify',
+    '!.owe903 = FALSE, !.owe904 = FALSE, !.owe908 = FALSE]',
+    '!.owe904 = FALSE, !.owe908 = FALSE]')
+mut('MU_FinalShort', 'TinyChunks',
+    "/\\ c2s' = Append(c2s, M(Head(cli.out)))",
+    "/\\ c2s' = Append(c2s, M(IF Head(cli.out) = \"PLUS\" /\\ cli.mech \\in TwoRound\n"
+    "                                     /\\ cli.round = 2 THEN \"SHORT\" ELSE Head(cli.out)))")
+mut('MU_ExactShort', 'TinyChunks',
+    'ELSE IF p.full THEN Fulls(p.n) \\o <<"PLUS">>   \\* cli-exact',
+    'ELSE IF p.full THEN Fulls(p.n) \\o <<"SHORT">>')
+mut('MU_PostRegWrongErr', 'TinyS1',
+    "ELSE IF srv.reg /\\ Reauth = \"none\"\n    THEN sout' = Append(sout, M(\"904\"))",
+    "ELSE IF srv.reg /\\ Reauth = \"none\"\n    THEN sout' = Append(sout, M(\"906\"))")
 mut('MU_ChangeOn907', 'TinyS1',
     "THEN sout' = Append(sout, M(\"907\")) /\\ srv' = srv  \\* opener-907",
     "THEN sout' = Append(sout, M(\"907\")) /\\ srv' = [srv EXCEPT !.account = \"\"]")
