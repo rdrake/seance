@@ -91,13 +91,31 @@ def command(raw):
     return split(raw)[1]
 
 
+_servers = set()
+
+
+def set_servers(meta, rows):
+    """The server names the trace shows: the recorder's (the source of 001),
+    the source of the version reply, and the source of every numeric."""
+    global _servers
+    _servers = {meta["server"]} if meta.get("server") else set()
+    lines = list(meta.get("version", []))
+    for r in rows:
+        lines += [x["raw"] if isinstance(x, dict) else x for x in r["recv"]]
+    for x in lines:
+        src, cmd, _ = split(x)
+        if cmd.isdigit() and src:
+            _servers.add(src)
+
+
 def nick_of(src):
-    """The nick of a user source, or None for a server.  A source may be the
-    nick alone; a nick never holds a dot and a server name always does, so
-    a bare name with a dot is a server."""
+    """The nick of a user source, or None for a server.  A user source may
+    be the nick alone, and neither a nick nor a server name has to hold a
+    dot (Modern IRC: SHOULD only), so a bare name is a server only when the
+    trace shows it is one."""
     if "!" in src or "@" in src:
         return re.split("[!@]", src, maxsplit=1)[0]
-    return src if src and "." not in src else None
+    return src if src and src not in _servers else None
 
 
 def kind(raw, sent_cmd):
@@ -241,6 +259,7 @@ def check(path):
     meta, cmds = rows[0], rows[1:]
     echo = meta.get("echo")
     set_casemapping(meta.get("isupport"))
+    set_servers(meta, cmds)
     me = meta.get("nicks", [""])[0]
     res = []
     for r in cmds:

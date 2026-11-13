@@ -198,7 +198,7 @@ a.drain()
 
 recs = [{"kind": "meta", "server_label": args.server_label, "runid": RUN, "caps": a.caps,
          "echo": not args.no_echo, "sasl": bool(args.sasl), "isupport": a.isupport,
-         "version": ver, "chan": CHAN, "nicks": [a.nick, b.nick]}]
+         "version": ver, "server": a.server, "chan": CHAN, "nicks": [a.nick, b.nick]}]
 
 S = [
     ("privmsg-chan", f"PRIVMSG {CHAN} :hello one"),
