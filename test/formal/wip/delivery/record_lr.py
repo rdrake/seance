@@ -221,6 +221,9 @@ for name, cmd, *tags in S:
 b.send("AWAY :b is away")
 b.drain()
 recs.append(run(a, "privmsg-user-away", f"PRIVMSG {b.nick} :to away b"))
+# Controls: a NOTICE or TAGMSG draws no 301.
+recs.append(run(a, "notice-user-away", f"NOTICE {b.nick} :notice to away b"))
+recs.append(run(a, "tagmsg-user-away", f"TAGMSG {b.nick}", "+typing=active"))
 b.send("AWAY")
 b.drain()
 
