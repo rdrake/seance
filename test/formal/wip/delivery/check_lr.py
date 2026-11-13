@@ -193,7 +193,7 @@ class Batches:
         self.nodes, self.errors, self.member_of = {}, [], {}
         open_ = {}
         for i, x in enumerate(lines):
-            src, cmd, params = split(x)
+            _, cmd, params = split(x)
             ref = tags(x).get("batch")
             if "multiline-concat" in tags(x):
                 self.errors.append("Multiline: the unprefixed multiline-concat tag")
@@ -210,9 +210,8 @@ class Batches:
                     self.errors.append(f"BatchSyntax: batch {r} starts with no type")
                 if r in open_:
                     self.errors.append(f"BatchClosed: batch {r} starts again while open")
-                node = {"ref": r, "type": params[1] if len(params) > 1 else "",
-                        "args": params[2:], "src": src, "start": i, "parent": ref,
-                        "members": [], "closed": False}
+                node = {"type": params[1] if len(params) > 1 else "",
+                        "args": params[2:], "start": i, "parent": ref, "members": []}
                 open_[r] = self.nodes[(r, i)] = node
                 if ref is not None:
                     open_[ref]["members"].append(node)
@@ -228,7 +227,6 @@ class Batches:
                 if node is None:
                     self.errors.append(f"BatchRef: end of batch {r}, which is not open")
                 else:
-                    node["closed"] = True
                     node["end"] = i
                     if ref != node["parent"]:
                         # Either delimiter MAY name an outer batch; once one
@@ -260,7 +258,7 @@ def subtree(node):
 
 
 def all_closed(node):
-    return node["closed"] and all(all_closed(m) for m in node["members"] if isinstance(m, dict))
+    return "end" in node and all(all_closed(m) for m in node["members"] if isinstance(m, dict))
 
 
 def check(path):
@@ -372,7 +370,7 @@ def check(path):
             if len(node["args"]) != 1 or len(senders(node)) != 1:
                 return False
             target = fold(node["args"][0])
-            return bool(msgs) and len(msgs) == len(node["members"]) and all(
+            return len(msgs) == len(node["members"]) and all(
                 command(lines[m]) == cmd and len(split(lines[m])[2]) == 2
                 and fold(split(lines[m])[2][0]) == target for m in msgs)
 
@@ -468,9 +466,6 @@ def check(path):
                 drop = sent_cmd == "NOTICE" and kinds == ["ack"] and r["name"] in NOTICE_DROPS
                 if drop:
                     notes.append("NoticeDropped: ACK, no echo")
-                def names(k, ps):
-                    return set(ps) & set(targets)
-
                 # An error about nothing in particular (412, a FAIL with no
                 # context) answers the whole command, but only when the
                 # response is errors alone (some may name targets), beside
@@ -480,7 +475,7 @@ def check(path):
                     and any(not ps for _, ps in outcome)
                 for t in targets:
                     covered = drop or wide or any(
-                        (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in names(k, ps))
+                        (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in ps)
                         for k, ps in its)
                     if not covered:
                         what = "ACK" if kinds == ["ack"] else ", ".join(kinds) or "nothing"
