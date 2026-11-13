@@ -67,6 +67,10 @@ CONSTANTS
 CN == "cap-notify"
 Caps == OtherCaps \cup {"sasl"}  \* caps whose availability can change
 AllCaps == Caps \cup {CN}
+\* D28: a cap that only works with another (LR:31 labeled-response on batch,
+\* draft/multiline on batch).  With OtherCaps = {"a", "b"}, "a" needs "b".
+Deps == IF {"a", "b"} \subseteq OtherCaps THEN [x \in {"a"} |-> "b"]
+        ELSE [x \in {} |-> "b"]
 
 Msg(t, S, more) == [t |-> t, caps |-> S, more |-> more]
 M(t) == Msg(t, {}, FALSE)
@@ -119,7 +123,7 @@ Init ==
              reHold |-> FALSE, failSeen |-> FALSE, failThenEnd |-> FALSE,
              splitCross |-> FALSE, delInSplit |-> FALSE,
              interleave |-> FALSE, twoSplits |-> FALSE, lsEnv |-> FALSE,
-             welcome903 |-> FALSE, abortChal |-> FALSE]
+             welcome903 |-> FALSE, abortChal |-> FALSE, depAlone |-> FALSE]
     /\ gc = [between |-> FALSE, n900 |-> 0, n903 |-> 0]
 
 -----------------------------------------------------------------------------
@@ -533,6 +537,19 @@ CQuit ==
 
 CQuitOblig == env.required /\ cli.unable /\ CQuit         \* S2-3
 
+\* D28: the client treats a dependent cap as usable only while its
+\* dependency is enabled too.
+Usable(c) == c \in cli.enabled /\ Deps[c] \in cli.enabled
+
+\* D28: the client uses a dependent cap (sends a labeled line, a multiline
+\* batch).  The ghost records a use while the dependency is off.
+CUseDep ==
+    /\ CLive
+    /\ \E c \in DOMAIN Deps :
+         /\ Usable(c)
+         /\ gh' = [gh EXCEPT !.depAlone = @ \/ Deps[c] \notin cli.enabled]
+    /\ UNCHANGED <<env, c2s, s2c, sout, srv, cli>>
+
 -----------------------------------------------------------------------------
 
 NewOut == IF Len(sout') > Len(sout) THEN SubSeq(sout', Len(sout) + 1, Len(sout')) ELSE <<>>
@@ -558,7 +575,7 @@ Next ==
     \/ G(SrvChallenge) \/ G(SrvDecide) \/ G(Srv900) \/ G(Srv903) \/ G(SrvSaslTimeout) \/ G(SrvRegister)
     \/ G(Srv001) \/ G(SrvFailClose) \/ G(EnvChange)
     \/ G(CRecv) \/ G(CReq) \/ G(CMech) \/ G(CAbort) \/ G(CGiveUp) \/ G(CEnd)
-    \/ G(CQuit)
+    \/ G(CQuit) \/ G(CUseDep)
 
 \* Fairness is split.  SrvFair is an assumption about the server and the
 \* network: lines get read and delivered, REQs answered, owed lines sent,
@@ -668,6 +685,7 @@ RuleClientAuthOnlyEnabled ==                                                \* S
 RuleClientRequiredNoEnd ==                                                  \* S2-3
     [][Has(NewC2S, "END") => ~(env.required /\ cli.unable)]_vars
 RuleFailCloseReason == [][Has(NewOut, "ERROR") => srv.failed]_vars          \* S2-7
+RuleDepNeedsDep == ~gh.depAlone                                             \* LR:31, D28
 
 \* S2-3: once a required client cannot get sasl, it disconnects.
 RequiredQuits == [](env.required /\ cli.unable => <>(cli.quit \/ cli.closed \/ srv.closed))
@@ -725,4 +743,5 @@ W_FailBeforeChal == ~(env.svcOk /\ "sasl" \in srv.enabled /\ cli.sasl = "mech"
 W_StrayOpen      == ~(srv.sasl = "open" /\ cli.sasl = "data")  \* D24: a late response opens an exchange
 W_AbortChal      == ~gh.abortChal       \* D27: "*" in answer to the challenge
 W_EarlyEnd       == ~(cli.endSent /\ ~cli.lsDone)              \* D25: END before LS is complete
+W_DepAlone       == ~(\E c \in DOMAIN Deps : c \in cli.enabled /\ Deps[c] \notin cli.enabled)  \* D28
 =============================================================================

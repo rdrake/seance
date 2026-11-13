@@ -1,0 +1,4 @@
+v7.2 (D28) limited runs, cloud container, tla2tools from ~/tools/formal.
+DepCaps.cfg (SpecHandshake)          : no error; 14,240,572 distinct states, depth 28, 4m15s
+W_DepAlone.cfg (SpecHandshake)       : W_DepAlone violated (expected: "a" enabled without "b" is reachable)
+DepCaps.cfg (mutants/MDepUnchecked)  : RuleDepNeedsDep violated (expected: the mutant uses "a" without "b")

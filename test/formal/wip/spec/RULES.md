@@ -37,6 +37,7 @@ or **out** (outside the model's scope; see the header of `SpecHandshake.tla`).
 | CN-23 | CN:475-479 | MUST | `CAP LS 302` enables cap-notify implicitly; the server must not disable it. | guard (NEW/DEL always sent; cap-notify never DELed). |
 | CN-23b | CN:481-485 | MAY / MUST | The server MAY list cap-notify in LS; the client MAY REQ it; a capable server MUST ACK it without side effects. | guard: LS may include it; REQ of it is always ACKed; switch `ReqCapNotify` (D14). |
 | CN-24 | CN:491-492 | MUST | With cap-notify, the server notifies all new and removed caps. | guard: every change in `offered` sends NEW or DEL in the same step. |
+| DEP-1 | LR:31; multiline, event-playback | MUST | `labeled-response` "depends on the `batch` capability which MUST be negotiated to use labeled responses"; `draft/multiline` requires `batch`; `draft/event-playback` only shapes `chathistory` batches. A client uses a dependent cap only while its dependency is enabled. | prop: `RuleDepNeedsDep` (client), with `OtherCaps = {"a", "b"}` and "a" depending on "b" (D28). |
 
 ## SASL 3.1 (S1)
 
