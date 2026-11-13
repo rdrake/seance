@@ -91,8 +91,14 @@ def command(raw):
     return split(raw)[1]
 
 
-def nick_of(src):
-    return src.split("!", 1)[0] if "!" in src else None
+def nick_of(src, me):
+    """The nick of a user source.  A source may be the nick alone; a bare
+    name is taken as a nick only when it is ours, since a server's name
+    cannot be told from another user's nick without the trace's server
+    list."""
+    if "!" in src or "@" in src:
+        return re.split("[!@]", src, maxsplit=1)[0]
+    return src if src and fold(src) == fold(me) else None
 
 
 def kind(raw, sent_cmd):
@@ -130,23 +136,26 @@ NOTICE_DROPS = {"notice-chan-moderated"}
 SELF_SCENES = ("privmsg-self", "privmsg-self-away")
 
 
-# RFC 1459 casemapping folds []\~ to {}|^ as well as A-Z; strict-rfc1459
-# leaves ~ alone.  The trace's ISUPPORT names the mapping; a server that
-# names none uses rfc1459 (Modern IRC).
-CASEMAPS = {"rfc1459": str.maketrans("[]\\~", "{}|^"),
-            "strict-rfc1459": str.maketrans("[]\\", "{}|"),
-            "ascii": {}}
+# ascii folds A-Z only; rfc1459 also folds []\~ to {}|^, and strict
+# rfc1459 (spelled either way) leaves ~ alone.  The trace's ISUPPORT names
+# the mapping; a server that names none uses rfc1459 (Modern IRC).  Any
+# other mapping (rfc7613, precis) folds Unicode case.
+_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+CASEMAPS = {"ascii": str.maketrans(_UPPER, _UPPER.lower()),
+            "rfc1459": str.maketrans(_UPPER + "[]\\~", _UPPER.lower() + "{}|^"),
+            "strict-rfc1459": str.maketrans(_UPPER + "[]\\", _UPPER.lower() + "{}|")}
+CASEMAPS["rfc1459-strict"] = CASEMAPS["strict-rfc1459"]
 _casemap = CASEMAPS["rfc1459"]
 
 
 def set_casemapping(isupport):
     global _casemap
     names = [t.split("=", 1)[1] for t in isupport or () if t.startswith("CASEMAPPING=")]
-    _casemap = CASEMAPS.get(names[-1] if names else "rfc1459", {})
+    _casemap = CASEMAPS.get(names[-1] if names else "rfc1459")
 
 
 def fold(x):
-    return x.lower().translate(_casemap)
+    return x.translate(_casemap) if _casemap is not None else x.lower()
 
 
 class Batches:
@@ -160,6 +169,8 @@ class Batches:
         for i, x in enumerate(lines):
             src, cmd, params = split(x)
             ref = tags(x).get("batch")
+            if "multiline-concat" in tags(x):
+                self.errors.append("Multiline: the unprefixed multiline-concat tag")
             if ref is not None and ref not in open_:
                 self.errors.append(f"BatchRef: {cmd} names batch {ref}, which is not open")
                 ref = None
@@ -255,7 +266,7 @@ def check(path):
             fails.append("AckOnlyAlone: ACK takes no parameters")
 
         def mine(i):
-            return fold(nick_of(split(lines[i])[0]) or "") == fold(me)
+            return fold(nick_of(split(lines[i])[0], me) or "") == fold(me)
 
         def item(i):
             """(kind, params) of one line of the response."""
@@ -297,7 +308,7 @@ def check(path):
             return out
 
         def senders(node):
-            return {fold(nick_of(split(lines[m])[0]) or "")
+            return {fold(nick_of(split(lines[m])[0], me) or "")
                     for m in node["members"] if not isinstance(m, dict)}
 
         def well_formed(node, cmd):
@@ -331,7 +342,8 @@ def check(path):
 
         response, its, shape = set(), [], None
         if head is not None:
-            if command(lines[head]) == "BATCH" and split(lines[head])[2][0].startswith("+"):
+            hp = split(lines[head])[2]
+            if command(lines[head]) == "BATCH" and hp and hp[0].startswith("+"):
                 node = bt.at(head)
                 response = subtree(node)
                 if not all_closed(node):
@@ -356,7 +368,7 @@ def check(path):
             if i in response or command(x) in ("PING", "PONG"):
                 continue
             src, cmd, params = split(x)
-            n = nick_of(src)
+            n = nick_of(src, me)
             if n is not None and fold(n) != fold(me):
                 continue
             if cmd in MSG and params and fold(params[0]) == fold(me) \
