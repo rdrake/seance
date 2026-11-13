@@ -1,0 +1,29 @@
+== nef2-7d4ec09 echo=on: 55/63 commands hold
+  note privmsg-self: SelfCopy: 2 copies, label on copy 1
+  FAIL privmsg-user-away (single, labeled away): OneResponse: unlabeled PRIVMSG outside the response
+  FAIL privmsg-user-away (single, labeled away): EchoEach: no echo or error for lrukarb (away)
+  FAIL action-user-away (single, labeled away): OneResponse: unlabeled PRIVMSG outside the response
+  FAIL action-user-away (single, labeled away): EchoEach: no echo or error for lrukarb (away)
+  FAIL reply-user-away (single, labeled away): OneResponse: unlabeled PRIVMSG outside the response
+  FAIL reply-user-away (single, labeled away): EchoEach: no echo or error for lrukarb (away)
+  FAIL privmsg-user-away-long (single, labeled away): OneResponse: unlabeled PRIVMSG outside the response
+  FAIL privmsg-user-away-long (single, labeled away): EchoEach: no echo or error for lrukarb (away)
+  FAIL privmsg-user-away-twice (single, labeled away): OneResponse: unlabeled PRIVMSG outside the response
+  FAIL privmsg-user-away-twice (single, labeled away): EchoEach: no echo or error for lrukarb (away)
+  FAIL privmsg-self-away (single, labeled away): EchoEach: no echo or error for lrukara (away)
+  note privmsg-self-away: SelfCopy: 2 copies, label on 301
+  FAIL privmsg-user-silenced (ack, labeled ack): EchoEach: no echo or error for lrukarb (ACK)
+  note notice-chan-moderated: NoticeDropped: ACK, no echo
+  FAIL multiline-user-away (batch, labeled echo): OneResponse: unlabeled 301 outside the response
+== nef2-7d4ec09 echo=off: 61/63 commands hold
+  note privmsg-self: SelfCopy: 1 copies, label on ACK
+  note privmsg-user-away: AwayAccepts: 301 answers the message
+  note action-user-away: AwayAccepts: 301 answers the message
+  note reply-user-away: AwayAccepts: 301 answers the message
+  note privmsg-user-away-long: AwayAccepts: 301 answers the message
+  note privmsg-user-away-twice: AwayAccepts: 301 answers the message
+  note privmsg-two-targets-away: AwayAccepts: 301 answers the message
+  note privmsg-self-away: AwayAccepts: 301 answers the message
+  note privmsg-self-away: SelfCopy: 1 copies, label on 301
+  FAIL multiline-chan (none, labeled None): LabelOnce: 0 labeled lines
+  FAIL multiline-user-away (none, labeled None): LabelOnce: 0 labeled lines
