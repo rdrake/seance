@@ -89,8 +89,9 @@ _servers = set()
 SERVER_ONLY = ("ACK", "FAIL", "WARN", "NOTE", "PING", "PONG")
 # How many params name subjects after an error numeric's recipient; the
 # rest is the description (Modern IRC, and nefarious2's 485-489 and 716).
-# Any other error: at least one subject, then the description.
-ERR_SUBJECTS = {"401": 1, "402": 1, "403": 1, "404": 1, "405": 1, "406": 1, "407": 1,
+# An error numeric not in the table is reported, never trusted to settle:
+# its shape is unknown.
+ERR_SUBJECTS = {"401": 1, "402": 1, "403": 1, "404": 1, "409": 0, "417": 0, "422": 0, "478": 2, "484": 2, "405": 1, "406": 1, "407": 1,
                 "411": 0, "412": 0, "413": 1, "414": 1, "421": 1, "431": 0, "432": 1,
                 "433": 1, "436": 1, "437": 1, "441": 2, "442": 1, "443": 2, "451": 0,
                 "461": 1, "462": 0, "464": 0, "465": 0, "471": 1, "473": 1, "474": 1,
@@ -133,7 +134,7 @@ def kind(raw, sent_cmd):
     if cmd == "BATCH":
         return "batch"
     if cmd.isdigit():
-        return "err" if cmd[0] in "45" else "numeric"
+        return "err" if cmd[0] in "45" or cmd in ERR_SUBJECTS else "numeric"
     if cmd == sent_cmd:
         return "echo"
     return cmd.lower()
@@ -151,7 +152,8 @@ FEEDBACK = ("warn", "note")
 REF_OK = re.compile(r"^[A-Za-z0-9-]+$")
 # FAIL codes whose context is a limit, not a target: they refuse the whole
 # message (multiline spec).
-WIDE_FAILS = ("MULTILINE_MAX_BYTES", "MULTILINE_MAX_LINES", "MULTILINE_INVALID")
+LIMIT_FAILS = ("MULTILINE_MAX_BYTES", "MULTILINE_MAX_LINES")
+WIDE_FAILS = LIMIT_FAILS + ("MULTILINE_INVALID",)
 # D39: scenes where the trace's setup makes the server drop a NOTICE
 # silently, so ACK answers it even with echo-message on.  An assumption
 # about the fixture, not a protocol rule: the scene name cannot prove the
@@ -320,14 +322,20 @@ def check(path):
                 # Its position says which param is the description, not
                 # the wire colon: a one-word last param may come without it.
                 if k == "err":
-                    n = ERR_SUBJECTS.get(cmd, max(len(params) - 2, 1))
+                    if cmd not in ERR_SUBJECTS:
+                        return "unknownerr", []
+                    n = ERR_SUBJECTS[cmd]
                     if len(params) < n + 2:
                         # recipient, subjects and description, all required
                         return "malformed", []
-                    about = params[1:1 + n]
+                    # 421 and 461 name the command, not a target: they refuse
+                    # the whole command.
+                    about = [] if cmd in ("421", "461") else params[1:1 + n]
                 else:
                     about = params[2:-1]
-                if k == "fail" and len(params) > 1 and params[1].upper() in WIDE_FAILS:
+                if k == "fail" and params[1].upper() in WIDE_FAILS:
+                    if params[1].upper() in LIMIT_FAILS and len(params) < 4:
+                        return "malformed", []  # its limit is required
                     about = []
                 return k, [fold(p) for p in about]
             return k, [fold(p) for p in params]
@@ -445,7 +453,7 @@ def check(path):
         if "ack" in kinds and (shape != "single" or outside):
             fails.append("AckOnlyAlone: ACK beside another reply")
 
-        if not is_msg and any(k in ("malformed", "othercmd") for k in kinds):
+        if not is_msg and any(k in ("malformed", "othercmd", "unknownerr") for k in kinds):
             fails.append("ReplySyntax: an error or standard reply missing its parameters "
                          "or about another command")
         if is_msg and head is not None:
