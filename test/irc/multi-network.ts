@@ -459,6 +459,82 @@ describe("multiple networks", function () {
 			}
 		});
 
+		describe("a blank password keeps the one in use when it is not remembered (#189)", function () {
+			function live(): IrcClient {
+				stored({rememberPassword: false, saslPassword: "", commands: []});
+				const a = manager.createNetwork({
+					uuid: "net-a",
+					nick: "alice",
+					join: "#one",
+					sasl: "plain",
+					saslAccount: "alice",
+					saslPassword: "pw",
+					serverPassword: "srvpw",
+				});
+				manager.transportOf(a).open(); // up, so the edit waits for the next connect
+				return a;
+			}
+
+			// The edit waits for the next connect while this one is up.
+			function dropped(a: IrcClient): void {
+				manager.transportOf(a).closed(1006, "", true);
+			}
+
+			const form = {
+				uuid: "net-a",
+				host: "net-a.test",
+				port: "8443",
+				tls: "on",
+				nick: "alice",
+				join: "#one, #two",
+				sasl: "plain",
+				saslAccount: "alice",
+				saslPassword: "",
+				hasServerPassword: "on",
+				serverPassword: "",
+			};
+
+			it("keeps the live passwords and still writes none to disk", function () {
+				const a = live();
+				socket.emit("network:edit", form);
+				dropped(a);
+
+				expect(a.editableInfo.saslPassword).to.equal("pw");
+				expect(a.options.serverPassword).to.equal("srvpw");
+				expect(saved.get("net-a")).to.include({saslPassword: "", join: "#one, #two"});
+				expect(saved.get("net-a")?.serverPassword).to.equal(undefined);
+			});
+
+			it("does not carry the password over to another account", function () {
+				const a = live();
+				socket.emit("network:edit", {...form, saslAccount: "bob"});
+				dropped(a);
+
+				expect(a.editableInfo.saslAccount).to.equal("bob");
+				expect(a.editableInfo.saslPassword).to.equal("");
+			});
+
+			it("stores the live password when the same edit turns Remember on", function () {
+				live();
+				socket.emit("network:edit", {...form, rememberPassword: "on"});
+
+				expect(saved.get("net-a")).to.include({saslPassword: "pw", rememberPassword: true});
+			});
+
+			it("keeps the login trusted: nothing about it changed", function () {
+				useTrustBackend(backend);
+
+				try {
+					live();
+					trustLogin("net-a", "alice");
+					socket.emit("network:edit", form);
+					expect(loginTrusted("net-a", "alice")).to.equal(true);
+				} finally {
+					useTrustBackend(null);
+				}
+			});
+		});
+
 		it("network:edit saves, sends NICK when connected and renames live", function () {
 			stored();
 			const a = manager.createNetwork({uuid: "net-a", nick: "alice", join: "#one"});

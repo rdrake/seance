@@ -367,6 +367,21 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 				presenceMode: client?.presenceMode,
 			});
 		const next = saved.fromForm(data, base);
+		// A blank password field keeps the password in use, as the form's
+		// placeholder says, even when it is not on disk to keep (#189): from
+		// the live client, for the same account only.  saved.save() still
+		// writes it only where Remember is on.  (A blank server password
+		// already keeps the one in memory: applySettings.)
+		const live = client?.options;
+
+		if (
+			live &&
+			data.saslPassword === "" &&
+			!next.saslPassword &&
+			next.saslAccount === live.saslAccount
+		) {
+			next.saslPassword = live.saslPassword;
+		}
 		// A different mode from the form is a choice made now (shared,
 		// irc/presenceShare.ts); the same mode posted again is not.
 		const was = client?.presenceMode ?? saved.presenceModeOf(existing);
@@ -381,7 +396,9 @@ export function registerBusHandlers(bus: EventBus, registry: ClientRegistry): vo
 
 		// Edited credentials have not proved themselves (saslTrust.ts); the
 		// client, when there is one, forgets them again in applySettings.
-		if (next.saslAccount !== base?.saslAccount || next.saslPassword !== base?.saslPassword) {
+		const before = base?.saslPassword || live?.saslPassword;
+
+		if (next.saslAccount !== base?.saslAccount || next.saslPassword !== before) {
 			forgetLogin(uuid);
 		}
 
