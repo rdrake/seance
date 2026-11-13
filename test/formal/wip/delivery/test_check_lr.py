@@ -203,6 +203,15 @@ CASES = [
     ("a multiline batch refused for its lines",
      "@label=L BATCH +m draft/multiline bob",
      ["@label=L :s FAIL BATCH MULTILINE_MAX_LINES 10 :Too many lines"], True, "case", False),
+    # sixth review
+    ("someone else's multiline message to us in the same window",
+     "@label=L PRIVMSG bob :hi",
+     ["@label=L " + E, ":s BATCH +d draft/multiline me", "@batch=d :carol!u@h PRIVMSG me :hello",
+      ":s BATCH -d"], True, "case", False),
+    ("a multiline echo line with no text",
+     "@label=L PRIVMSG bob :hi",
+     ["@label=L :s BATCH +d draft/multiline bob", "@batch=d :me!u@h PRIVMSG bob",
+      ":s BATCH -d"], True, "case", True),
     # accepted shapes
     ("lone labeled echo", "@label=L PRIVMSG bob :hi", ["@label=L " + E], True, "case", False),
     ("lone 301 accepts with echo off",

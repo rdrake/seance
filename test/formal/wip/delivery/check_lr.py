@@ -279,7 +279,7 @@ def check(path):
             msgs = [m for m in node["members"] if not isinstance(m, dict)]
             target = fold(node["args"][0]) if node["args"] else ""
             return bool(msgs) and len(msgs) == len(node["members"]) and all(
-                command(lines[m]) == cmd and mine(m) and split(lines[m])[2]
+                command(lines[m]) == cmd and mine(m) and len(split(lines[m])[2]) == 2
                 and fold(split(lines[m])[2][0]) == target for m in msgs)
 
         def multiline_item(node):
@@ -323,9 +323,11 @@ def check(path):
                 continue
             if cmd == "BATCH" and len(params) > 2 and params[1] in MULTILINE \
                     and fold(params[2]) == fold(me):
-                # the delivered copy of a multiline message to us
+                # A multiline message to us: someone else's is traffic; one
+                # from us is the delivered copy, and must be well formed.
                 node = bt.at(i)
-                if not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
+                ours = [m for m in node["members"] if not isinstance(m, dict) and mine(m)]
+                if ours and not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
                     fails.append("Multiline: a delivered multiline batch that is not one "
                                  "message kind to its target")
                 continue
