@@ -330,7 +330,12 @@ def check(path):
                         return "malformed", []
                     # 421 and 461 name the command, not a target: they refuse
                     # the whole command.
-                    about = [] if cmd in ("421", "461") else params[1:1 + n]
+                    if cmd in ("421", "461"):
+                        if params[1].upper() != sent_cmd:
+                            return "othercmd", []
+                        about = []
+                    else:
+                        about = params[1:1 + n]
                 else:
                     about = params[2:-1]
                 if k == "fail" and params[1].upper() in WIDE_FAILS:
@@ -468,9 +473,11 @@ def check(path):
 
                 # An error about nothing in particular (412, a FAIL with no
                 # context) answers the whole command, but only when the
-                # response is errors alone, beside any feedback.
+                # response is errors alone (some may name targets), beside
+                # any feedback.
                 outcome = [(k, ps) for k, ps in its if k not in FEEDBACK]
-                wide = bool(outcome) and all(k in ("err", "fail") and not ps for k, ps in outcome)
+                wide = bool(outcome) and all(k in ("err", "fail") for k, _ in outcome) \
+                    and any(not ps for _, ps in outcome)
                 for t in targets:
                     covered = drop or wide or any(
                         (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in names(k, ps))
