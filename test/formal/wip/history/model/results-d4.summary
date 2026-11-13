@@ -10,3 +10,10 @@
   Delivery V4Spent 348377 distinct states pass
   Delivery W_SpentSelfDeliv 239963 distinct states Error: Invariant NoCrossFromConfirmedDeliv is violated.
   Delivery W_SpentModify 327087 distinct states Error: Invariant ConfirmedByOwnOrTwin is violated.
+# Delivery v2.4.1 simplified (Settle by EXCEPT, DM_NoSpent branch removed), cloud, limited; 2026-11-13T02:45Z
+  Delivery V4Spent 348377 distinct states pass (unchanged)
+  DM_NoSpent V4Spent 348365 distinct states Error: Temporal property ResolvedByResponse was violated. (unchanged)
+  Delivery W_SpentModify 337761 distinct states Error: Invariant ConfirmedByOwnOrTwin is violated.
+  Delivery W_SpentSelfDeliv 414073 distinct states Error: Invariant NoCrossFromConfirmedDeliv is violated.
+  Delivery Base 1285641 distinct states pass (unchanged)
+# A failing run stops at the first violation a worker reaches, so its count varies with 4 workers; passing counts are exact.

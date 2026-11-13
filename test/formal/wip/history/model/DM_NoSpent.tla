@@ -316,18 +316,18 @@ Now == [p |-> pend, b |-> by, c |-> cause, r |-> role, mc |-> modConf, e |-> ear
 \* line's root batch is still open after this step.
 Settle(s, l, o, m, oa) ==
     IF l # NoLabel /\ Pending(s.p, l)
-    THEN [p  |-> [s.p EXCEPT ![l] = o],
-          b  |-> [s.b EXCEPT ![l] = IF m.who = l THEN "own" ELSE m.who],
-          c  |-> [s.c EXCEPT ![l] = m.k],
-          r  |-> [s.r EXCEPT ![l] = m.role],
-          mc |-> IF o = "confirmed" /\ m.txt # pendTxt[l] THEN s.mc \cup {l} ELSE s.mc,
-          e  |-> s.e \/ (Deferred /\ oa),
-          x  |-> s.x \/ (m.who \in Labels /\ m.who # l /\ s.p[m.who] = "timedout"),
-          d  |-> s.d \/ (m.role = "deliv" /\ m.who \in Labels /\ m.who # l
+    THEN [s EXCEPT
+          !.p  = [s.p EXCEPT ![l] = o],
+          !.b  = [s.b EXCEPT ![l] = IF m.who = l THEN "own" ELSE m.who],
+          !.c  = [s.c EXCEPT ![l] = m.k],
+          !.r  = [s.r EXCEPT ![l] = m.role],
+          !.mc = IF o = "confirmed" /\ m.txt # pendTxt[l] THEN s.mc \cup {l} ELSE s.mc,
+          !.e  = s.e \/ (Deferred /\ oa),
+          !.x  = s.x \/ (m.who \in Labels /\ m.who # l /\ s.p[m.who] = "timedout"),
+          !.d  = s.d \/ (m.role = "deliv" /\ m.who \in Labels /\ m.who # l
                          /\ s.p[m.who] = "confirmed" /\ s.b[m.who] = "own" /\ s.r[m.who] = "resp"),
-          h  |-> s.h \/ (m.role = "hist"),
-          kc |-> s.kc \/ (m.k = "echo" /\ m.cmd # pendCmd[l]),
-          sp |-> s.sp]
+          !.h  = s.h \/ (m.role = "hist"),
+          !.kc = s.kc \/ (m.k = "echo" /\ m.cmd # pendCmd[l])]
     ELSE s
 
 \* Handle one line with effective label `lab`.  History lines settle nothing (D19).
@@ -340,8 +340,7 @@ Handle(m, lab, hist, oa, s) ==
            [] m.k \in {"fail", "err"} -> Settle(s, lab, "failed", m, oa)
            \* D40: a reply that carries the label itself but settles nothing
            \* (a 301) spends it; one inside a labeled batch does not.
-           [] FALSE -> s
-           [] OTHER -> s
+                      [] OTHER -> s
 
 \* Deferred: process every buffered line, in order (BA:55, BA:63).
 RECURSIVE HandleAll(_, _)

@@ -24,8 +24,7 @@ M = {
     "DM_GlobalHist": ("HistOf(m) == m.ref # 0 /\\ ob[m.ref].on /\\ ob[m.ref].hist",
                       "HistOf(m) == \\E r \\in RefIds : ob[r].on /\\ ob[r].hist"),
     # D40: Seance before #297, a 301 that carries the label spends nothing
-    "DM_NoSpent": ('[] m.k = "note" /\\ m.lab \\in Labels -> [s EXCEPT !.sp = @ \\cup {m.lab}]',
-                   '[] FALSE -> s'),
+    "DM_NoSpent": ('[] m.k = "note" /\\ m.lab \\in Labels -> [s EXCEPT !.sp = @ \\cup {m.lab}]\n', ''),
     # server mutants
     "DS_Twice": ("/\\ owed' = owed \\ {l}", "/\\ owed' = owed"),
     "DS_AfterSettle": ("/\\ ~closed /\\ l \\in owed /\\ out[l] = << >>",
