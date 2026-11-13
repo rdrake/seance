@@ -47,6 +47,8 @@ Batch is negotiated state. With metadata the client may ask for batch (`REQB`) b
 
 Witnesses: `W_MetaDropped` (a key acknowledged, then removed), `W_MetaBeforeBatch` (761 `*` before the batch ACK, and the key kept). Mutants: `MU_TrustDropped` (the client trusts any acknowledged key, as Seance did before evilnet/seance#299) and `MU_KeepWithoutBatch` (the server keeps the stored key, caught by `RuleWelcomeStore`).
 
+**Scope, after evilnet/nefarious2#222 (2026-11-13).** Two server behaviours fall outside the model. A SASL login during registration replaces a before-connect key with the account's stored metadata; the model has no SASL, so `RuleHeldIsKept` holds only for a registration without a login (the client must treat a held key as replaceable after 900). And before CAP END, GET, LIST, CLEAR, SUBS and SYNC without both caps get 421, while SET, SUB and UNSUB are answered without a batch; the model sends only SET. The burst order (after LUSERS, before 376/422, an empty batch when nothing is set) matches D6.
+
 ## Open questions (to settle from traces)
 - **Q1.** METADATA aimed at a target other than `*` before registration: refused, or accepted? The spec is silent; the model reads refused (D5). **Observed (traces/):** both servers refuse it with `FAIL METADATA` (one `INVALID_TARGET`, the other `KEY_NO_PERMISSION`). The model's reading stands; settled.
 - **Q2.** METADATA after CAP END and before 001: is it in the burst? This is server-dependent (D7). The traces show each server's behaviour. **Observed:** both branches occur. One server reads the SET before completing registration (`761` with target `*`, key in the burst); the other completes registration first (`761` with the nick, after the burst). Settled as server-dependent, as D7 models.
