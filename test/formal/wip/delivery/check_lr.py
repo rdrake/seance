@@ -243,6 +243,8 @@ def check(path):
                 k = "loose"
             elif is_msg and cmd == sent_cmd:
                 k = "echo" if mine(i) else "foreign"
+                if k == "echo" and len(params) != (1 if cmd == "TAGMSG" else 2):
+                    k = "malformed"
             if k == "numeric" and cmd == "301":
                 k = "away"
             if k in ("err", "fail"):
@@ -271,20 +273,27 @@ def check(path):
                     out.extend(items(m))
             return out
 
+        def senders(node):
+            return {fold(nick_of(split(lines[m])[0]) or "")
+                    for m in node["members"] if not isinstance(m, dict)}
+
         def well_formed(node, cmd):
-            """A multiline batch: at least one line, every line a message
-            from us, of `cmd`, to the batch's target (multiline spec).  The
-            BATCH line's source may be the server; the lines carry the
-            sender."""
+            """A multiline batch: exactly one parameter, its target; at
+            least one line; every line a message of `cmd` with text, to the
+            target, all from one sender (multiline spec).  The BATCH line's
+            source may be the server; the lines carry the sender."""
             msgs = [m for m in node["members"] if not isinstance(m, dict)]
-            target = fold(node["args"][0]) if node["args"] else ""
+            if len(node["args"]) != 1 or len(senders(node)) != 1:
+                return False
+            target = fold(node["args"][0])
             return bool(msgs) and len(msgs) == len(node["members"]) and all(
-                command(lines[m]) == cmd and mine(m) and len(split(lines[m])[2]) == 2
+                command(lines[m]) == cmd and len(split(lines[m])[2]) == 2
                 and fold(split(lines[m])[2][0]) == target for m in msgs)
 
         def multiline_item(node):
             target = fold(node["args"][0]) if node["args"] else ""
-            return ("echo" if well_formed(node, msg_cmd) else "badmultiline", [target])
+            ok = well_formed(node, msg_cmd) and senders(node) == {fold(me)}
+            return ("echo" if ok else "badmultiline", [target])
 
         response, its, shape = set(), [], None
         if head is not None:
@@ -321,16 +330,20 @@ def check(path):
                 # a message to us (the delivered copy of one to ourselves),
                 # or a server NOTICE: traffic, not a reply
                 continue
-            if cmd == "BATCH" and len(params) > 2 and params[1] in MULTILINE \
-                    and fold(params[2]) == fold(me):
-                # A multiline message to us: someone else's is traffic; one
-                # from us is the delivered copy, and must be well formed.
+            if cmd == "BATCH" and len(params) > 1 and params[0].startswith("+") \
+                    and params[1] in MULTILINE:
+                # A multiline message: someone else's is traffic, and so is
+                # ours to ourselves (the delivered copy); ours to anyone else
+                # is an echo outside the response.  Either way it must be
+                # well formed.
                 node = bt.at(i)
-                ours = [m for m in node["members"] if not isinstance(m, dict) and mine(m)]
-                if ours and not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
-                    fails.append("Multiline: a delivered multiline batch that is not one "
-                                 "message kind to its target")
-                continue
+                who = senders(node)
+                to_me = len(params) > 2 and fold(params[2]) == fold(me)
+                if not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
+                    fails.append("Multiline: a multiline batch that is not one sender, "
+                                 "one message kind, to its target")
+                if who and (fold(me) not in who or to_me):
+                    continue
             if cmd == "BATCH" and len(params) > 1 and params[1] in ASYNC_BATCHES:
                 continue
             if bt.member_of.get(i) is not None:
