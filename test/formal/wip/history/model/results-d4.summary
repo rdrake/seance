@@ -1,0 +1,8 @@
+# Delivery v2.4 (D40), cloud, limited; 2026-11-13T01:32:00Z
+  Delivery V4Spent 348377 distinct states pass
+  Delivery V4SpentTwin 64024 distinct states Error: Invariant ConfirmedByOwn is violated.
+  Delivery W_SpentNoFallback 348365 distinct states Error: Temporal property ResolvedByResponse was violated.
+  Delivery V4LabelledOnly 321549 distinct states pass
+  DM_NoSpent V4Spent 27516 distinct states Error: Temporal property ResolvedByResponse was violated.
+  Delivery Base 1285641 distinct states pass
+  Delivery LossyTimeout 1486609 distinct states pass

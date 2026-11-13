@@ -1356,3 +1356,20 @@ With these, Ergo holds 63/63 both ways. nefarious2 fails exactly the filed issue
 - the multiline batch with echo off that gets no labeled reply (#225).
 
 The older e81d12a traces (21 commands each) fail the labeled PART answered by ACK beside an unlabeled PART, and, with echo off, the labeled copy delivered to ourselves; both were fixed in nefarious2 before 253218e. #226 (STATUSMSG answered by 401) settles by its error. It is a delivery bug, not a label one, so the checker does not flag it. Ergo has no SILENCE command, so its `privmsg-user-silenced` trace is a plain delivered PM and says nothing about #227.
+
+## D40. Delivery v2.4: a labeled 301 ahead of an unlabeled echo (2026-11-13)
+
+nefarious2 #224 answers a PRIVMSG to someone away with a labeled 301 and sends the echo unlabeled, outside any batch. LR forbids that shape: the response has two messages, so it must be one labeled batch. Seance #297 copes by letting the 301 spend the label, so the unlabeled echo may settle that copy. The model's server never sent the shape and its client had no such rule, so neither the bug nor the fix could be checked.
+
+- **Server switch `SpentLabel`** (adversarial): a non-NOTICE request may be answered by a labeled `note` (the 301) and then its echo with no label (role `unlab`).
+- **Client switch `LabelledEchoes`**: an unlabeled echo settles only a copy whose label was spent. Seance has done this since #297; before it, a labelled copy waited for its labelled echo. A reply spends a label only when it carries the label itself. A note inside a labeled batch inherits the label and spends nothing, as in Seance, which reads the line's own `label` tag.
+- **`ConfirmedByOwnOrTwin`**: a copy is confirmed by its own echo, or by the echo of a twin, meaning a copy with the same text, target and kind. Two same-text copies both answered this way can swap echoes. The user sees the right message either way, and this is #297's documented limit.
+
+Runs (cloud, limited: Labels 2, Texts 2, MaxReq 2):
+- **V4Spent**, the adversarial server with the Seance client, passes: 348,377 distinct states. That covers TypeOK, LabelOnce, OutcomeMatchesCause, ConfirmedByOwnOrTwin, Absorbing and ResolvedByResponse.
+- **V4SpentTwin** breaks ConfirmedByOwn, as expected: the swap.
+- **W_SpentNoFallback** breaks ResolvedByResponse, as expected. A label-only client never settles the copy, and this is the bug the model could not see before.
+- **V4LabelledOnly**, a conforming server with LabelledEchoes, passes with ConfirmedByOwn: 321,549 states, the same count as NoTimeout.
+- **DM_NoSpent**, Seance before #297, breaks ResolvedByResponse on V4Spent, as expected.
+
+**Unchanged results.** Every earlier config sets both switches FALSE. `spent` stays empty unless a note carries its own label, and only `SpentLabel` sends one. Base and LossyTimeout are re-run for equal distinct-state counts.

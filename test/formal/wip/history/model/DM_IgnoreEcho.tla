@@ -4,6 +4,11 @@
 (* echo-message (EM) and batch (BA), with the checked client's pending    *)
 (* copies (D15).  Decisions: ../DECISIONS.md D1, D2, D12, D13, D15-D21.    *)
 (*                                                                         *)
+(* v2.4 (D40): a server that labels a 301 and sends the echo unlabeled     *)
+(* (SpentLabel, adversarial; nefarious2 #224), and a client whose          *)
+(* unlabeled echo settles only a copy whose label a reply has spent        *)
+(* (LabelledEchoes; Seance #297).                                          *)
+(*                                                                         *)
 (* v2.2 (MODEL-REVIEW-3): history lines are queued and emitted one at a   *)
 (* time, the label ledger counts emitted lines, the obligations use the   *)
 (* wire's own provenance, and a late echo may be altered under Modify.    *)
@@ -35,7 +40,9 @@ CONSTANTS
     CloseOn,       \* D18: the connection may close
     History,       \* D19: the server may replay a same-text line in a history batch
     Notice,        \* D20: requests may be NOTICE as well as PRIVMSG
-    Modify         \* D20, EM-2: the server may alter the echoed text
+    Modify,        \* D20, EM-2: the server may alter the echoed text
+    SpentLabel,    \* D40, adversarial: a labeled 301 first, then the echo unlabeled
+    LabelledEchoes \* D40: an unlabeled echo settles only a copy whose label was spent
 
 NoLabel == "none"
 HistLabel == "h"          \* the label of a CHATHISTORY request; never a pending copy's
@@ -50,7 +57,8 @@ RefIds == 1..(2 * MaxReq + 2)
 \* only, else 0); `ref` the batch the line belongs to (0 = none; BA:51-52: a
 \* start or end never belongs to its own batch); `bt` the batch type; `who`
 \* (ghost) the request it answers, "other" or "hist"; `role` (ghost) "resp",
-\* "deliv" (a self-message's delivered copy), "late", "other" or "hist".
+\* "deliv" (a self-message's delivered copy), "late", "other", "hist" or
+\* "unlab" (D40: the echo the server sent without the label it spent).
 Ln(k, lab, txt, tgt, cmd, id, ref, bt, who, role) ==
     [k |-> k, lab |-> lab, txt |-> txt, tgt |-> tgt, cmd |-> cmd, id |-> id,
      ref |-> ref, bt |-> bt, who |-> who, role |-> role]
@@ -88,12 +96,14 @@ VARIABLES
     crossTimed,  \* ghost: a timed-out request's line settled another copy
     crossDeliv,  \* ghost: a delivered copy settled another copy after its own echo confirmed its own
     histSettled, \* ghost: a history line settled a copy
-    kindCross    \* ghost: a line of the other kind settled a copy
+    kindCross,   \* ghost: a line of the other kind settled a copy
+    spent        \* client: labels a labeled non-settling reply has used (D40)
 
 vars == <<sent, pend, pendTxt, pendTgt, pendCmd, order, ob, buf, closed, owed, out, late,
           lateUsed, s2c, nextRef, otherDone, histDone, hout, closeBuf, labeledN, firstK, compet, by, cause,
-          role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross>>
-client == <<pend, by, cause, role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross>>
+          role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross, spent>>
+client == <<pend, by, cause, role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross,
+            spent>>
 server == <<owed, out, late, lateUsed, nextRef, labeledN, firstK, compet>>
 
 LabelsUsed == {sent[i].lab : i \in 1..Len(sent)}
@@ -115,6 +125,7 @@ Init ==
     /\ role = [l \in Labels |-> "none"] /\ modConf = {}
     /\ early = FALSE /\ crossTimed = FALSE /\ crossDeliv = FALSE
     /\ histSettled = FALSE /\ kindCross = FALSE
+    /\ spent = {}
 
 -----------------------------------------------------------------------------
 (* Client sends a PRIVMSG or NOTICE with a fresh label (D12).              *)
@@ -130,7 +141,7 @@ CSend(t, g, c) ==
          /\ owed' = owed \cup {l}
     /\ UNCHANGED <<ob, buf, closed, out, late, lateUsed, s2c, nextRef, otherDone, histDone,
                    labeledN, firstK, compet, by, cause, role, modConf, early, crossTimed,
-                   crossDeliv, histSettled, kindCross>>
+                   crossDeliv, histSettled, kindCross, spent>>
     /\ UNCHANGED <<hout, closeBuf>>
 
 NLabeled(resp, l) == Len(SelectSeq(resp, LAMBDA m : m.lab = l))
@@ -180,11 +191,15 @@ SAnswer(l) ==
               failEcho == << bs, M("fail", t), M("echo", et), be >>
               ack1 == << L("ack", l, t, 0, 0, "none") >>
               partial == << bs, be >>
+              \* D40: the 301 takes the label, the echo goes out without it
+              spentR == << L("note", l, t, 0, 0, "none"),
+                           Ln("echo", NoLabel, et, g, c, 0, 0, "none", l, "unlab") >>
               Ok == {Wrap(echo1), Wrap(batch), Wrap(noteB), Wrap(nestB)}
               Bad == IF c = "NOTICE" THEN {} ELSE {fail1, err1, failB, noteFB}
               Comp == IF Competing /\ c # "NOTICE" THEN {Wrap(echoFail), Wrap(failEcho)} ELSE {}
               Lost == IF Lossy THEN {partial, ack1, << >>} ELSE {}
-          IN \/ \E resp \in Ok \cup Bad \cup Comp \cup Lost :
+              Spent == IF SpentLabel /\ c # "NOTICE" THEN {Wrap(spentR)} ELSE {}
+          IN \/ \E resp \in Ok \cup Bad \cup Comp \cup Lost \cup Spent :
                   /\ out' = [out EXCEPT ![l] = resp]
                   /\ firstK' = [firstK EXCEPT ![l] = FirstK(resp)]
                   /\ compet' = IF resp \in Comp THEN compet \cup {l} ELSE compet
@@ -270,8 +285,10 @@ SEmitHist ==
 Pending(p, l) == l \in LabelsUsed /\ p[l] = "pending"
 
 \* The oldest pending copy with text t, target g and kind c, or NoLabel.
-Oldest(p, t, g, c) ==
+\* D40: with LabelledEchoes, only a copy whose label a reply has spent.
+Oldest(p, t, g, c, sp) ==
     LET I == {i \in 1..Len(order) : Pending(p, order[i]) /\ pendTxt[order[i]] = t
+                                    /\ (~LabelledEchoes \/ order[i] \in sp)
                                     /\ pendTgt[order[i]] = g /\ pendCmd[order[i]] = c}
     IN IF I = {} THEN NoLabel ELSE order[CHOOSE i \in I : \A j \in I : i <= j]
 
@@ -293,7 +310,7 @@ HistOf(m) == m.ref # 0 /\ ob[m.ref].on /\ ob[m.ref].hist
 
 \* The client's state the handling of one line updates.
 Now == [p |-> pend, b |-> by, c |-> cause, r |-> role, mc |-> modConf, e |-> early,
-        x |-> crossTimed, d |-> crossDeliv, h |-> histSettled, kc |-> kindCross]
+        x |-> crossTimed, d |-> crossDeliv, h |-> histSettled, kc |-> kindCross, sp |-> spent]
 
 \* Settle l as outcome o by line m; terminal outcomes absorb (D13).  `oa`: the
 \* line's root batch is still open after this step.
@@ -309,17 +326,21 @@ Settle(s, l, o, m, oa) ==
           d  |-> s.d \/ (m.role = "deliv" /\ m.who \in Labels /\ m.who # l
                          /\ s.p[m.who] = "confirmed" /\ s.b[m.who] = "own" /\ s.r[m.who] = "resp"),
           h  |-> s.h \/ (m.role = "hist"),
-          kc |-> s.kc \/ (m.k = "echo" /\ m.cmd # pendCmd[l])]
+          kc |-> s.kc \/ (m.k = "echo" /\ m.cmd # pendCmd[l]),
+          sp |-> s.sp]
     ELSE s
 
 \* Handle one line with effective label `lab`.  History lines settle nothing (D19).
 Handle(m, lab, hist, oa, s) ==
     IF hist THEN s
     ELSE CASE m.k = "echo" /\ lab # NoLabel -> s
-           [] m.k = "echo" /\ Fallback -> Settle(s, Oldest(s.p, m.txt, m.tgt, m.cmd), "confirmed", m, oa)
+           [] m.k = "echo" /\ Fallback -> Settle(s, Oldest(s.p, m.txt, m.tgt, m.cmd, s.sp), "confirmed", m, oa)
            [] m.k = "ack" -> Settle(s, lab, "accepted", m, oa)
            [] m.k = "err" /\ lab = NoLabel /\ ErrFallback -> Settle(s, OnlyFor(s.p, m.tgt), "failed", m, oa)
            [] m.k \in {"fail", "err"} -> Settle(s, lab, "failed", m, oa)
+           \* D40: a reply that carries the label itself but settles nothing
+           \* (a 301) spends it; one inside a labeled batch does not.
+           [] m.k = "note" /\ m.lab \in Labels -> [s EXCEPT !.sp = @ \cup {m.lab}]
            [] OTHER -> s
 
 \* Deferred: process every buffered line, in order (BA:55, BA:63).
@@ -331,7 +352,7 @@ HandleAll(items, s) ==
 Apply(s) ==
     /\ pend' = s.p /\ by' = s.b /\ cause' = s.c /\ role' = s.r /\ modConf' = s.mc
     /\ early' = s.e /\ crossTimed' = s.x /\ crossDeliv' = s.d /\ histSettled' = s.h
-    /\ kindCross' = s.kc
+    /\ kindCross' = s.kc /\ spent' = s.sp
 
 (* The client reads the next line.                                         *)
 CRecv ==
@@ -371,7 +392,7 @@ CTimeout(l) ==
     /\ cause' = [cause EXCEPT ![l] = "timeout"]
     /\ UNCHANGED <<sent, pendTxt, pendTgt, pendCmd, order, ob, buf, closed, s2c, otherDone, histDone>>
     /\ UNCHANGED server
-    /\ UNCHANGED <<by, role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross>>
+    /\ UNCHANGED <<by, role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross, spent>>
     /\ UNCHANGED <<hout, closeBuf>>
 
 (* The connection closes (D18): pending copies fail; nothing more arrives. *)
@@ -388,7 +409,7 @@ CClose ==
     /\ closeBuf' = \E r \in RefIds : buf[r] # << >>
     /\ UNCHANGED <<sent, pendTxt, pendTgt, pendCmd, order, owed, late, lateUsed, nextRef,
                    otherDone, histDone, labeledN, firstK, compet>>
-    /\ UNCHANGED <<by, role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross>>
+    /\ UNCHANGED <<by, role, modConf, early, crossTimed, crossDeliv, histSettled, kindCross, spent>>
 
 -----------------------------------------------------------------------------
 Next ==
@@ -420,12 +441,19 @@ TypeOK ==
     /\ \A r \in RefIds : ob[r].on => (ob[r].root \in RefIds /\ ob[ob[r].root].on)
     /\ \A r \in RefIds : ~ob[r].on => buf[r] = << >>
     /\ closed => s2c = << >>
+    /\ spent \subseteq Labels
 
 \* D2: at most one labeled line per label over the whole run.
 LabelOnce == \A l \in Labels : labeledN[l] <= 1
 
 \* D15: a copy is confirmed only by a line answering its own request.
 ConfirmedByOwn == \A l \in LabelsUsed : pend[l] = "confirmed" => by[l] = "own"
+\* D40: or by the echo of a twin, a copy of the same text, target and kind:
+\* the user sees the right message either way (the documented limit of
+\* Seance #297's fallback).
+Twin(a, b) == pendTxt[a] = pendTxt[b] /\ pendTgt[a] = pendTgt[b] /\ pendCmd[a] = pendCmd[b]
+ConfirmedByOwnOrTwin ==
+    \A l \in LabelsUsed : pend[l] = "confirmed" => (by[l] = "own" \/ (by[l] \in Labels /\ Twin(l, by[l])))
 
 \* D28: a copy is failed by a FAIL or error line only when that line answers its own request.
 FailedByOwn == \A l \in LabelsUsed : (pend[l] = "failed" /\ cause[l] \in {"fail", "err"}) => by[l] = "own"

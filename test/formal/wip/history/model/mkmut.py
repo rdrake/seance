@@ -7,7 +7,7 @@ M = {
     "DM_IgnoreEcho": ('m.k = "echo" /\\ lab # NoLabel -> Settle(s, lab, "confirmed", m, oa)',
                       'm.k = "echo" /\\ lab # NoLabel -> s'),
     "DM_WrongLabel": ('m.k = "echo" /\\ lab # NoLabel -> Settle(s, lab, "confirmed", m, oa)',
-                      'm.k = "echo" /\\ lab # NoLabel -> Settle(s, Oldest(s.p, m.txt, m.tgt, m.cmd), "confirmed", m, oa)'),
+                      'm.k = "echo" /\\ lab # NoLabel -> Settle(s, Oldest(s.p, m.txt, m.tgt, m.cmd, s.sp), "confirmed", m, oa)'),
     "DM_Early": ("[] m.ref # 0 /\\ Deferred ->", "[] FALSE ->"),
     "DM_Flip": ("IF l # NoLabel /\\ Pending(s.p, l)", "IF l # NoLabel /\\ l \\in LabelsUsed"),
     "DM_FirstOnly": ("Apply(HandleAll(buf[m.id], Now))",
@@ -23,6 +23,9 @@ M = {
     # v2.2: a client that treats every line as history while any history batch is open
     "DM_GlobalHist": ("HistOf(m) == m.ref # 0 /\\ ob[m.ref].on /\\ ob[m.ref].hist",
                       "HistOf(m) == \\E r \\in RefIds : ob[r].on /\\ ob[r].hist"),
+    # D40: Seance before #297, a 301 that carries the label spends nothing
+    "DM_NoSpent": ('[] m.k = "note" /\\ m.lab \\in Labels -> [s EXCEPT !.sp = @ \\cup {m.lab}]',
+                   '[] FALSE -> s'),
     # server mutants
     "DS_Twice": ("/\\ owed' = owed \\ {l}", "/\\ owed' = owed"),
     "DS_AfterSettle": ("/\\ ~closed /\\ l \\in owed /\\ out[l] = << >>",
