@@ -79,24 +79,25 @@ def split(raw):
     return src, (w[0].upper() if w else ""), params
 
 
-def has_trailing(raw):
-    """Whether the line's last parameter is a trailing one (` :...`)."""
-    rest = body(raw)
-    if rest.startswith(":"):
-        rest = rest.partition(" ")[2]
-    return " :" in rest
-
-
 def command(raw):
     return split(raw)[1]
 
 
 _servers = set()
+# Lines only a server sends (labeled-response ACK, standard replies, PING
+# and PONG): their bare source is a server.
+SERVER_ONLY = ("ACK", "FAIL", "WARN", "NOTE", "PING", "PONG")
+# How many params name subjects after an error numeric's recipient; the
+# rest is the description (Modern IRC).  Others: every param but the last.
+ERR_SUBJECTS = {"401": 1, "402": 1, "403": 1, "404": 1, "405": 1, "406": 1, "407": 1,
+                "411": 0, "412": 0, "413": 1, "414": 1, "421": 1, "442": 1, "476": 1,
+                "477": 1, "486": 1, "489": 1, "492": 1}
 
 
 def set_servers(meta, rows):
     """The server names the trace shows: the recorder's (the source of 001),
-    the source of the version reply, and the source of every numeric."""
+    the source of the version reply, and the bare source of every numeric
+    or other line only a server sends."""
     global _servers
     _servers = {meta["server"]} if meta.get("server") else set()
     lines = list(meta.get("version", []))
@@ -104,7 +105,7 @@ def set_servers(meta, rows):
         lines += [x["raw"] if isinstance(x, dict) else x for x in r["recv"]]
     for x in lines:
         src, cmd, _ = split(x)
-        if cmd.isdigit() and src:
+        if src and "!" not in src and "@" not in src and (cmd.isdigit() or cmd in SERVER_ONLY):
             _servers.add(src)
 
 
@@ -303,9 +304,13 @@ def check(path):
                 # What an error is about: the params between its recipient
                 # (a numeric) or its command and code (a FAIL) and its
                 # description, which is prose and names nothing.
-                about = params[1:] if k == "err" else params[2:]
-                if has_trailing(lines[i]) and about:
-                    about = about[:-1]
+                # Its position says which param is the description, not
+                # the wire colon: a one-word last param may come without it.
+                if k == "err":
+                    n = ERR_SUBJECTS.get(cmd, max(len(params) - 2, 0))
+                    about = params[1:1 + n]
+                else:
+                    about = params[2:-1]
                 if k == "fail" and len(params) > 1 and params[1] in WIDE_FAILS:
                     about = []
                 return k, [fold(p) for p in about]
@@ -383,16 +388,17 @@ def check(path):
         # batch's start.
         outside = []
         for i, x in enumerate(lines):
-            if i in response or command(x) in ("PING", "PONG"):
+            # A server's PING is traffic; a PONG answers a PING of ours, and
+            # the recorder's own sentinel PONG is never in the row.
+            if i in response or command(x) == "PING":
                 continue
             src, cmd, params = split(x)
             n = nick_of(src)
             if n is not None and fold(n) != fold(me):
                 continue
-            if cmd in MSG and params and fold(params[0]) == fold(me) \
-                    and (n is not None or cmd == "NOTICE"):
+            if cmd in MSG and params and fold(params[0]) == fold(me):
                 # a message to us (the delivered copy of one to ourselves),
-                # or a server NOTICE: traffic, not a reply
+                # or a server's own NOTICE or PRIVMSG: traffic, not a reply
                 continue
             if cmd == "BATCH" and len(params) > 1 and params[0].startswith("+") \
                     and params[1] in MULTILINE:
