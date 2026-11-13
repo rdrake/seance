@@ -1370,17 +1370,18 @@ Runs (cloud, limited: Labels 2, Texts 2, MaxReq 2):
 - **V4Spent**, the adversarial server with the Seance client, passes: 348,377 distinct states. That covers TypeOK, LabelOnce, OutcomeMatchesCause, ConfirmedByOwnOrTwin, Absorbing and ResolvedByResponse.
 - **V4SpentTwin** breaks ConfirmedByOwn, as expected: the swap.
 - **W_SpentNoFallback** breaks ResolvedByResponse, as expected. A label-only client never settles the copy, and this is the bug the model could not see before.
-- **V4LabelledOnly**, a conforming server with LabelledEchoes, passes with ConfirmedByOwn: 321,549 states, the same count as NoTimeout.
+- **V4LabelledOnly**, a conforming server with LabelledEchoes and another session sending the same texts, passes with ConfirmedByOwn: 4,665,916 states. The first run had no other session and so no unlabeled same-text line to refuse; v2.4.1 turns OtherSession on.
 - **DM_NoSpent**, Seance before #297, breaks ResolvedByResponse on V4Spent, as expected.
 
 **Unchanged results.** Every earlier config sets both switches FALSE. `spent` stays empty unless a note carries its own label, and only `SpentLabel` sends one. Base and LossyTimeout are re-run for equal distinct-state counts.
 
 **After review (v2.4.1).**
-- **What `LabelledEchoes` models.** It models the client after it has learned that the server labels echoes. Seance learns this from the first labelled echo that matches a pending copy, and forgets it on disconnect. Before that point it lets any unlabeled same-text echo settle a copy, which is `Fallback` with `LabelledEchoes` FALSE; Base, BaseFallback and the W_ configs above already cover that client. The spend rule is checked only for the well-formed case: a 301 for the request's own target. Seance also checks the nick; the model's server never sends another target's 301.
+- **What `LabelledEchoes` models.** It models the client after it has learned that the server labels echoes. Seance learns this from the first labelled echo that matches a pending copy, and forgets it on disconnect. Before that point it lets any unlabeled same-text echo settle a copy, which is `Fallback` with `LabelledEchoes` FALSE; BaseFallback and W_Other already cover that client (Base has the fallback off). The spend rule is checked only for the well-formed case: a 301 for the request's own target. Seance also checks the nick; the model's server never sends another target's 301.
 - **`ConfirmedByOwnOrTwin`, tightened.** A twin now confirms a copy only through its unaltered echo, never through a delivered copy (role `deliv`) or an altered text.
 - **Two witnesses for the content fallback's limits.** Both are failures #297 shares, because the fallback matches by content:
-  - **W_SpentSelfDeliv** (SelfMsg). The delivered copy of a message to ourselves looks like an echo, so it settles a spent same-text copy before that copy's own echo arrives. NoCrossFromConfirmedDeliv fails, at 239,963 states.
+  - **W_SpentSelfDeliv** (SelfMsg). The delivered copy of a message to ourselves looks like an echo, so it settles a spent same-text copy before that copy's own echo arrives. NoCrossFromConfirmedDeliv fails, at 239,963 states. That invariant sees one chronology only: the delivered copy settles another copy after its own copy was confirmed by its own echo. A delivered copy that arrives earlier and settles the wrong copy is not flagged by it.
   - **W_SpentModify** (Modify). An echo the server altered to another copy's text settles that copy. ConfirmedByOwnOrTwin fails, at 327,087 states.
 
   Neither limit arises once the server labels its echoes as LR requires.
 - V4Spent still passes with the tightened property: 348,377 states.
+- The checked-in mutants are regenerated from the v2.4.1 model; DM_NoSpent still breaks ResolvedByResponse on V4Spent, at 348,365 states.

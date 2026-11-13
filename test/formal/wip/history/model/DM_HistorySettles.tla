@@ -448,12 +448,17 @@ LabelOnce == \A l \in Labels : labeledN[l] <= 1
 
 \* D15: a copy is confirmed only by a line answering its own request.
 ConfirmedByOwn == \A l \in LabelsUsed : pend[l] = "confirmed" => by[l] = "own"
-\* D40: or by the echo of a twin, a copy of the same text, target and kind:
-\* the user sees the right message either way (the documented limit of
-\* Seance #297's fallback).
+\* D40: or by the unaltered echo of a twin, a copy of the same text, target
+\* and kind: two such echoes are interchangeable, and the user sees the right
+\* message either way (the documented limit of Seance #297's fallback).  Not
+\* by a delivered copy (role "deliv"), which is a message to us and not an
+\* echo, and not by an altered text (modConf).
 Twin(a, b) == pendTxt[a] = pendTxt[b] /\ pendTgt[a] = pendTgt[b] /\ pendCmd[a] = pendCmd[b]
 ConfirmedByOwnOrTwin ==
-    \A l \in LabelsUsed : pend[l] = "confirmed" => (by[l] = "own" \/ (by[l] \in Labels /\ Twin(l, by[l])))
+    \A l \in LabelsUsed : pend[l] = "confirmed" =>
+        \/ by[l] = "own"
+        \/ /\ by[l] \in Labels /\ Twin(l, by[l])
+           /\ role[l] \in {"resp", "unlab", "late"} /\ l \notin modConf
 
 \* D28: a copy is failed by a FAIL or error line only when that line answers its own request.
 FailedByOwn == \A l \in LabelsUsed : (pend[l] = "failed" /\ cause[l] \in {"fail", "err"}) => by[l] = "own"
