@@ -74,7 +74,10 @@ class Conn:
                     self.caps = [c for c in want if c in names]
                     if sasl:
                         self.caps.append("sasl")
-                    self.send("CAP REQ :" + " ".join(self.caps))
+                    if self.caps:
+                        self.send("CAP REQ :" + " ".join(self.caps))
+                    else:
+                        self.send("CAP END")
             if len(w) > 3 and w[1] == "CAP" and w[3] == "ACK":
                 if sasl:
                     self.send("AUTHENTICATE PLAIN")
@@ -86,6 +89,7 @@ class Conn:
             if len(w) > 1 and w[1] in ("903", "904", "905"):
                 self.send("CAP END")
             if len(w) > 2 and w[1] == "001":
+                self.server = w[0].lstrip(":")
                 self.nick = w[2]  # what the server calls us (a bouncer may differ)
             if len(w) > 1 and w[1] == "005":
                 self.isupport += w[3:]
@@ -123,14 +127,17 @@ class Conn:
 seq = [0]
 
 
-def run(c, name, cmd, tags=""):
-    """Send `cmd` labeled (plus client `tags`); record until the label
+def run(c, name, cmd, tags="", follow=()):
+    """Send `cmd` labeled (plus client `tags`) and then the `follow` lines
+    unlabeled (a multiline batch's body); record until the label
     completes, then a sentinel."""
     seq[0] += 1
     label = f"L{seq[0]}"
     sent = f"@label={label}{';' + tags if tags else ''} {cmd}"
     t0 = time.time()
     c.send(sent)
+    for f in follow:
+        c.send(f)
     recv, shape, btype, open_ref, done = [], "none", None, None, False
     c.settimeout(args.timeout)
     try:
@@ -166,12 +173,15 @@ def run(c, name, cmd, tags=""):
     return rec
 
 
-want = ["batch", "labeled-response", "message-tags", "server-time", "draft/chathistory"]
+want = ["batch", "labeled-response", "message-tags", "server-time", "draft/chathistory",
+        "draft/multiline", "draft/read-marker", "setname"]
 if not args.no_echo:
     want.append("echo-message")
 a = Conn(RUN + "a", want, args.sasl)
 b = Conn(RUN + "b", ["message-tags", "server-time"])
-a.send(f"JOIN {CHAN}"); b.send(f"JOIN {CHAN}")
+a.send(f"JOIN {CHAN}")
+time.sleep(1)  # a first, so a holds ops (KICK, INVITE)
+b.send(f"JOIN {CHAN}")
 time.sleep(1); a.drain(); b.drain()
 a.send("VERSION")
 ver = []
@@ -216,16 +226,120 @@ S = [
 for name, cmd, *tags in S:
     recs.append(run(a, name, cmd, *tags))
 
+def scene(name, cmd, tags="", setup=(), undo=(), follow=()):
+    """One scenario with its own state: `setup` lines are sent (as
+    (connection, line) pairs) and both sides drained before the labelled
+    command, and `undo` puts things back after it, so the next scenario
+    starts from the plain state above."""
+    for c, l in setup:
+        c.send(l)
+        time.sleep(0.2)
+    if setup:
+        a.drain(); b.drain()
+    recs.append(run(a, name, cmd, tags, follow))
+    for c, l in undo:
+        c.send(l)
+        time.sleep(0.2)
+    if undo:
+        a.drain(); b.drain()
+
+
+B = b.nick
+AWAY = [(b, "AWAY :b is away")]
+BACK = [(b, "AWAY")]
+LONG = "x" * 380  # near the line cap once the prefix is added
+
+# The person you message, in each state they can be in.
 # A message to someone away draws a 301 as well as the echo: two replies,
 # which labeled-response wants in one labelled batch.
-b.send("AWAY :b is away")
-b.drain()
-recs.append(run(a, "privmsg-user-away", f"PRIVMSG {b.nick} :to away b"))
+scene("privmsg-user-away", f"PRIVMSG {B} :to away b", setup=AWAY, undo=BACK)
 # Controls: a NOTICE or TAGMSG draws no 301.
-recs.append(run(a, "notice-user-away", f"NOTICE {b.nick} :notice to away b"))
-recs.append(run(a, "tagmsg-user-away", f"TAGMSG {b.nick}", "+typing=active"))
-b.send("AWAY")
-b.drain()
+scene("notice-user-away", f"NOTICE {B} :notice to away b", setup=AWAY, undo=BACK)
+scene("tagmsg-user-away", f"TAGMSG {B}", "+typing=active", setup=AWAY, undo=BACK)
+# What a client really sends to someone away: /me, a reply, a long line.
+scene("action-user-away", f"PRIVMSG {B} :\x01ACTION waves\x01", setup=AWAY, undo=BACK)
+scene("reply-user-away", f"PRIVMSG {B} :a reply", "+draft/reply=zzzz", setup=AWAY, undo=BACK)
+scene("privmsg-user-away-long", f"PRIVMSG {B} :{LONG}", setup=AWAY, undo=BACK)
+scene("privmsg-user-away-twice", f"PRIVMSG {B} :second to away b",
+      setup=AWAY + [(a, f"PRIVMSG {B} :first to away b")], undo=BACK)
+# Two targets, one of them away: one labelled batch with both echoes.
+scene("privmsg-two-targets", f"PRIVMSG {B},{CHAN} :to b and the channel")
+scene("privmsg-two-targets-away", f"PRIVMSG {B},{CHAN} :to away b and the channel",
+      setup=AWAY, undo=BACK)
+scene("privmsg-user-at-server", f"PRIVMSG {B}@{a.server} :to b at server")
+scene("privmsg-self-away", f"PRIVMSG {a.nick} :to myself while away",
+      setup=[(a, "AWAY :a is away")], undo=[(a, "AWAY")])
+scene("action-user", f"PRIVMSG {B} :\x01ACTION waves\x01")
+scene("privmsg-user-long", f"PRIVMSG {B} :{LONG}")
+scene("reply-user", f"PRIVMSG {B} :a reply", "+draft/reply=zzzz")
+# The person refuses private messages (+D), takes them only from people
+# sharing a channel (+q), or only from logged-in people (+R).
+scene("privmsg-user-privdeaf", f"PRIVMSG {B} :to privdeaf b",
+      setup=[(b, f"MODE {B} +D")], undo=[(b, f"MODE {B} -D")])
+scene("tagmsg-user-privdeaf", f"TAGMSG {B}", "+typing=active",
+      setup=[(b, f"MODE {B} +D")], undo=[(b, f"MODE {B} -D")])
+scene("privmsg-user-commonchans", f"PRIVMSG {B} :no common channel",
+      setup=[(b, f"PART {CHAN}"), (b, f"MODE {B} +q")],
+      undo=[(b, f"MODE {B} -q"), (b, f"JOIN {CHAN}")])
+scene("privmsg-user-accountonly", f"PRIVMSG {B} :from an unauthed sender",
+      setup=[(b, f"MODE {B} +R")], undo=[(b, f"MODE {B} -R")])
+# The person silences us: dropped without a word, so the sender still
+# needs its echo (or ACK) to settle.
+scene("privmsg-user-silenced", f"PRIVMSG {B} :to b who silenced a",
+      setup=[(b, f"SILENCE +{a.nick}!*@*")], undo=[(b, f"SILENCE -{a.nick}!*@*")])
+scene("tagmsg-user-silenced", f"TAGMSG {B}", "+typing=active",
+      setup=[(b, f"SILENCE +{a.nick}!*@*")], undo=[(b, f"SILENCE -{a.nick}!*@*")])
+# Deaf (+d) drops channel messages for that member only.
+scene("privmsg-chan-deaf-member", f"PRIVMSG {CHAN} :b is deaf",
+      setup=[(b, f"MODE {B} +d")], undo=[(b, f"MODE {B} -d")])
+# The person changed nick or left between typing and sending.
+scene("privmsg-old-nick", f"PRIVMSG {B} :to the old nick",
+      setup=[(b, f"NICK {B}n")], undo=[(b, f"NICK {B}")])
+scene("privmsg-user-quit", f"PRIVMSG {RUN}c :to someone who left",
+      setup=[(Conn(RUN + "c", []), "QUIT :gone")])
+
+# Channels in states that refuse or change a message. b owns each of these.
+M, N, X, K, P = (f"#{RUN}{s}" for s in "mnxkp")
+scene("privmsg-chan-moderated", f"PRIVMSG {M} :unvoiced",
+      setup=[(b, f"JOIN {M}"), (b, f"MODE {M} +m"), (a, f"JOIN {M}")],
+      undo=[(a, f"PART {M}")])
+scene("tagmsg-chan-moderated", f"TAGMSG {M}", "+typing=active",
+      setup=[(a, f"JOIN {M}")], undo=[(a, f"PART {M}")])
+scene("privmsg-chan-outside", f"PRIVMSG {N} :from outside",
+      setup=[(b, f"JOIN {N}"), (b, f"MODE {N} +n")])
+scene("privmsg-chan-banned", f"PRIVMSG {X} :while banned",
+      setup=[(b, f"JOIN {X}"), (a, f"JOIN {X}"), (b, f"MODE {X} +b {a.nick}!*@*")],
+      undo=[(a, f"PART {X}")])
+scene("privmsg-chan-nocolour", f"PRIVMSG {K} :\x0304red\x03 text",
+      setup=[(b, f"JOIN {K}"), (b, f"MODE {K} +c"), (a, f"JOIN {K}")],
+      undo=[(a, f"PART {K}")])
+scene("privmsg-chan-parted", f"PRIVMSG {P} :after leaving",
+      setup=[(a, f"JOIN {P}"), (a, f"PART {P}")])
+scene("privmsg-statusmsg", f"PRIVMSG @{CHAN} :to the ops")
+scene("notice-chan-moderated", f"NOTICE {M} :unvoiced notice",
+      setup=[(a, f"JOIN {M}")], undo=[(a, f"PART {M}")])
+scene("multiline-chan", f"BATCH +ml draft/multiline {CHAN}",
+      follow=[f"@batch=ml PRIVMSG {CHAN} :line one",
+              f"@batch=ml PRIVMSG {CHAN} :line two", "BATCH -ml"])
+scene("multiline-user-away", f"BATCH +mu draft/multiline {B}",
+      setup=AWAY, undo=BACK,
+      follow=[f"@batch=mu PRIVMSG {B} :line one",
+              f"@batch=mu PRIVMSG {B} :line two", "BATCH -mu"])
+
+# Commands whose answer is more than one line.
+J = f"#{RUN}j"
+scene("join-existing", f"JOIN {J}",
+      setup=[(b, f"JOIN {J}"), (b, f"TOPIC {J} :existing topic")],
+      undo=[(a, f"PART {J}")])
+scene("invite-user-away", f"INVITE {B} {CHAN}",
+      setup=[(b, f"PART {CHAN}")] + AWAY, undo=BACK + [(b, f"JOIN {CHAN}")])
+scene("whois-user-away", f"WHOIS {B}", setup=AWAY, undo=BACK)
+scene("kick", f"KICK {CHAN} {B} :out", undo=[(b, f"JOIN {CHAN}")])
+scene("monitor-online", f"MONITOR + {B}", undo=[(a, f"MONITOR - {B}")])
+scene("nick-change", f"NICK {RUN}a2", undo=[(a, f"NICK {a.nick}")])
+scene("setname", "SETNAME :a new realname")
+scene("markread-set", f"MARKREAD {CHAN} timestamp=2026-01-01T00:00:00.000Z")
+scene("markread-get", f"MARKREAD {CHAN}")
 
 for c in (a, b):
     c.send("QUIT :done")
