@@ -12,9 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_lr  # noqa: E402
 
 
-def run(sent, recv, echo, name="case"):
+def run(sent, recv, echo, name="case", isupport=None):
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
-        f.write(json.dumps({"server_label": "t", "echo": echo, "nicks": ["me"]}) + "\n")
+        f.write(json.dumps({"server_label": "t", "echo": echo, "nicks": ["me"],
+                            "isupport": isupport or []}) + "\n")
         f.write(json.dumps({"name": name, "shape": "x", "label": "L",
                             "sent": sent, "recv": recv}) + "\n")
     try:
@@ -253,7 +254,24 @@ CASES = [
      "@label=L PRIVMSG bob :hi",
      ["@label=L :s BATCH +d draft/multiline bob", "@batch=d;label=X " + E, ":s BATCH -d"],
      True, "case", True),
+    ("a label on a multiline batch's end",
+     "@label=L BATCH +m draft/multiline bob",
+     ["@label=L :me!u@h BATCH +i draft/multiline bob", "@batch=i " + E,
+      "@label=X :me!u@h BATCH -i"], True, "case", True),
+    ("a BATCH line that neither starts nor ends",
+     "@label=L PRIVMSG bob :hi", ["@label=L :s BATCH nonsense"], True, "case", True),
+    ("the unprefixed multiline type, outside the response",
+     "@label=L PRIVMSG bob :hi",
+     ["@label=L " + E, ":bob!u@h BATCH +z multiline me", "@batch=z :bob!u@h PRIVMSG me :yo",
+      ":bob!u@h BATCH -z"], True, "case", True),
+    ("an ascii server does not fold [ to {",
+     "@label=L PRIVMSG b[b :hi", ["@label=L :me!u@h PRIVMSG b{b :hi"], True, "case", True,
+     ["CASEMAPPING=ascii"]),
     # accepted shapes
+    ("rfc1459 folds [ to {, in a multiline batch",
+     "@label=L BATCH +m draft/multiline b[b",
+     ["@label=L :me!u@h BATCH +i draft/multiline B{B", "@batch=i :me!u@h PRIVMSG b[b :hi",
+      ":me!u@h BATCH -i"], True, "case", False, ["CASEMAPPING=rfc1459"]),
     ("lone labeled echo", "@label=L PRIVMSG bob :hi", ["@label=L " + E], True, "case", False),
     ("lone 301 accepts with echo off",
      "@label=L PRIVMSG bob :hi", ["@label=L :s 301 me bob :away"], False, "case", False),
@@ -279,8 +297,8 @@ CASES = [
 
 def main():
     bad = 0
-    for what, sent, recv, echo, scene, must_fail in CASES:
-        fails = run(sent, recv, echo, scene)
+    for what, sent, recv, echo, scene, must_fail, *isupport in CASES:
+        fails = run(sent, recv, echo, scene, *isupport)
         ok = bool(fails) == must_fail
         bad += not ok
         print(f"{'ok  ' if ok else 'BAD '} {what}: {fails or 'holds'}")

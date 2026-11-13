@@ -130,8 +130,23 @@ NOTICE_DROPS = {"notice-chan-moderated"}
 SELF_SCENES = ("privmsg-self", "privmsg-self-away")
 
 
+# RFC 1459 casemapping folds []\~ to {}|^ as well as A-Z; strict-rfc1459
+# leaves ~ alone.  The trace's ISUPPORT names the mapping; a server that
+# names none uses rfc1459 (Modern IRC).
+CASEMAPS = {"rfc1459": str.maketrans("[]\\~", "{}|^"),
+            "strict-rfc1459": str.maketrans("[]\\", "{}|"),
+            "ascii": {}}
+_casemap = CASEMAPS["rfc1459"]
+
+
+def set_casemapping(isupport):
+    global _casemap
+    names = [t.split("=", 1)[1] for t in isupport or () if t.startswith("CASEMAPPING=")]
+    _casemap = CASEMAPS.get(names[-1] if names else "rfc1459", {})
+
+
 def fold(x):
-    return x.lower()
+    return x.lower().translate(_casemap)
 
 
 class Batches:
@@ -150,6 +165,8 @@ class Batches:
                 ref = None
             if cmd == "BATCH" and params and params[0].startswith("+"):
                 r = params[0][1:]
+                if len(params) > 1 and params[1] == "multiline":
+                    self.errors.append("Multiline: the unprefixed multiline batch type")
                 if not REF_OK.match(r):
                     self.errors.append(f"BatchRef: reference {r!r} is not letters, digits and hyphens")
                 if len(params) < 2:
@@ -167,6 +184,9 @@ class Batches:
                 r = params[0][1:]
                 if len(params) != 1:
                     self.errors.append(f"BatchSyntax: the end of batch {r} has parameters")
+                if "label" in tags(x):
+                    # labeled-response: the label goes on the batch's start
+                    self.errors.append(f"BatchSyntax: the end of batch {r} carries a label")
                 node = open_.pop(r, None)
                 if node is None:
                     self.errors.append(f"BatchRef: end of batch {r}, which is not open")
@@ -180,6 +200,8 @@ class Batches:
                                            f"but ends in {ref}")
                 self.member_of[i] = ("end", r)
             else:
+                if cmd == "BATCH":
+                    self.errors.append("BatchSyntax: a BATCH line that neither starts nor ends a batch")
                 if ref is not None:
                     open_[ref]["members"].append(i)
                 self.member_of[i] = ref
@@ -208,6 +230,7 @@ def check(path):
     rows = [json.loads(l) for l in open(path)]
     meta, cmds = rows[0], rows[1:]
     echo = meta.get("echo")
+    set_casemapping(meta.get("isupport"))
     me = meta.get("nicks", [""])[0]
     res = []
     for r in cmds:
