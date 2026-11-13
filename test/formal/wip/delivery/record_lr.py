@@ -216,6 +216,14 @@ S = [
 for name, cmd, *tags in S:
     recs.append(run(a, name, cmd, *tags))
 
+# A message to someone away draws a 301 as well as the echo: two replies,
+# which labeled-response wants in one labelled batch.
+b.send("AWAY :b is away")
+b.drain()
+recs.append(run(a, "privmsg-user-away", f"PRIVMSG {b.nick} :to away b"))
+b.send("AWAY")
+b.drain()
+
 for c in (a, b):
     c.send("QUIT :done")
 with open(args.out, "w") as f:
