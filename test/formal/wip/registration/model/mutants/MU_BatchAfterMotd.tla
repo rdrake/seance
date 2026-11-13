@@ -342,7 +342,14 @@ RuleNoMetaBatchWithoutBatch == ~srv.batch => ~Seen("S", "BATCH+")
 
 \* D9 (client): after 001 the client counts a key set before registration
 \* as held only if the server still holds it.
-RuleHeldIsKept == cli.held => srv.pre
+RuleHeldIsKept == cli.held => (srv.pre /\ srv.meta = 1)
+
+\* D9 (server): completing registration keeps the stored metadata with
+\* batch and empties it without (before 001 only a pre-registration SET
+\* can have set it).
+RuleWelcomeStore ==
+    [][(srv.phase = "pre" /\ srv'.phase = "burst")
+       => srv'.meta = (IF srv.batch THEN srv.meta ELSE 0)]_vars
 
 \* MC:53 (server): a NICK answered with 433 does not change the nick.
 RuleNickIgnoredOn433 ==

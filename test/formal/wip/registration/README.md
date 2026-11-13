@@ -66,7 +66,7 @@ Each line is: mutant (base config): what it changes → the property expected to
 - `MU_NoCookieGate` (TinyCookie): 001 before the PONG → `RuleCookieGate`
 - `MU_SpeakAfterError` (TinyTimeout): server answers after ERROR → `RuleNothingAfterError`
 - `MU_TrustDropped` (TinyMetaNoBatch): client counts a key as held without batch → `RuleHeldIsKept`
-- `MU_KeepWithoutBatch` (TinyMetaNoBatch): server keeps a pre-registration key without batch → `RuleDropWithoutBatch`
+- `MU_KeepWithoutBatch` (TinyMetaNoBatch): server keeps the stored pre-registration key without batch → `RuleWelcomeStore`
 
 ## Commands
 

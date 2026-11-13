@@ -22,7 +22,7 @@ INV = ['TypeOK', 'RulePassBeforeLatter', 'RulePongToken', 'RuleMetaStar', 'RuleB
        'RuleMetaBatch', 'RuleMetaCarries', 'RulePassGate', 'RuleCookieGate', 'RuleWelcomedBy001', 'RuleHeldIsKept',
        'RuleDropWithoutBatch', 'RuleNoMetaBatchWithoutBatch']
 PROP = ['RuleNickIgnoredOn433', 'RulePassRefusalSaid', 'RuleNothingAfterError',
-        'PingsAnswered', 'Registers']
+        'PingsAnswered', 'Registers', 'RuleWelcomeStore']
 LIMITED = ['TinyNick', 'TinyPass', 'TinyCookie', 'TinyMeta', 'TinyTimeout', 'TinyMetaNick',
            'TinyMetaCookie', 'TinyMetaNoBatch']
 WIT = {'W_433Then001': 'TinyNick', 'W_EndThen433': 'TinyNick', 'W_CookieThen001': 'TinyCookie',

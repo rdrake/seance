@@ -23,8 +23,8 @@ model passes the same config.  Run from this directory:
                                     -> RuleNothingAfterError
   MU_TrustDropped    (TinyMetaNoBatch) client counts a key acknowledged before 001 as held
                                     without batch (Seance before #299) -> RuleHeldIsKept
-  MU_KeepWithoutBatch (TinyMetaNoBatch) server keeps a key set before registration
-                                    without batch -> RuleDropWithoutBatch
+  MU_KeepWithoutBatch (TinyMetaNoBatch) server keeps the stored key set before
+                                    registration without batch -> RuleWelcomeStore
 """
 src = open('../SpecReg.tla').read()
 
@@ -75,5 +75,5 @@ mut('MU_SpeakAfterError', 'TinyTimeout',
 mut('MU_TrustDropped', 'TinyMetaNoBatch',
     ('!.held = cli.acked /\\ cli.batch]', '!.held = cli.acked]'))
 mut('MU_KeepWithoutBatch', 'TinyMetaNoBatch',
-    ('!.pre = srv.pre /\\ srv.batch]', '!.pre = srv.pre]'))
+    ('!.meta = IF srv.batch THEN @ ELSE 0,', '!.meta = @,'))
 print('ok')
