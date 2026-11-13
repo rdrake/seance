@@ -4,32 +4,33 @@
 Every labeled command:
   LabelOnce  (D2)    exactly one line carries the label: a single reply,
                      the BATCH start of a batch, or ACK.
-  BatchClosed (LR)   a labeled batch, and every batch inside it, ends; a
-                     line counts as a member only while its batch is open.
-  AckOnlyAlone (LR)  ACK only when nothing else answers the command: not
-                     inside a labeled batch, and not beside an unlabeled
-                     reply.
-  OneResponse (LR)   a lone labeled line has no unlabeled, unbatched reply
-                     beside it: a response of more than one message MUST be
-                     a batch.
+  BatchRef / BatchNest / BatchClosed (batch spec)
+                     a line names only a batch that is open; a nested
+                     batch's end, if tagged, names the batch its start
+                     named; the labeled batch and every batch in it end.
+  OneResponse (LR)   no reply outside the response: a response of more than
+                     one message MUST be one labeled batch.  Lines from other
+                     users, and a message to ourselves (the delivered copy),
+                     are not replies.
+  AckOnlyAlone (LR)  ACK only as the whole response, never inside a batch.
 
-Messages (PRIVMSG / NOTICE / TAGMSG / multiline), the pending copies (D15):
-  Settles            the response settles: a lone echo, ACK, FAIL or error;
-                     a labeled-response batch whose first settling member is
-                     one (a nested multiline batch with a message in it is an
-                     echo); or, for a multiline send, its labeled multiline
-                     echo.  Without echo-message a lone labeled 301 accepts.
-  KindForEcho        with echo-message the copy is confirmed by its echo;
-                     without it, accepted by ACK; an error fails it.  The
-                     model's Expect(k) gives the outcome.  A NOTICE answered
-                     by ACK passes with echo-message on only in NOTICE_DROPS.
-  SelfDelivery (LR)  messaging your own nick: the delivered copy MUST NOT
-                     carry the label.  With echo-message off the only copy is
-                     the delivery, so a labeled copy fails; with it on the two
-                     copies cannot be told apart, so that case is reported.
+Messages (PRIVMSG / NOTICE / TAGMSG / a multiline batch), D15:
+  The response is flattened through nested batches; a multiline batch is
+  one echo only if it comes from us and holds only PRIVMSG or only NOTICE
+  lines, all to its target (for a multiline send, nothing else is an echo).
+  EchoEach           with echo-message, every target has its echo or an
+                     error naming it (an all-error response settles all);
+                     301s may sit beside them.  A NOTICE answered by ACK
+                     passes only in NOTICE_DROPS, an assumption about the
+                     fixture.
+  KindForEcho        without echo-message, no echo: ACK, 301s and errors.
+  SelfDelivery (LR)  without echo-message, the copy delivered to yourself
+                     MUST NOT carry the label.
+  Settles            nothing else (another numeric, someone else's message)
+                     is in the response.
 
 D39 says why each acceptance is as wide as it is; test_check_lr.py holds
-the cases it must reject.
+the cases it must reject and accept.
 
     python3 check_lr.py traces/*.jsonl
 """
@@ -55,11 +56,24 @@ def body(raw):
     return TAG.sub("", raw, count=1)
 
 
+def split(raw):
+    """(source, command, params) of a line, the trailing parameter last."""
+    rest = body(raw)
+    src = ""
+    if rest.startswith(":"):
+        src, _, rest = rest[1:].partition(" ")
+    head, sep, trailing = rest.partition(" :")
+    w = head.split()
+    params = w[1:] + ([trailing] if sep else [])
+    return src, (w[0].upper() if w else ""), params
+
+
 def command(raw):
-    w = body(raw).split()
-    if w and w[0].startswith(":"):
-        w = w[1:]
-    return w[0].upper() if w else ""
+    return split(raw)[1]
+
+
+def nick_of(src):
+    return src.split("!", 1)[0] if "!" in src else None
 
 
 def kind(raw, sent_cmd):
@@ -78,150 +92,213 @@ def kind(raw, sent_cmd):
 
 
 MSG = ("PRIVMSG", "NOTICE", "TAGMSG")
-SETTLING = ("echo", "ack", "fail", "err")
-# D39: scenes where the server drops a NOTICE silently, so ACK answers it
-# even with echo-message on.  Only these; any other NOTICE ACK is checked as
-# a message, and a delivered NOTICE owes its echo.
+MULTILINE = ("draft/multiline", "multiline")
+# D39: scenes where the trace's setup makes the server drop a NOTICE
+# silently, so ACK answers it even with echo-message on.  An assumption
+# about the fixture, not a protocol rule: the scene name cannot prove the
+# drop.  Any other NOTICE answered by ACK owes its echo.
 NOTICE_DROPS = {"notice-chan-moderated"}
+SELF_SCENES = ("privmsg-self", "privmsg-self-away")
 
 
-def batch_start(raw):
-    """(ref, type) for a BATCH +ref line, else None."""
-    w = body(raw).split()
-    if w and w[0].startswith(":"):
-        w = w[1:]
-    if len(w) > 1 and w[0].upper() == "BATCH" and w[1].startswith("+"):
-        return w[1][1:], (w[2] if len(w) > 2 else "")
-    return None
+def fold(x):
+    return x.lower()
 
 
-def batch_end(raw):
-    w = body(raw).split()
-    if w and w[0].startswith(":"):
-        w = w[1:]
-    if len(w) > 1 and w[0].upper() == "BATCH" and w[1].startswith("-"):
-        return w[1][1:]
-    return None
+class Batches:
+    """Every batch the row opens, in order (batch spec): a line may name a
+    batch only while it is open; a batch's end, if tagged, names the batch
+    its start named."""
+
+    def __init__(self, lines):
+        self.nodes, self.errors, self.member_of = {}, [], {}
+        open_ = {}
+        for i, x in enumerate(lines):
+            src, cmd, params = split(x)
+            ref = tags(x).get("batch")
+            if ref is not None and ref not in open_:
+                self.errors.append(f"BatchRef: {cmd} names batch {ref}, which is not open")
+                ref = None
+            if cmd == "BATCH" and params and params[0].startswith("+"):
+                r = params[0][1:]
+                node = {"ref": r, "type": params[1] if len(params) > 1 else "",
+                        "args": params[2:], "src": src, "start": i, "parent": ref,
+                        "members": [], "closed": False}
+                open_[r] = self.nodes[(r, i)] = node
+                if ref is not None:
+                    open_[ref]["members"].append(node)
+                self.member_of[i] = ref
+            elif cmd == "BATCH" and params and params[0].startswith("-"):
+                r = params[0][1:]
+                node = open_.pop(r, None)
+                if node is None:
+                    self.errors.append(f"BatchRef: end of batch {r}, which is not open")
+                else:
+                    node["closed"] = True
+                    node["end"] = i
+                    if ref is not None and ref != node["parent"]:
+                        self.errors.append(f"BatchNest: batch {r} starts in {node['parent']} "
+                                           f"but ends in {ref}")
+                self.member_of[i] = ("end", r)
+            else:
+                if ref is not None:
+                    open_[ref]["members"].append(i)
+                self.member_of[i] = ref
+
+    def at(self, i):
+        return next(n for n in self.nodes.values() if n["start"] == i)
 
 
-def collect(lines, i):
-    """The batch that lines[i] opens: its members, top level first, as a
-    tree of (line, children) and whether it and every nested batch closed.
-    A line counts only while the batch it names is open."""
-    ref, btype = batch_start(lines[i])
-    node = {"line": lines[i], "type": btype, "members": [], "closed": False}
-    open_ = {ref: node}
-    for x in lines[i + 1:]:
-        end = batch_end(x)
-        if end in open_:
-            open_.pop(end)["closed"] = True
-            if end == ref:
-                break
-            continue
-        parent = open_.get(tags(x).get("batch"))
-        if parent is None:
-            continue
-        st = batch_start(x)
-        if st:
-            child = {"line": x, "type": st[1], "members": [], "closed": False}
-            parent["members"].append(child)
-            open_[st[0]] = child
-        else:
-            parent["members"].append(x)
-    return node
+def subtree(node):
+    """Line indices of a batch: its start, every member, every end."""
+    out = {node["start"]}
+    if "end" in node:
+        out.add(node["end"])
+    for m in node["members"]:
+        out |= subtree(m) if isinstance(m, dict) else {m}
+    return out
 
 
 def all_closed(node):
     return node["closed"] and all(all_closed(m) for m in node["members"] if isinstance(m, dict))
 
 
-def is_multiline_echo(node):
-    """A multiline batch holding at least one PRIVMSG or NOTICE."""
-    return node["type"].endswith("multiline") and any(
-        isinstance(m, str) and command(m) in ("PRIVMSG", "NOTICE") for m in node["members"])
-
-
-def member_kind(m, msg_cmd):
-    if isinstance(m, dict):
-        return "echo" if msg_cmd and is_multiline_echo(m) else "batch"
-    return kind(m, msg_cmd)
-
-
 def check(path):
     rows = [json.loads(l) for l in open(path)]
     meta, cmds = rows[0], rows[1:]
     echo = meta.get("echo")
+    me = meta.get("nicks", [""])[0]
     res = []
     for r in cmds:
         label = r["label"]
-        sent_cmd = command(r["sent"])
-        multiline = sent_cmd == "BATCH" and "multiline" in r["sent"]
-        # the command a copy of the message comes back as
-        msg_cmd = sent_cmd if sent_cmd in MSG else "PRIVMSG" if multiline else None
+        _, sent_cmd, sent_params = split(r["sent"])
+        multiline = sent_cmd == "BATCH" and len(sent_params) > 2 \
+            and sent_params[1] in MULTILINE
+        is_msg = sent_cmd in MSG or multiline
+        targets = ([fold(t) for t in sent_params[0].split(",")] if sent_cmd in MSG
+                   else [fold(sent_params[2])] if multiline else [])
         lines = [x["raw"] if isinstance(x, dict) else x for x in r["recv"]]
+        bt = Batches(lines)
+        notes, fails = [], list(bt.errors)
         idx = [i for i, x in enumerate(lines) if tags(x).get("label") == label]
-        notes, fails = [], []
         if len(idx) != 1:
             fails.append(f"LabelOnce: {len(idx)} labeled lines")
-        head = lines[idx[0]] if idx else None
-        lk = kind(head, sent_cmd) if head else None
-        if multiline and lk == "batch":
-            lk = None  # decided below from the batch's content
-        members = []
-        if head and batch_start(head):
-            node = collect(lines, idx[0])
-            if not all_closed(node):
-                fails.append("BatchClosed: the labeled batch, or one inside it, never ends")
-            if multiline and is_multiline_echo(node):
-                lk = "echo"  # the echo is itself the labeled multiline batch
-            elif node["type"] == "labeled-response":
-                members = node["members"]
-                kinds = [member_kind(m, msg_cmd) for m in members]
-                if "ack" in kinds:
-                    fails.append("AckOnlyAlone: ACK inside a labeled batch")
-                # LR:55-58: the batch is the response; the copy settles on
-                # the first settling line in it (a nested multiline echo
-                # counts as one).
-                lk = next((k for k in kinds if k in SETTLING), "batch")
+        head = idx[0] if idx else None
+
+        def mine(i):
+            return fold(nick_of(split(lines[i])[0]) or "") == fold(me)
+
+        def item(i):
+            """(kind, params) of one line of the response."""
+            src, cmd, params = split(lines[i])
+            k = kind(lines[i], sent_cmd)
+            if multiline and cmd in ("PRIVMSG", "NOTICE"):
+                # a multiline send is echoed only by a multiline batch
+                k = "loose"
+            elif is_msg and cmd == sent_cmd:
+                k = "echo" if mine(i) else "foreign"
+            if k == "numeric" and cmd == "301":
+                k = "away"
+            return k, [fold(p) for p in params]
+
+        def items(node):
+            """The response's lines, flattened through nested batches.  A
+            multiline batch is one echo: from us, only PRIVMSG or only
+            NOTICE, every line to the batch's target."""
+            out = []
+            for m in node["members"]:
+                if not isinstance(m, dict):
+                    out.append(item(m))
+                elif m["type"] in MULTILINE:
+                    out.append(multiline_item(m))
+                else:
+                    out.extend(items(m))
+            return out
+
+        def multiline_item(node):
+            msgs = [m for m in node["members"] if not isinstance(m, dict)]
+            cmds = {command(lines[m]) for m in msgs}
+            target = fold(node["args"][0]) if node["args"] else ""
+            ok = (msgs and len(msgs) == len(node["members"])
+                  and len(cmds) == 1 and cmds <= {"PRIVMSG", "NOTICE"}
+                  and all(fold(split(lines[m])[2][0]) == target for m in msgs)
+                  and fold(nick_of(node["src"]) or "") == fold(me))
+            return ("echo", [target]) if ok else ("badmultiline", [target])
+
+        response, its, shape = set(), [], None
+        if head is not None:
+            if command(lines[head]) == "BATCH" and split(lines[head])[2][0].startswith("+"):
+                node = bt.at(head)
+                response = subtree(node)
+                if not all_closed(node):
+                    fails.append("BatchClosed: the labeled batch, or one inside it, never ends")
+                if node["type"] in MULTILINE:
+                    its, shape = [multiline_item(node)], "multiline"
+                else:
+                    its, shape = items(node), "batch"
             else:
-                lk = "batch"
-        others = [x for x in lines if tags(x).get("label") != label
-                  and not tags(x).get("batch") and command(x) not in ("PING", "PONG")
-                  and not batch_end(x)]
-        if r["name"] in ("privmsg-self", "privmsg-self-away"):
-            # the delivered copy is a message to us, not a reply to the command
-            others = [x for x in others if command(x) != sent_cmd]
-        if head and not batch_start(head) and others:
-            # LR: a response of more than one message MUST be a batch; an
-            # unlabeled reply beside a lone labeled line breaks that.
-            what = "AckOnlyAlone: ACK" if lk == "ack" else f"OneResponse: labeled {command(head)}"
-            fails.append(f"{what} plus unlabeled {command(others[0])}")
-        if msg_cmd and head and not echo and lk == "numeric" and command(head) == "301":
-            # D39: without echo-message a lone labeled RPL_AWAY is the whole
-            # response, and it accepts the message.  Only 301: it is the one
-            # informational reply a message draws.
-            notes.append("AwayAccepts: 301 answers the message")
-            lk = "ack"
-        if msg_cmd and head:
-            if lk not in SETTLING:
-                fails.append(f"Settles: labeled response is {lk}")
-            elif sent_cmd == "NOTICE" and lk == "ack" and r["name"] in NOTICE_DROPS:
-                notes.append("NoticeDropped: ACK, no echo")
+                response, its, shape = {head}, [item(head)], "single"
+
+        # Replies outside the response.  A line from another user is their
+        # traffic, not a reply; a message from us to us is the delivered
+        # copy; a line inside a batch outside the response is counted by its
+        # batch's start.
+        outside = []
+        for i, x in enumerate(lines):
+            if i in response or command(x) in ("PING", "PONG"):
+                continue
+            src, cmd, params = split(x)
+            n = nick_of(src)
+            if n is not None and fold(n) != fold(me):
+                continue
+            if n is not None and cmd in MSG and params and fold(params[0]) == fold(me):
+                continue
+            if bt.member_of.get(i) is not None:
+                continue
+            outside.append(x)
+        if outside and head is not None:
+            fails.append(f"OneResponse: unlabeled {command(outside[0])} outside the response")
+
+        kinds = [k for k, _ in its]
+        if "ack" in kinds and (shape != "single" or outside):
+            fails.append("AckOnlyAlone: ACK beside another reply")
+
+        if is_msg and head is not None:
+            if "badmultiline" in kinds:
+                fails.append("Multiline: an echo batch that is not one message kind to its target")
+            if echo:
+                drop = sent_cmd == "NOTICE" and kinds == ["ack"] and r["name"] in NOTICE_DROPS
+                if drop:
+                    notes.append("NoticeDropped: ACK, no echo")
+                errs_only = bool(kinds) and all(k in ("err", "fail") for k in kinds)
+                for t in targets:
+                    covered = drop or errs_only or any(
+                        (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in ps)
+                        for k, ps in its)
+                    if not covered:
+                        what = "ACK" if kinds == ["ack"] else ", ".join(kinds) or "nothing"
+                        fails.append(f"EchoEach: no echo or error for {t} ({what})")
+                bad = [k for k in kinds if k not in ("echo", "away", "err", "fail", "ack")]
+                if bad:
+                    fails.append(f"Settles: unexpected {bad[0]} in the response")
             else:
-                errs = lk in ("fail", "err")
-                want = "echo" if echo else "ack"
-                self_msg = r["name"] == "privmsg-self"
-                if not errs and lk != want and not self_msg:
-                    fails.append(f"KindForEcho: {lk}, the model expects {want}")
-                if self_msg and not echo and lk == "echo":
-                    # labeled-response: the copy delivered to yourself MUST NOT carry the
-                    # label; with echo-message off the only copy is that delivery.
+                if "echo" in kinds and r["name"] in SELF_SCENES:
+                    # labeled-response: the copy delivered to yourself MUST
+                    # NOT carry the label; it is the only copy here.
                     fails.append("SelfDelivery: the delivered copy to self carries the label")
-                if self_msg:
-                    copies = [x for x in lines if command(x) == sent_cmd]
-                    pos = next((i for i, x in enumerate(copies) if tags(x).get("label") == label), None)
-                    notes.append(f"SelfCopy: {len(copies)} copies, label on "
-                                 + ("an ACK" if lk == "ack" else f"copy {pos + 1}" if pos is not None else "none"))
+                elif "echo" in kinds:
+                    fails.append("KindForEcho: an echo without echo-message")
+                bad = [k for k in kinds if k not in ("ack", "away", "err", "fail", "echo")]
+                if bad:
+                    fails.append(f"Settles: {bad[0]} does not settle the message")
+                elif "away" in kinds:
+                    notes.append("AwayAccepts: 301 answers the message")
+            if r["name"] in SELF_SCENES:
+                copies = [i for i, x in enumerate(lines) if command(x) == sent_cmd]
+                pos = next((n for n, i in enumerate(copies) if i == head), None)
+                notes.append(f"SelfCopy: {len(copies)} copies, label on "
+                             + (f"copy {pos + 1}" if pos is not None else command(lines[head])))
+        lk = shape if not is_msg else ",".join(kinds) if kinds else None
         res.append((r["name"], r["shape"], lk, fails, notes))
     return meta, res
 
