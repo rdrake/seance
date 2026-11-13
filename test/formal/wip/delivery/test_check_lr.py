@@ -307,6 +307,13 @@ CASES = [
     ("a FAIL for another command",
      "@label=L PRIVMSG bob :hi", ["@label=L :s FAIL JOIN NO_SUCH_CHANNEL bob :Missing"],
      False, "case", True),
+    ("a 401 with no nick", "@label=L PRIVMSG bob :hi", ["@label=L :s 401 me"], True, "case", True),
+    ("a 401 with no description",
+     "@label=L PRIVMSG bob :hi", ["@label=L :s 401 me bob"], True, "case", True),
+    ("a bare FAIL to a PING", "@label=L PING :x", ["@label=L :s FAIL"], True, "case", True),
+    ("a bare WARN to a PING", "@label=L PING :x", ["@label=L :s WARN"], True, "case", True),
+    ("a FAIL for JOIN to a PING",
+     "@label=L PING :x", ["@label=L :s FAIL JOIN NO_SUCH_CHANNEL bob :Missing"], True, "case", True),
     # accepted shapes
     ("a FAIL for no command in particular",
      "@label=L PRIVMSG bob :hi", ["@label=L :s FAIL * RATE_LIMITED :Slow down"], True, "case", False),

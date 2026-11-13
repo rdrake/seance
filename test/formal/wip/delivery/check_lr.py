@@ -316,6 +316,9 @@ def check(path):
                 # the wire colon: a one-word last param may come without it.
                 if k == "err":
                     n = ERR_SUBJECTS.get(cmd, max(len(params) - 2, 0))
+                    if len(params) < n + 2:
+                        # recipient, subjects and description, all required
+                        return "malformed", []
                     about = params[1:1 + n]
                 else:
                     about = params[2:-1]
@@ -437,6 +440,9 @@ def check(path):
         if "ack" in kinds and (shape != "single" or outside):
             fails.append("AckOnlyAlone: ACK beside another reply")
 
+        if not is_msg and any(k in ("malformed", "othercmd") for k in kinds):
+            fails.append("ReplySyntax: an error or standard reply missing its parameters "
+                         "or about another command")
         if is_msg and head is not None:
             if "badmultiline" in kinds:
                 fails.append("Multiline: an echo batch that is not one message kind to its target")
