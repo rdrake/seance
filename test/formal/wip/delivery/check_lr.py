@@ -5,17 +5,20 @@ Every labeled command:
   LabelOnce  (D2)    exactly one line carries the label: a single reply,
                      the BATCH start of a batch, or ACK.
   BatchRef / BatchNest / BatchClosed (batch spec)
-                     a line names only a batch that is open; a nested
-                     batch's start and end name the same outer batch; the
-                     labeled batch and every batch in it end.
+                     references are letters, digits and hyphens; a line
+                     names only a batch that is open; a nested batch's start
+                     and end name the same outer batch; every batch ends.
   BatchType (LR)     the labeled batch is labeled-response, or a type that
                      answers the whole command (RESPONSE_BATCHES, or the
-                     multiline echo of a multiline send).
+                     multiline echo of a message).
+  EmptyBatch (LR)    an empty labeled-response batch is no response.
   OneResponse (LR)   no reply outside the response: a response of more than
                      one message MUST be one labeled batch.  Lines from other
                      users, a message or multiline batch to ourselves (the
-                     delivered copy), and a server NOTICE are not replies.
-  AckOnlyAlone (LR)  ACK only as the whole response, never inside a batch.
+                     delivered copy), a server NOTICE, and a netsplit or
+                     netjoin batch are not replies.
+  AckOnlyAlone (LR)  ACK only as the whole response, never inside a batch,
+                     and with no parameters.
 
 Messages (PRIVMSG / NOTICE / TAGMSG / a multiline batch), D15:
   The response is flattened through nested batches; a multiline batch is
@@ -23,8 +26,9 @@ Messages (PRIVMSG / NOTICE / TAGMSG / a multiline batch), D15:
   for a multiline send), to its target; for a multiline send nothing else
   is an echo.
   EchoEach           with echo-message, every target has its echo or an
-                     error naming it; an error naming no target answers
-                     the whole command when the response is errors alone;
+                     error about it (a param before the description); an
+                     error about no param answers the whole command when the
+                     response is errors alone;
                      301s may sit beside them.  A NOTICE answered by ACK
                      passes only in NOTICE_DROPS, an assumption about the
                      fixture.
@@ -102,6 +106,9 @@ MULTILINE = ("draft/multiline",)
 # LR: a labeled response is a labeled-response batch, or a batch type that
 # applies to the whole response of that command.
 RESPONSE_BATCHES = {"CHATHISTORY": ("chathistory", "draft/chathistory-targets")}
+# Batches that are traffic of their own, never a reply (batch spec).
+ASYNC_BATCHES = ("netsplit", "netjoin")
+REF_OK = re.compile(r"^[A-Za-z0-9-]+$")
 # D39: scenes where the trace's setup makes the server drop a NOTICE
 # silently, so ACK answers it even with echo-message on.  An assumption
 # about the fixture, not a protocol rule: the scene name cannot prove the
@@ -130,6 +137,8 @@ class Batches:
                 ref = None
             if cmd == "BATCH" and params and params[0].startswith("+"):
                 r = params[0][1:]
+                if not REF_OK.match(r):
+                    self.errors.append(f"BatchRef: reference {r!r} is not letters, digits and hyphens")
                 node = {"ref": r, "type": params[1] if len(params) > 1 else "",
                         "args": params[2:], "src": src, "start": i, "parent": ref,
                         "members": [], "closed": False}
@@ -155,6 +164,8 @@ class Batches:
                 if ref is not None:
                     open_[ref]["members"].append(i)
                 self.member_of[i] = ref
+        for r in open_:
+            self.errors.append(f"BatchClosed: batch {r} never ends")
 
     def at(self, i):
         return next(n for n in self.nodes.values() if n["start"] == i)
@@ -198,6 +209,8 @@ def check(path):
         if len(idx) != 1:
             fails.append(f"LabelOnce: {len(idx)} labeled lines")
         head = idx[0] if idx else None
+        if head is not None and command(lines[head]) == "ACK" and split(lines[head])[2]:
+            fails.append("AckOnlyAlone: ACK takes no parameters")
 
         def mine(i):
             return fold(nick_of(split(lines[i])[0]) or "") == fold(me)
@@ -246,7 +259,7 @@ def check(path):
                 response = subtree(node)
                 if not all_closed(node):
                     fails.append("BatchClosed: the labeled batch, or one inside it, never ends")
-                if node["type"] in MULTILINE and multiline:
+                if node["type"] in MULTILINE and is_msg:
                     its, shape = [multiline_item(node)], "multiline"
                 else:
                     if node["type"] != "labeled-response" \
@@ -277,6 +290,8 @@ def check(path):
             if cmd == "BATCH" and len(params) > 2 and params[1] in MULTILINE \
                     and fold(params[2]) == fold(me):
                 continue  # the delivered copy of a multiline message to us
+            if cmd == "BATCH" and len(params) > 1 and params[1] in ASYNC_BATCHES:
+                continue
             if bt.member_of.get(i) is not None:
                 continue
             outside.append(x)
@@ -284,6 +299,10 @@ def check(path):
             fails.append(f"OneResponse: unlabeled {command(outside[0])} outside the response")
 
         kinds = [k for k, _ in its]
+        if shape == "batch" and not kinds and bt.at(head)["type"] == "labeled-response":
+            # An empty chathistory batch is an answer (no lines); an empty
+            # labeled-response batch is not.
+            fails.append("EmptyBatch: an empty labeled batch is no response; ACK is")
         if "ack" in kinds and (shape != "single" or outside):
             fails.append("AckOnlyAlone: ACK beside another reply")
 
@@ -294,14 +313,19 @@ def check(path):
                 drop = sent_cmd == "NOTICE" and kinds == ["ack"] and r["name"] in NOTICE_DROPS
                 if drop:
                     notes.append("NoticeDropped: ACK, no echo")
-                def names(k, ps):
-                    """The targets an error names: a numeric's params after
-                    its recipient; a FAIL's context after command and code."""
-                    return set(ps[1:] if k == "err" else ps[2:]) & set(targets)
+                def subjects(k, ps):
+                    """What an error is about: a numeric's params between its
+                    recipient and its description; a FAIL's context between
+                    its command and code and its description."""
+                    return ps[1:-1] if k == "err" else ps[2:-1]
 
-                # An error naming no target answers the whole command (412,
-                # a FAIL BATCH), but only when nothing else is in the response.
-                wide = bool(kinds) and all(k in ("err", "fail") and not names(k, ps)
+                def names(k, ps):
+                    return set(subjects(k, ps)) & set(targets)
+
+                # An error about nothing in particular (412, a FAIL with no
+                # context) answers the whole command, but only when the
+                # response is errors alone.
+                wide = bool(kinds) and all(k in ("err", "fail") and not subjects(k, ps)
                                            for k, ps in its)
                 for t in targets:
                     covered = drop or wide or any(
