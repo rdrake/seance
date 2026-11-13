@@ -6,20 +6,25 @@ Every labeled command:
                      the BATCH start of a batch, or ACK.
   BatchRef / BatchNest / BatchClosed (batch spec)
                      a line names only a batch that is open; a nested
-                     batch's end, if tagged, names the batch its start
-                     named; the labeled batch and every batch in it end.
+                     batch's start and end name the same outer batch; the
+                     labeled batch and every batch in it end.
+  BatchType (LR)     the labeled batch is labeled-response, or a type that
+                     answers the whole command (RESPONSE_BATCHES, or the
+                     multiline echo of a multiline send).
   OneResponse (LR)   no reply outside the response: a response of more than
                      one message MUST be one labeled batch.  Lines from other
-                     users, and a message to ourselves (the delivered copy),
-                     are not replies.
+                     users, a message or multiline batch to ourselves (the
+                     delivered copy), and a server NOTICE are not replies.
   AckOnlyAlone (LR)  ACK only as the whole response, never inside a batch.
 
 Messages (PRIVMSG / NOTICE / TAGMSG / a multiline batch), D15:
   The response is flattened through nested batches; a multiline batch is
-  one echo only if it comes from us and holds only PRIVMSG or only NOTICE
-  lines, all to its target (for a multiline send, nothing else is an echo).
+  one echo only if every line in it is from us, of the sent command (PRIVMSG
+  for a multiline send), to its target; for a multiline send nothing else
+  is an echo.
   EchoEach           with echo-message, every target has its echo or an
-                     error naming it (an all-error response settles all);
+                     error naming it; an error naming no target answers
+                     the whole command when the response is errors alone;
                      301s may sit beside them.  A NOTICE answered by ACK
                      passes only in NOTICE_DROPS, an assumption about the
                      fixture.
@@ -92,7 +97,11 @@ def kind(raw, sent_cmd):
 
 
 MSG = ("PRIVMSG", "NOTICE", "TAGMSG")
-MULTILINE = ("draft/multiline", "multiline")
+# The draft forbids the unprefixed name.
+MULTILINE = ("draft/multiline",)
+# LR: a labeled response is a labeled-response batch, or a batch type that
+# applies to the whole response of that command.
+RESPONSE_BATCHES = {"CHATHISTORY": ("chathistory", "draft/chathistory-targets")}
 # D39: scenes where the trace's setup makes the server drop a NOTICE
 # silently, so ACK answers it even with echo-message on.  An assumption
 # about the fixture, not a protocol rule: the scene name cannot prove the
@@ -136,7 +145,9 @@ class Batches:
                 else:
                     node["closed"] = True
                     node["end"] = i
-                    if ref is not None and ref != node["parent"]:
+                    if ref != node["parent"]:
+                        # Either delimiter MAY name an outer batch; once one
+                        # does, both name the same one.
                         self.errors.append(f"BatchNest: batch {r} starts in {node['parent']} "
                                            f"but ends in {ref}")
                 self.member_of[i] = ("end", r)
@@ -175,6 +186,9 @@ def check(path):
         multiline = sent_cmd == "BATCH" and len(sent_params) > 2 \
             and sent_params[1] in MULTILINE
         is_msg = sent_cmd in MSG or multiline
+        # the command its copies come back as: record_lr's multiline scenes
+        # send PRIVMSG lines
+        msg_cmd = sent_cmd if sent_cmd in MSG else "PRIVMSG" if multiline else None
         targets = ([fold(t) for t in sent_params[0].split(",")] if sent_cmd in MSG
                    else [fold(sent_params[2])] if multiline else [])
         lines = [x["raw"] if isinstance(x, dict) else x for x in r["recv"]]
@@ -216,13 +230,13 @@ def check(path):
             return out
 
         def multiline_item(node):
+            # The lines carry the sender; the BATCH line's source may be the
+            # server.  Every line from us, of the sent command, to the target.
             msgs = [m for m in node["members"] if not isinstance(m, dict)]
-            cmds = {command(lines[m]) for m in msgs}
             target = fold(node["args"][0]) if node["args"] else ""
             ok = (msgs and len(msgs) == len(node["members"])
-                  and len(cmds) == 1 and cmds <= {"PRIVMSG", "NOTICE"}
-                  and all(fold(split(lines[m])[2][0]) == target for m in msgs)
-                  and fold(nick_of(node["src"]) or "") == fold(me))
+                  and all(command(lines[m]) == msg_cmd and mine(m)
+                          and fold(split(lines[m])[2][0]) == target for m in msgs))
             return ("echo", [target]) if ok else ("badmultiline", [target])
 
         response, its, shape = set(), [], None
@@ -232,9 +246,13 @@ def check(path):
                 response = subtree(node)
                 if not all_closed(node):
                     fails.append("BatchClosed: the labeled batch, or one inside it, never ends")
-                if node["type"] in MULTILINE:
+                if node["type"] in MULTILINE and multiline:
                     its, shape = [multiline_item(node)], "multiline"
                 else:
+                    if node["type"] != "labeled-response" \
+                            and node["type"] not in RESPONSE_BATCHES.get(sent_cmd, ()):
+                        fails.append(f"BatchType: a {node['type']} batch cannot be "
+                                     f"the response to {sent_cmd}")
                     its, shape = items(node), "batch"
             else:
                 response, its, shape = {head}, [item(head)], "single"
@@ -251,8 +269,14 @@ def check(path):
             n = nick_of(src)
             if n is not None and fold(n) != fold(me):
                 continue
-            if n is not None and cmd in MSG and params and fold(params[0]) == fold(me):
+            if cmd in MSG and params and fold(params[0]) == fold(me) \
+                    and (n is not None or cmd == "NOTICE"):
+                # a message to us (the delivered copy of one to ourselves),
+                # or a server NOTICE: traffic, not a reply
                 continue
+            if cmd == "BATCH" and len(params) > 2 and params[1] in MULTILINE \
+                    and fold(params[2]) == fold(me):
+                continue  # the delivered copy of a multiline message to us
             if bt.member_of.get(i) is not None:
                 continue
             outside.append(x)
@@ -270,10 +294,18 @@ def check(path):
                 drop = sent_cmd == "NOTICE" and kinds == ["ack"] and r["name"] in NOTICE_DROPS
                 if drop:
                     notes.append("NoticeDropped: ACK, no echo")
-                errs_only = bool(kinds) and all(k in ("err", "fail") for k in kinds)
+                def names(k, ps):
+                    """The targets an error names: a numeric's params after
+                    its recipient; a FAIL's context after command and code."""
+                    return set(ps[1:] if k == "err" else ps[2:]) & set(targets)
+
+                # An error naming no target answers the whole command (412,
+                # a FAIL BATCH), but only when nothing else is in the response.
+                wide = bool(kinds) and all(k in ("err", "fail") and not names(k, ps)
+                                           for k, ps in its)
                 for t in targets:
-                    covered = drop or errs_only or any(
-                        (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in ps)
+                    covered = drop or wide or any(
+                        (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in names(k, ps))
                         for k, ps in its)
                     if not covered:
                         what = "ACK" if kinds == ["ack"] else ", ".join(kinds) or "nothing"
