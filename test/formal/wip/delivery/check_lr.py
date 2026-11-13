@@ -142,6 +142,7 @@ MULTILINE = ("draft/multiline",)
 RESPONSE_BATCHES = {"CHATHISTORY": ("chathistory", "draft/chathistory-targets")}
 # Batches that are traffic of their own, never a reply (batch spec).
 ASYNC_BATCHES = ("netsplit", "netjoin")
+FEEDBACK = ("warn", "note")
 REF_OK = re.compile(r"^[A-Za-z0-9-]+$")
 # FAIL codes whose context is a limit, not a target: they refuse the whole
 # message (multiline spec).
@@ -311,7 +312,7 @@ def check(path):
                     about = params[1:1 + n]
                 else:
                     about = params[2:-1]
-                if k == "fail" and len(params) > 1 and params[1] in WIDE_FAILS:
+                if k == "fail" and len(params) > 1 and params[1].upper() in WIDE_FAILS:
                     about = []
                 return k, [fold(p) for p in about]
             return k, [fold(p) for p in params]
@@ -396,9 +397,11 @@ def check(path):
             n = nick_of(src)
             if n is not None and fold(n) != fold(me):
                 continue
-            if cmd in MSG and params and fold(params[0]) == fold(me):
+            if cmd in MSG and params and (fold(params[0]) == fold(me)
+                                          or (n is None and params[0].startswith("$"))):
                 # a message to us (the delivered copy of one to ourselves),
-                # or a server's own NOTICE or PRIVMSG: traffic, not a reply
+                # a server's own NOTICE or PRIVMSG, or a server's $mask
+                # broadcast: traffic, not a reply
                 continue
             if cmd == "BATCH" and len(params) > 1 and params[0].startswith("+") \
                     and params[1] in MULTILINE:
@@ -448,7 +451,9 @@ def check(path):
                     if not covered:
                         what = "ACK" if kinds == ["ack"] else ", ".join(kinds) or "nothing"
                         fails.append(f"EchoEach: no echo or error for {t} ({what})")
-                bad = [k for k in kinds if k not in ("echo", "away", "err", "fail", "ack")]
+                # WARN and NOTE are feedback beside the outcome (standard
+                # replies): they neither settle nor spoil it.
+                bad = [k for k in kinds if k not in ("echo", "away", "err", "fail", "ack") + FEEDBACK]
                 if bad:
                     fails.append(f"Settles: unexpected {bad[0]} in the response")
             else:
@@ -458,7 +463,7 @@ def check(path):
                     fails.append("SelfDelivery: the delivered copy to self carries the label")
                 elif "echo" in kinds:
                     fails.append("KindForEcho: an echo without echo-message")
-                bad = [k for k in kinds if k not in ("ack", "away", "err", "fail", "echo")]
+                bad = [k for k in kinds if k not in ("ack", "away", "err", "fail", "echo") + FEEDBACK]
                 if bad:
                     fails.append(f"Settles: {bad[0]} does not settle the message")
                 elif "away" in kinds:
