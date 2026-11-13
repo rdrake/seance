@@ -91,14 +91,13 @@ def command(raw):
     return split(raw)[1]
 
 
-def nick_of(src, me):
-    """The nick of a user source.  A source may be the nick alone; a bare
-    name is taken as a nick only when it is ours, since a server's name
-    cannot be told from another user's nick without the trace's server
-    list."""
+def nick_of(src):
+    """The nick of a user source, or None for a server.  A source may be the
+    nick alone; a nick never holds a dot and a server name always does, so
+    a bare name with a dot is a server."""
     if "!" in src or "@" in src:
         return re.split("[!@]", src, maxsplit=1)[0]
-    return src if src and fold(src) == fold(me) else None
+    return src if src and "." not in src else None
 
 
 def kind(raw, sent_cmd):
@@ -266,7 +265,7 @@ def check(path):
             fails.append("AckOnlyAlone: ACK takes no parameters")
 
         def mine(i):
-            return fold(nick_of(split(lines[i])[0], me) or "") == fold(me)
+            return fold(nick_of(split(lines[i])[0]) or "") == fold(me)
 
         def item(i):
             """(kind, params) of one line of the response."""
@@ -308,7 +307,7 @@ def check(path):
             return out
 
         def senders(node):
-            return {fold(nick_of(split(lines[m])[0], me) or "")
+            return {fold(nick_of(split(lines[m])[0]) or "")
                     for m in node["members"] if not isinstance(m, dict)}
 
         def well_formed(node, cmd):
@@ -368,7 +367,7 @@ def check(path):
             if i in response or command(x) in ("PING", "PONG"):
                 continue
             src, cmd, params = split(x)
-            n = nick_of(src, me)
+            n = nick_of(src)
             if n is not None and fold(n) != fold(me):
                 continue
             if cmd in MSG and params and fold(params[0]) == fold(me) \
