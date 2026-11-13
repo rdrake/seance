@@ -21,6 +21,8 @@ model passes the same config.  Run from this directory:
   MU_NoCookieGate    (TinyCookie)   server sends 001 before the cookie's PONG -> RuleCookieGate
   MU_SpeakAfterError (TinyTimeout)  server keeps reading (and answering) after ERROR
                                     -> RuleNothingAfterError
+  MU_TrustDropped    (TinyMetaNoBatch) client counts a key acknowledged before 001 as held
+                                    without batch (Seance before #299) -> RuleHeldIsKept
 """
 src = open('../SpecReg.tla').read()
 
@@ -43,7 +45,7 @@ mut('MU_PongWrong', 'TinyCookie',
 mut('MU_MetaNick', 'TinyMetaNick',
     ('CSend(M("METASET", "*"))', 'CSend(M("METASET", NickList[1]))'))
 mut('MU_NoEmptyBatch', 'TinyMeta',
-    ('    \\o (IF Meta\n        THEN <<M("BATCH+", n)>>', '    \\o (IF Meta /\\ srv.meta = 1\n        THEN <<M("BATCH+", n)>>'))
+    ('    \\o (IF Meta /\\ srv.batch\n        THEN <<M("BATCH+", n)>>', '    \\o (IF Meta /\\ srv.batch /\\ srv.meta = 1\n        THEN <<M("BATCH+", n)>>'))
 mut('MU_BatchAfterMotd', 'TinyMeta',
     ('    \\o <<M("376", "")>>\n', '    \\o <<>>\n'),
     ('    <<M("001", n)>>\n', '    <<M("001", n), M("376", "")>>\n'))
@@ -68,4 +70,6 @@ mut('MU_NoCookieGate', 'TinyCookie',
     ('/\\ (~Cookie \\/ srv.cookie = "ok")', '/\\ TRUE'))
 mut('MU_SpeakAfterError', 'TinyTimeout',
     ('/\\ srv.phase # "closed" /\\ c2s # <<>>', '/\\ c2s # <<>>'))
+mut('MU_TrustDropped', 'TinyMetaNoBatch',
+    ('!.held = cli.acked /\\ cli.batch]', '!.held = cli.acked]'))
 print('ok')

@@ -40,6 +40,13 @@ This is still registration (MD:176). The server may have completed registration 
 - The server checks the password when registration would complete.
 - 464 alone leaves the connection open and unregistered (`refused`), until the server ends it (D4).
 
+## D9. Metadata without batch (nefarious2)
+draft/metadata-2 requires batch, but nefarious2 grants the metadata cap without it for before-connect (ibutsu, 2026-11-12): a METADATA SET during registration is answered with 761 `*` even when batch is refused, and if batch is not negotiated by the end of registration, the server drops what was set. `NoBatch` lets the server refuse batch. With metadata the client asks for batch too, and the server's ACK or NAK is one line (`CAPB`). At 001 without batch, the server drops the key and sends no metadata batch, since metadata is not usable; `RuleMetaBatch` and `RuleMetaCarries` apply only with batch.
+
+The client counts a key acknowledged before 001 as held only if batch was negotiated (`cli.held`). `RuleHeldIsKept` (invariant): a key the client counts as held is still held by the server. `W_MetaDropped` shows the drop is reachable. The mutant `MU_TrustDropped` counts every acknowledged key as held, as Seance did before evilnet/seance#299, and breaks `RuleHeldIsKept`.
+
+The Meta configs gain the batch answer line, so their state counts change; configs without Meta keep theirs.
+
 ## Open questions (to settle from traces)
 - **Q1.** METADATA aimed at a target other than `*` before registration: refused, or accepted? The spec is silent; the model reads refused (D5). **Observed (traces/):** both servers refuse it with `FAIL METADATA` (one `INVALID_TARGET`, the other `KEY_NO_PERMISSION`). The model's reading stands; settled.
 - **Q2.** METADATA after CAP END and before 001: is it in the burst? This is server-dependent (D7). The traces show each server's behaviour. **Observed:** both branches occur. One server reads the SET before completing registration (`761` with target `*`, key in the burst); the other completes registration first (`761` with the nick, after the burst). Settled as server-dependent, as D7 models.

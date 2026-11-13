@@ -1385,5 +1385,7 @@ Runs (cloud, limited: Labels 2, Texts 2, MaxReq 2):
   - **W_SpentModify** (Modify). An echo the server altered to another copy's text settles that copy. ConfirmedByOwnOrTwin fails, at 327,087 states.
 
   Neither limit arises once the server labels its echoes as LR requires.
+
+  Checked against Seance in unit tests (develop 01ecb7e73, not committed). The self-delivery shape settles the wrong copy only before the client has learned that echoes are labelled, and since the texts are identical nothing shows. The altered-echo shape reproduces: a false "Not sent" for the copy that was delivered. That needs the server to rewrite a PM's text into exactly another pending copy's text, and no nefarious2 path is known to do so to a PM. Recorded, not fixed.
 - V4Spent still passes with the tightened property: 348,377 states.
 - The checked-in mutants are regenerated from the v2.4.1 model; DM_NoSpent still breaks ResolvedByResponse on V4Spent, at 348,365 states.

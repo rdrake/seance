@@ -3,7 +3,7 @@
 S = lambda *a: '{' + ', '.join('"%s"' % x for x in a) + '}'
 Q = lambda *a: {1: 'NL1', 2: 'NL2'}[len(a)]   # tuples are defined in SpecReg.tla
 D = dict(NickList=Q('n1'), Taken='{}', PassReq='"none"', CliPasses=S('none'),
-         Cookie='FALSE', Meta='FALSE', MetaVals='{0}', Timeout='FALSE')
+         Cookie='FALSE', Meta='FALSE', MetaVals='{0}', Timeout='FALSE', NoBatch='FALSE')
 BASE = {
     'TinyNick': dict(D, NickList=Q('n1', 'n2'), Taken=S('n1')),          # 433, then the next nick
     'TinyPass': dict(D, PassReq='"need"', CliPasses=S('none', 'right', 'wrong')),
@@ -12,20 +12,22 @@ BASE = {
     'TinyTimeout': dict(D, Taken=S('n1'), Timeout='TRUE'),
     'TinyMetaNick': dict(D, Meta='TRUE', MetaVals='{0, 1}', NickList=Q('n1', 'n2'), Taken=S('n1')),
     'TinyMetaCookie': dict(D, Meta='TRUE', MetaVals='{1}', Cookie='TRUE'),
+    'TinyMetaNoBatch': dict(D, Meta='TRUE', MetaVals='{0, 1}', NoBatch='TRUE'),   # D9
     # comprehensive: not for now
     'Reference': dict(NickList=Q('n1', 'n2'), Taken=S('n1'), PassReq='"need"',
                       CliPasses=S('none', 'right', 'wrong'), Cookie='TRUE', Meta='TRUE',
-                      MetaVals='{0, 1}', Timeout='TRUE'),
+                      MetaVals='{0, 1}', Timeout='TRUE', NoBatch='TRUE'),
 }
 INV = ['TypeOK', 'RulePassBeforeLatter', 'RulePongToken', 'RuleMetaStar', 'RuleBurstAfter001',
-       'RuleMetaBatch', 'RuleMetaCarries', 'RulePassGate', 'RuleCookieGate', 'RuleWelcomedBy001']
+       'RuleMetaBatch', 'RuleMetaCarries', 'RulePassGate', 'RuleCookieGate', 'RuleWelcomedBy001', 'RuleHeldIsKept']
 PROP = ['RuleNickIgnoredOn433', 'RulePassRefusalSaid', 'RuleNothingAfterError',
         'PingsAnswered', 'Registers']
 LIMITED = ['TinyNick', 'TinyPass', 'TinyCookie', 'TinyMeta', 'TinyTimeout', 'TinyMetaNick',
-           'TinyMetaCookie']
+           'TinyMetaCookie', 'TinyMetaNoBatch']
 WIT = {'W_433Then001': 'TinyNick', 'W_EndThen433': 'TinyNick', 'W_CookieThen001': 'TinyCookie',
        'W_MetaKV': 'TinyMeta', 'W_EmptyBatch': 'TinyMeta', 'W_MetaAfterEnd': 'TinyMeta',
-       'W_Timeout': 'TinyTimeout', 'W_PassRefused': 'TinyPass', 'W_Refused464Only': 'TinyPass'}
+       'W_Timeout': 'TinyTimeout', 'W_PassRefused': 'TinyPass', 'W_Refused464Only': 'TinyPass',
+       'W_MetaDropped': 'TinyMetaNoBatch'}
 CFGS = {b: (b, INV, PROP, 'LIMITED run (now)') for b in LIMITED}
 CFGS['Reference'] = ('Reference', INV, PROP, 'COMPREHENSIVE: not for now')
 for w, b in WIT.items():

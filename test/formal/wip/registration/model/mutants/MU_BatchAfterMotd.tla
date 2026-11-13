@@ -33,13 +33,14 @@ CONSTANTS
     Cookie,     \* server sends a PING during registration and waits for its PONG (D2)
     Meta,       \* server advertises metadata before-connect; the client enables it (D5)
     MetaVals,   \* subset of {0, 1}: keys the client sets before 001
-    Timeout     \* server may end a registration that has not completed (D4)
+    Timeout,    \* server may end a registration that has not completed (D4)
+    NoBatch     \* server may refuse batch while granting metadata (D9)
 
 ASSUME Len(NickList) \in 1..3
 ASSUME PassReq \in {"none", "need"}
 ASSUME CliPasses \subseteq {"none", "right", "wrong"} /\ CliPasses # {}
 ASSUME MetaVals \subseteq {0, 1} /\ MetaVals # {}
-ASSUME Cookie \in BOOLEAN /\ Meta \in BOOLEAN /\ Timeout \in BOOLEAN
+ASSUME Cookie \in BOOLEAN /\ Meta \in BOOLEAN /\ Timeout \in BOOLEAN /\ NoBatch \in BOOLEAN
 
 \* TLC configs cannot write a tuple: they bind NickList <- NL1 or NL2.
 NL1 == <<"n1">>
@@ -64,13 +65,16 @@ Log(d, m) == hist' = Append(hist, [d |-> d, m |-> m])
 
 Init ==
     /\ c2s = <<>> /\ s2c = <<>> /\ hist = <<>>
-    /\ srv = [phase |-> "pre", susp |-> FALSE, nick |-> "", user |-> FALSE,
-              pass |-> "none", cookie |-> "none", meta |-> 0, out |-> <<>>]
+    /\ \E b \in IF NoBatch THEN BOOLEAN ELSE {TRUE} :
+         srv = [phase |-> "pre", susp |-> FALSE, nick |-> "", user |-> FALSE,
+                pass |-> "none", cookie |-> "none", meta |-> 0, out |-> <<>>,
+                batch |-> b]
     /\ \E p \in CliPasses, v \in MetaVals :
          cli = [pass |-> p, mv |-> v, capls |-> FALSE, passSent |-> FALSE,
                 ni |-> 0, need |-> FALSE, user |-> FALSE, metaSent |-> 0,
                 endSent |-> FALSE, pings |-> <<>>, welcomed |-> FALSE,
-                nick |-> "", closed |-> FALSE]
+                nick |-> "", closed |-> FALSE,
+                batch |-> FALSE, acked |-> FALSE, held |-> FALSE]
 
 PassOK == PassReq = "none" \/ srv.pass = "right"
 
@@ -84,18 +88,22 @@ Ready ==
 \* MI:117-126: 001 first, then the burst; the MOTD (or 422) closes it.
 \* MD:113, MD:140: with metadata negotiated, a metadata batch targeting the
 \* client's own nick, before 376/422, holding what was set before
-\* registration; empty if nothing was (D6).
+\* registration; empty if nothing was (D6).  Without batch, metadata is
+\* not usable (MD: it requires batch), so there is no batch (D9).
 Burst(n) ==
     <<M("001", n), M("376", "")>>
-    \o (IF Meta
+    \o (IF Meta /\ srv.batch
         THEN <<M("BATCH+", n)>> \o (IF srv.meta = 1 THEN <<M("KV", "k")>> ELSE <<>>)
              \o <<M("BATCH-", n)>>
         ELSE <<>>)
     \o <<>>
 
+\* D9 (nefarious2): what was set before registration is dropped at its end
+\* if batch was not negotiated by then.
 SWelcome ==
     /\ Ready /\ PassOK
-    /\ srv' = [srv EXCEPT !.phase = "burst", !.out = Burst(srv.nick)]
+    /\ srv' = [srv EXCEPT !.phase = "burst", !.out = Burst(srv.nick),
+                          !.meta = IF srv.batch THEN @ ELSE 0]
     /\ UNCHANGED <<c2s, s2c, cli, hist>>
 
 \* MC:32: a wrong or missing password: 464 SHOULD, then ERROR MAY; at least
@@ -134,8 +142,11 @@ SRecv ==
     /\ c2s' = Tail(c2s)
     /\ LET m == Head(c2s)
            pre == srv.phase = "pre"
+       \* With metadata the client also asks for batch; the answer (ACK or
+       \* NAK, D9) is one line.
        IN CASE m.t = "CAPLS" ->
-                 s2c' = s2c /\ srv' = [srv EXCEPT !.susp = pre]
+                 s2c' = (IF Meta THEN Append(s2c, M("CAPB", srv.batch)) ELSE s2c)
+                 /\ srv' = [srv EXCEPT !.susp = pre]
             [] m.t = "CAPEND" ->
                  s2c' = s2c /\ srv' = [srv EXCEPT !.susp = FALSE]
             \* MC:30: only the last PASS counts; after registration, 462 (MA:941).
@@ -240,7 +251,12 @@ CRecv ==
        cli' = CASE m.t = "PING" -> [cli EXCEPT !.pings = Append(@, m.a)]
                 [] m.t = "433" -> [cli EXCEPT !.need = TRUE]
                 [] m.t = "ERROR" -> [cli EXCEPT !.closed = TRUE]
-                [] m.t = "001" -> [cli EXCEPT !.welcomed = TRUE, !.nick = m.a]
+                [] m.t = "CAPB" -> [cli EXCEPT !.batch = m.a]
+                [] m.t = "761" /\ m.a = "*" -> [cli EXCEPT !.acked = TRUE]
+                \* D9: a key acknowledged before 001 is held only if batch was
+                \* negotiated; otherwise the server dropped it.
+                [] m.t = "001" -> [cli EXCEPT !.welcomed = TRUE, !.nick = m.a,
+                                              !.held = cli.acked /\ cli.batch]
                 [] OTHER -> cli
     /\ UNCHANGED <<c2s, srv>>
 
@@ -268,6 +284,8 @@ TypeOK ==
     /\ srv.phase \in {"pre", "burst", "reg", "refused", "closed"}
     /\ srv.cookie \in {"none", "sent", "ok"} /\ srv.meta \in {0, 1}
     /\ cli.ni \in 0..Len(NickList) /\ cli.metaSent \in 0..1
+    /\ srv.batch \in BOOLEAN /\ cli.batch \in BOOLEAN
+    /\ cli.acked \in BOOLEAN /\ cli.held \in BOOLEAN
 
 \* MI:103 (MUST, client): no PASS after both a NICK and a USER.
 RulePassBeforeLatter ==
@@ -293,16 +311,20 @@ RuleBurstAfter001 ==
 \* client has had a metadata batch for its own nick, opened and closed
 \* between 001 and 376.
 RuleMetaBatch ==
-    (Meta /\ Seen("S", "376") /\ Seen("S", "001")) =>
+    (Meta /\ srv.batch /\ Seen("S", "376") /\ Seen("S", "001")) =>
         \E b \in Pos("S", "BATCH+"), e \in Pos("S", "BATCH-") :
             /\ First("S", "001") < b /\ b < e /\ e < First("S", "376")
             /\ hist[b].m.a = hist[First("S", "001")].m.a
 
 \* MD:140 (server): a key acknowledged before 001 (761 "*") is in that batch.
 RuleMetaCarries ==
-    (Meta /\ Seen("S", "376") /\ Seen("S", "001")
+    (Meta /\ srv.batch /\ Seen("S", "376") /\ Seen("S", "001")
      /\ \E i \in Pos("S", "761") : hist[i].m.a = "*" /\ i < First("S", "001"))
     => \E k \in Pos("S", "KV") : First("S", "001") < k /\ k < First("S", "376")
+
+\* D9 (client): after 001 the client counts a key set before registration
+\* as held only if the server still holds it.
+RuleHeldIsKept == cli.held => srv.meta = 1
 
 \* MC:53 (server): a NICK answered with 433 does not change the nick.
 RuleNickIgnoredOn433 ==
@@ -347,4 +369,5 @@ W_MetaAfterEnd == ~(\E i \in Pos("C", "METASET") : Seen("C", "CAPEND") /\ First(
 W_Timeout      == ~(Seen("S", "ERROR") /\ ~Seen("S", "001") /\ ~Seen("S", "464"))
 W_PassRefused  == ~Seen("S", "464")
 W_Refused464Only == ~(srv.phase = "refused")
+W_MetaDropped  == ~(cli.acked /\ ~srv.batch /\ cli.welcomed)
 =============================================================================
