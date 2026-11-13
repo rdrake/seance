@@ -295,6 +295,17 @@ def check(path):
             ok = well_formed(node, msg_cmd) and senders(node) == {fold(me)}
             return ("echo" if ok else "badmultiline", [target])
 
+        # Every multiline batch in the row, wherever it is and whoever sent
+        # it, is well formed, and only its start may carry a label.
+        for node in bt.nodes.values():
+            if node["type"] in MULTILINE:
+                if not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
+                    fails.append("Multiline: a multiline batch that is not one sender, "
+                                 "one message kind, to its one target")
+                if any(not isinstance(m, dict) and "label" in tags(lines[m])
+                       for m in node["members"]):
+                    fails.append("Multiline: a line inside a multiline batch carries a label")
+
         response, its, shape = set(), [], None
         if head is not None:
             if command(lines[head]) == "BATCH" and split(lines[head])[2][0].startswith("+"):
@@ -339,9 +350,6 @@ def check(path):
                 node = bt.at(i)
                 who = senders(node)
                 to_me = len(params) > 2 and fold(params[2]) == fold(me)
-                if not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
-                    fails.append("Multiline: a multiline batch that is not one sender, "
-                                 "one message kind, to its target")
                 if who and (fold(me) not in who or to_me):
                     continue
             if cmd == "BATCH" and len(params) > 1 and params[1] in ASYNC_BATCHES:
