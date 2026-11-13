@@ -86,9 +86,36 @@ def check(path):
             others = [x for x in others if command(x) != sent_cmd]
         if lk == "ack" and others:
             fails.append(f"AckOnlyAlone: ACK plus unlabeled {command(others[0])}")
+        if lk == "batch":
+            # A labeled batch settles through what it holds (LR:55-58): the
+            # settling kind is the first echo/ack/fail/err among its members,
+            # nested batches' members included.
+            ref = body(labeled[0]).split()[2].lstrip("+")
+            refs, inner = {ref}, []
+            for x in lines:
+                b = tags(x).get("batch")
+                if b in refs:
+                    if command(x) == "BATCH" and body(x).split()[2].startswith("+"):
+                        refs.add(body(x).split()[2][1:])
+                    inner.append(x)
+            kinds = [kind(x, sent_cmd) for x in inner]
+            lk = next((k for k in kinds if k in ("echo", "ack", "fail", "err")),
+                      "batch")
+            if lk == "batch" and any(command(x) == "BATCH" for x in inner):
+                lk = "echo"  # a nested multiline echo
+        if sent_cmd in ("PRIVMSG", "NOTICE", "TAGMSG") and labeled and not echo \
+                and lk == "numeric":
+            # D32: without echo-message a labeled informational numeric (301)
+            # is the whole response, and it accepts the message.
+            notes.append(f"NumericAccepts: {command(labeled[0])} answers the message")
+            lk = "ack"
         if sent_cmd in ("PRIVMSG", "NOTICE", "TAGMSG") and labeled:
             if lk not in ("echo", "ack", "fail", "err"):
                 fails.append(f"Settles: labeled line is {lk}")
+            elif sent_cmd == "NOTICE" and lk == "ack":
+                # D32: a NOTICE draws no error, so one the server drops (+m)
+                # is answered by ACK even with echo-message on.
+                notes.append("NoticeDropped: ACK, no echo")
             else:
                 errs = lk in ("fail", "err")
                 want = "echo" if echo else "ack"

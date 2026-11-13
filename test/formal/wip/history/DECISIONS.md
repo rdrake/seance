@@ -1340,3 +1340,13 @@ id from the reserved block.
   Holes {2, 3}) and NHeld 3 with one hole, at Limit 1-2 with LiveOn; on
   HNoBatchAgrees-sized configs with a hole; and with Skew 1 plus NOld 1
   and MayFail.
+
+## D32. What check_lr.py accepts besides a lone echo, ACK or error (2026-11-13)
+
+The widened trace scenarios (record_lr.py, about 60 commands, nefarious2 253218e0 and Ergo, echo-message on and off) showed three shapes the checker misjudged. Each is allowed by the specs, and Ergo produces all three:
+
+- **A labeled batch** (LR:55-58) settles through what it holds: the first echo, ACK, FAIL or error among its members, nested batches included (a multiline echo inside the labeled batch counts as the echo). Before, any labeled batch failed `Settles`.
+- **Without echo-message, a labeled informational numeric** (a 301 for a message to someone away) is the whole response and accepts the message, as an ACK would. With echo-message on, the echo is part of the response, so a lone labeled 301 still fails: that is evilnet/nefarious2#224.
+- **A NOTICE the server drops** (a moderated channel) draws no error (D20), so with echo-message on it is answered by ACK and not echoed.
+
+With these, Ergo holds 63/63 both ways. nefarious2 fails exactly the filed issues: the away cases with echo on (#224), the silenced PRIVMSG answered by ACK (#227, a question), and the multiline batch with echo off that gets no labeled reply (#225). #226 (STATUSMSG answered by 401) settles by its error and is a delivery bug, not a label one, so the checker does not flag it.
