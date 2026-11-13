@@ -1,24 +1,27 @@
 == nef2-253218e0 echo=on: 56/63 commands hold
   note privmsg-self: SelfCopy: 2 copies, label on copy 1
-  FAIL privmsg-user-away (single, labeled numeric): Settles: labeled line is numeric
-  FAIL action-user-away (single, labeled numeric): Settles: labeled line is numeric
-  FAIL reply-user-away (single, labeled numeric): Settles: labeled line is numeric
-  FAIL privmsg-user-away-long (single, labeled numeric): Settles: labeled line is numeric
-  FAIL privmsg-user-away-twice (single, labeled numeric): Settles: labeled line is numeric
-  FAIL privmsg-self-away (single, labeled numeric): Settles: labeled line is numeric
+  FAIL privmsg-user-away (single, labeled numeric): OneResponse: labeled 301 plus unlabeled PRIVMSG
+  FAIL privmsg-user-away (single, labeled numeric): Settles: labeled response is numeric
+  FAIL action-user-away (single, labeled numeric): OneResponse: labeled 301 plus unlabeled PRIVMSG
+  FAIL action-user-away (single, labeled numeric): Settles: labeled response is numeric
+  FAIL reply-user-away (single, labeled numeric): OneResponse: labeled 301 plus unlabeled PRIVMSG
+  FAIL reply-user-away (single, labeled numeric): Settles: labeled response is numeric
+  FAIL privmsg-user-away-long (single, labeled numeric): OneResponse: labeled 301 plus unlabeled PRIVMSG
+  FAIL privmsg-user-away-long (single, labeled numeric): Settles: labeled response is numeric
+  FAIL privmsg-user-away-twice (single, labeled numeric): OneResponse: labeled 301 plus unlabeled PRIVMSG
+  FAIL privmsg-user-away-twice (single, labeled numeric): Settles: labeled response is numeric
+  FAIL privmsg-self-away (single, labeled numeric): Settles: labeled response is numeric
   FAIL privmsg-user-silenced (ack, labeled ack): KindForEcho: ack, the model expects echo
   note notice-chan-moderated: NoticeDropped: ACK, no echo
 == nef2-253218e0 echo=off: 61/63 commands hold
-  note notice-chan: NoticeDropped: ACK, no echo
   note privmsg-self: SelfCopy: 1 copies, label on an ACK
-  note privmsg-user-away: NumericAccepts: 301 answers the message
-  note notice-user-away: NoticeDropped: ACK, no echo
-  note action-user-away: NumericAccepts: 301 answers the message
-  note reply-user-away: NumericAccepts: 301 answers the message
-  note privmsg-user-away-long: NumericAccepts: 301 answers the message
-  note privmsg-user-away-twice: NumericAccepts: 301 answers the message
-  note privmsg-two-targets-away: NumericAccepts: 301 answers the message
-  note privmsg-self-away: NumericAccepts: 301 answers the message
+  note privmsg-user-away: AwayAccepts: 301 answers the message
+  note action-user-away: AwayAccepts: 301 answers the message
+  note reply-user-away: AwayAccepts: 301 answers the message
+  note privmsg-user-away-long: AwayAccepts: 301 answers the message
+  note privmsg-user-away-twice: AwayAccepts: 301 answers the message
+  note privmsg-two-targets-away: AwayAccepts: 301 answers the message
+  note privmsg-self-away: AwayAccepts: 301 answers the message
   note notice-chan-moderated: NoticeDropped: ACK, no echo
   FAIL multiline-chan (none, labeled None): LabelOnce: 0 labeled lines
   FAIL multiline-user-away (none, labeled None): LabelOnce: 0 labeled lines
@@ -26,14 +29,13 @@
   note privmsg-self: SelfCopy: 2 copies, label on copy 2
   note notice-chan-moderated: NoticeDropped: ACK, no echo
 == ergo-079720e8 echo=off: 63/63 commands hold
-  note notice-chan: NoticeDropped: ACK, no echo
   note privmsg-self: SelfCopy: 1 copies, label on an ACK
-  note privmsg-user-away: NumericAccepts: 301 answers the message
-  note notice-user-away: NoticeDropped: ACK, no echo
-  note action-user-away: NumericAccepts: 301 answers the message
-  note reply-user-away: NumericAccepts: 301 answers the message
-  note privmsg-user-away-long: NumericAccepts: 301 answers the message
-  note privmsg-user-away-twice: NumericAccepts: 301 answers the message
-  note privmsg-two-targets-away: NumericAccepts: 301 answers the message
-  note privmsg-self-away: NumericAccepts: 301 answers the message
+  note privmsg-user-away: AwayAccepts: 301 answers the message
+  note action-user-away: AwayAccepts: 301 answers the message
+  note reply-user-away: AwayAccepts: 301 answers the message
+  note privmsg-user-away-long: AwayAccepts: 301 answers the message
+  note privmsg-user-away-twice: AwayAccepts: 301 answers the message
+  note privmsg-two-targets-away: AwayAccepts: 301 answers the message
+  note privmsg-self-away: AwayAccepts: 301 answers the message
   note notice-chan-moderated: NoticeDropped: ACK, no echo
+  note multiline-user-away: AwayAccepts: 301 answers the message
