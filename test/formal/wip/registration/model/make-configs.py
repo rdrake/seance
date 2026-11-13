@@ -19,7 +19,8 @@ BASE = {
                       MetaVals='{0, 1}', Timeout='TRUE', NoBatch='TRUE'),
 }
 INV = ['TypeOK', 'RulePassBeforeLatter', 'RulePongToken', 'RuleMetaStar', 'RuleBurstAfter001',
-       'RuleMetaBatch', 'RuleMetaCarries', 'RulePassGate', 'RuleCookieGate', 'RuleWelcomedBy001', 'RuleHeldIsKept']
+       'RuleMetaBatch', 'RuleMetaCarries', 'RulePassGate', 'RuleCookieGate', 'RuleWelcomedBy001', 'RuleHeldIsKept',
+       'RuleDropWithoutBatch', 'RuleNoMetaBatchWithoutBatch']
 PROP = ['RuleNickIgnoredOn433', 'RulePassRefusalSaid', 'RuleNothingAfterError',
         'PingsAnswered', 'Registers']
 LIMITED = ['TinyNick', 'TinyPass', 'TinyCookie', 'TinyMeta', 'TinyTimeout', 'TinyMetaNick',
@@ -27,7 +28,7 @@ LIMITED = ['TinyNick', 'TinyPass', 'TinyCookie', 'TinyMeta', 'TinyTimeout', 'Tin
 WIT = {'W_433Then001': 'TinyNick', 'W_EndThen433': 'TinyNick', 'W_CookieThen001': 'TinyCookie',
        'W_MetaKV': 'TinyMeta', 'W_EmptyBatch': 'TinyMeta', 'W_MetaAfterEnd': 'TinyMeta',
        'W_Timeout': 'TinyTimeout', 'W_PassRefused': 'TinyPass', 'W_Refused464Only': 'TinyPass',
-       'W_MetaDropped': 'TinyMetaNoBatch'}
+       'W_MetaDropped': 'TinyMetaNoBatch', 'W_MetaBeforeBatch': 'TinyMeta'}
 CFGS = {b: (b, INV, PROP, 'LIMITED run (now)') for b in LIMITED}
 CFGS['Reference'] = ('Reference', INV, PROP, 'COMPREHENSIVE: not for now')
 for w, b in WIT.items():

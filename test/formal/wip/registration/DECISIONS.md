@@ -41,11 +41,11 @@ This is still registration (MD:176). The server may have completed registration 
 - 464 alone leaves the connection open and unregistered (`refused`), until the server ends it (D4).
 
 ## D9. Metadata without batch (nefarious2)
-draft/metadata-2 requires batch, but nefarious2 grants the metadata cap without it for before-connect (ibutsu, 2026-11-12): a METADATA SET during registration is answered with 761 `*` even when batch is refused, and if batch is not negotiated by the end of registration, the server drops what was set. `NoBatch` lets the server refuse batch. With metadata the client asks for batch too, and the server's ACK or NAK is one line (`CAPB`). At 001 without batch, the server drops the key and sends no metadata batch, since metadata is not usable; `RuleMetaBatch` and `RuleMetaCarries` apply only with batch.
+draft/metadata-2 requires batch, but nefarious2 grants the metadata cap without it for before-connect (ibutsu, 2026-11-12): a METADATA SET during registration is answered with 761 `*` whether or not batch is negotiated yet, and if batch is not negotiated by the end of registration, the server drops what was set. The metadata spec allows either negotiation order.
 
-The client counts a key acknowledged before 001 as held only if batch was negotiated (`cli.held`). `RuleHeldIsKept` (invariant): a key the client counts as held is still held by the server. `W_MetaDropped` shows the drop is reachable. The mutant `MU_TrustDropped` counts every acknowledged key as held, as Seance did before evilnet/seance#299, and breaks `RuleHeldIsKept`.
+Batch is negotiated state. With metadata the client may ask for batch (`REQB`) before or after its SET, only before CAP END, or never. The server answers each request with one line, ACK, or with `NoBatch` possibly NAK. Completing registration without batch drops the pre-registration key (`srv.pre`) and sends no metadata batch (`RuleDropWithoutBatch`, `RuleNoMetaBatchWithoutBatch`); the burst rules of D6 apply only with batch. The client counts a key acknowledged before 001 as held only if batch was ACKed by then (`RuleHeldIsKept`).
 
-The Meta configs gain the batch answer line, so their state counts change; configs without Meta keep theirs.
+Witnesses: `W_MetaDropped` (a key acknowledged, then removed), `W_MetaBeforeBatch` (761 `*` before the batch ACK, and the key kept). Mutants: `MU_TrustDropped` (the client trusts any acknowledged key, as Seance did before evilnet/seance#299) and `MU_KeepWithoutBatch` (the server keeps it).
 
 ## Open questions (to settle from traces)
 - **Q1.** METADATA aimed at a target other than `*` before registration: refused, or accepted? The spec is silent; the model reads refused (D5). **Observed (traces/):** both servers refuse it with `FAIL METADATA` (one `INVALID_TARGET`, the other `KEY_NO_PERMISSION`). The model's reading stands; settled.

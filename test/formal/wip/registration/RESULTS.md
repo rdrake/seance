@@ -1,13 +1,13 @@
-# Registration model v1 (D9): limited run results
+# Registration model v1.1 (D9, batch negotiable): limited run results
 
-Cloud, TLC `-workers 4`. All 8 configs pass, all 10 witnesses are reached, and all 14 mutants are caught by the property their docstring names. Configs without Meta keep their v0 counts.
+Cloud, TLC `-workers 4`. All 8 configs pass, all 11 witnesses are reached, and all 15 mutants are caught by the property their docstring names. Configs without Meta keep their v0 counts.
 
 ```
 TinyNick: PASS 146 / TinyPass: PASS 139 / TinyCookie: PASS 678 / TinyTimeout: PASS 129
-TinyMeta: PASS 4071 / TinyMetaNick: PASS 16975 / TinyMetaCookie: PASS 124224
-TinyMetaNoBatch: PASS 6034
-W_MetaDropped: Error: Invariant W_MetaDropped is violated.
-MU_TrustDropped: Error: Invariant RuleHeldIsKept is violated.
+TinyMeta: PASS 12084 / TinyMetaNick: PASS 87680 / TinyMetaCookie: PASS 472594
+TinyMetaNoBatch: PASS 17167
+W_MetaDropped, W_MetaBeforeBatch: violated (reached)
+MU_TrustDropped: RuleHeldIsKept violated / MU_KeepWithoutBatch: RuleDropWithoutBatch violated
 (every other witness and mutant: violated as in v0)
 ```
 

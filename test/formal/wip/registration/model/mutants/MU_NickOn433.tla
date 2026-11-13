@@ -65,16 +65,15 @@ Log(d, m) == hist' = Append(hist, [d |-> d, m |-> m])
 
 Init ==
     /\ c2s = <<>> /\ s2c = <<>> /\ hist = <<>>
-    /\ \E b \in IF NoBatch THEN BOOLEAN ELSE {TRUE} :
-         srv = [phase |-> "pre", susp |-> FALSE, nick |-> "", user |-> FALSE,
-                pass |-> "none", cookie |-> "none", meta |-> 0, out |-> <<>>,
-                batch |-> b]
+    /\ srv = [phase |-> "pre", susp |-> FALSE, nick |-> "", user |-> FALSE,
+              pass |-> "none", cookie |-> "none", meta |-> 0, out |-> <<>>,
+              batch |-> FALSE, pre |-> FALSE]
     /\ \E p \in CliPasses, v \in MetaVals :
          cli = [pass |-> p, mv |-> v, capls |-> FALSE, passSent |-> FALSE,
                 ni |-> 0, need |-> FALSE, user |-> FALSE, metaSent |-> 0,
                 endSent |-> FALSE, pings |-> <<>>, welcomed |-> FALSE,
                 nick |-> "", closed |-> FALSE,
-                batch |-> FALSE, acked |-> FALSE, held |-> FALSE]
+                reqB |-> FALSE, batch |-> FALSE, acked |-> FALSE, held |-> FALSE]
 
 PassOK == PassReq = "none" \/ srv.pass = "right"
 
@@ -103,7 +102,8 @@ Burst(n) ==
 SWelcome ==
     /\ Ready /\ PassOK
     /\ srv' = [srv EXCEPT !.phase = "burst", !.out = Burst(srv.nick),
-                          !.meta = IF srv.batch THEN @ ELSE 0]
+                          !.meta = IF srv.batch THEN @ ELSE 0,
+                          !.pre = srv.pre /\ srv.batch]
     /\ UNCHANGED <<c2s, s2c, cli, hist>>
 
 \* MC:32: a wrong or missing password: 464 SHOULD, then ERROR MAY; at least
@@ -142,11 +142,16 @@ SRecv ==
     /\ c2s' = Tail(c2s)
     /\ LET m == Head(c2s)
            pre == srv.phase = "pre"
-       \* With metadata the client also asks for batch; the answer (ACK or
-       \* NAK, D9) is one line.
        IN CASE m.t = "CAPLS" ->
-                 s2c' = (IF Meta THEN Append(s2c, M("CAPB", srv.batch)) ELSE s2c)
-                 /\ srv' = [srv EXCEPT !.susp = pre]
+                 s2c' = s2c /\ srv' = [srv EXCEPT !.susp = pre]
+            \* D9: CAP REQ batch, at any point of registration, is ACKed (or,
+            \* with NoBatch, may be NAKed): one line, CAPB TRUE or FALSE.
+            [] m.t = "REQB" ->
+                 IF pre
+                 THEN \E ok \in IF NoBatch THEN BOOLEAN ELSE {TRUE} :
+                        /\ s2c' = Append(s2c, M("CAPB", ok))
+                        /\ srv' = [srv EXCEPT !.batch = ok]
+                 ELSE s2c' = s2c /\ srv' = srv
             [] m.t = "CAPEND" ->
                  s2c' = s2c /\ srv' = [srv EXCEPT !.susp = FALSE]
             \* MC:30: only the last PASS counts; after registration, 462 (MA:941).
@@ -173,7 +178,7 @@ SRecv ==
             \* value is stored but no longer reaches the burst.
             [] m.t = "METASET" ->
                  IF pre /\ Meta /\ m.a = "*"
-                 THEN s2c' = Append(s2c, M("761", "*")) /\ srv' = [srv EXCEPT !.meta = 1]
+                 THEN s2c' = Append(s2c, M("761", "*")) /\ srv' = [srv EXCEPT !.meta = 1, !.pre = TRUE]
                  ELSE IF pre
                  THEN s2c' = Append(s2c, M("FAIL", m.a)) /\ srv' = srv
                  ELSE s2c' = Append(s2c, M("761", srv.nick)) /\ srv' = [srv EXCEPT !.meta = 1]
@@ -226,6 +231,14 @@ CMeta ==
     /\ cli' = [cli EXCEPT !.metaSent = @ + 1]
     /\ UNCHANGED <<s2c, srv>>
 
+\* D9: with metadata the client asks for batch, before or after its SET,
+\* and only before CAP END; it may also never ask.
+CReqBatch ==
+    /\ Live /\ Meta /\ cli.capls /\ ~cli.reqB /\ ~cli.endSent
+    /\ CSend(M("REQB", ""))
+    /\ cli' = [cli EXCEPT !.reqB = TRUE]
+    /\ UNCHANGED <<s2c, srv>>
+
 \* CAP END once NICK and USER (and PASS, if held) are out (MI:99-111).
 CEnd ==
     /\ Live /\ cli.capls /\ cli.ni >= 1 /\ cli.user /\ ~cli.endSent
@@ -262,13 +275,13 @@ CRecv ==
 
 Next ==
     \/ SWelcome \/ SRefuse \/ SBurst \/ SPing \/ STimeout \/ SRecv
-    \/ CCapLs \/ CPass \/ CNick \/ CUser \/ CMeta \/ CEnd \/ CPong \/ CRecv
+    \/ CCapLs \/ CPass \/ CNick \/ CUser \/ CMeta \/ CReqBatch \/ CEnd \/ CPong \/ CRecv
 
 Fair ==
     /\ WF_vars(SWelcome) /\ WF_vars(SRefuse) /\ WF_vars(SBurst) /\ WF_vars(SPing)
     /\ WF_vars(SRecv)
     /\ WF_vars(CCapLs) /\ WF_vars(CPass) /\ WF_vars(CNick) /\ WF_vars(CUser)
-    /\ WF_vars(CMeta) /\ WF_vars(CEnd) /\ WF_vars(CPong) /\ WF_vars(CRecv)
+    /\ WF_vars(CMeta) /\ WF_vars(CReqBatch) /\ WF_vars(CEnd) /\ WF_vars(CPong) /\ WF_vars(CRecv)
 
 Spec == Init /\ [][Next]_vars /\ Fair
 
@@ -284,7 +297,7 @@ TypeOK ==
     /\ srv.phase \in {"pre", "burst", "reg", "refused", "closed"}
     /\ srv.cookie \in {"none", "sent", "ok"} /\ srv.meta \in {0, 1}
     /\ cli.ni \in 0..Len(NickList) /\ cli.metaSent \in 0..1
-    /\ srv.batch \in BOOLEAN /\ cli.batch \in BOOLEAN
+    /\ srv.batch \in BOOLEAN /\ srv.pre \in BOOLEAN /\ cli.reqB \in BOOLEAN /\ cli.batch \in BOOLEAN
     /\ cli.acked \in BOOLEAN /\ cli.held \in BOOLEAN
 
 \* MI:103 (MUST, client): no PASS after both a NICK and a USER.
@@ -322,9 +335,14 @@ RuleMetaCarries ==
      /\ \E i \in Pos("S", "761") : hist[i].m.a = "*" /\ i < First("S", "001"))
     => \E k \in Pos("S", "KV") : First("S", "001") < k /\ k < First("S", "376")
 
+\* D9 (server, nefarious2): registration completed without batch holds
+\* nothing set before it, and sends no metadata batch.
+RuleDropWithoutBatch == (srv.phase \in {"burst", "reg"} /\ ~srv.batch) => ~srv.pre
+RuleNoMetaBatchWithoutBatch == ~srv.batch => ~Seen("S", "BATCH+")
+
 \* D9 (client): after 001 the client counts a key set before registration
 \* as held only if the server still holds it.
-RuleHeldIsKept == cli.held => srv.meta = 1
+RuleHeldIsKept == cli.held => srv.pre
 
 \* MC:53 (server): a NICK answered with 433 does not change the nick.
 RuleNickIgnoredOn433 ==
@@ -369,5 +387,7 @@ W_MetaAfterEnd == ~(\E i \in Pos("C", "METASET") : Seen("C", "CAPEND") /\ First(
 W_Timeout      == ~(Seen("S", "ERROR") /\ ~Seen("S", "001") /\ ~Seen("S", "464"))
 W_PassRefused  == ~Seen("S", "464")
 W_Refused464Only == ~(srv.phase = "refused")
-W_MetaDropped  == ~(cli.acked /\ ~srv.batch /\ cli.welcomed)
+W_MetaDropped  == ~(cli.acked /\ cli.welcomed /\ ~srv.pre)
+W_MetaBeforeBatch == ~(cli.held /\ \E i \in Pos("S", "761"), j \in Pos("S", "CAPB") :
+                                    i < j /\ hist[j].m.a = TRUE)
 =============================================================================

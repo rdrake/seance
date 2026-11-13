@@ -45,7 +45,8 @@ All of them use `CHECK_DEADLOCK FALSE`. The invariants are `TypeOK` and the `Rul
 | `W_Timeout` | TinyTimeout | ERROR with no 001 and no 464 |
 | `W_PassRefused` | TinyPass | 464 |
 | `W_Refused464Only` | TinyPass | refused with 464 alone, connection left open |
-| `W_MetaDropped` | TinyMetaNoBatch | a key acknowledged before 001, then dropped because batch was refused (D9) |
+| `W_MetaDropped` | TinyMetaNoBatch | a key acknowledged before 001, then removed because batch was not negotiated (D9) |
+| `W_MetaBeforeBatch` | TinyMeta | 761 `*` before the batch ACK, and the key kept (D9) |
 
 ## Mutants (expected results, not yet run)
 
@@ -65,6 +66,7 @@ Each line is: mutant (base config): what it changes → the property expected to
 - `MU_NoCookieGate` (TinyCookie): 001 before the PONG → `RuleCookieGate`
 - `MU_SpeakAfterError` (TinyTimeout): server answers after ERROR → `RuleNothingAfterError`
 - `MU_TrustDropped` (TinyMetaNoBatch): client counts a key as held without batch → `RuleHeldIsKept`
+- `MU_KeepWithoutBatch` (TinyMetaNoBatch): server keeps a pre-registration key without batch → `RuleDropWithoutBatch`
 
 ## Commands
 
@@ -74,7 +76,7 @@ Limited:
 
     for C in TinyNick TinyPass TinyCookie TinyMeta TinyTimeout TinyMetaNick TinyMetaCookie TinyMetaNoBatch \
              W_433Then001 W_EndThen433 W_CookieThen001 W_MetaKV W_EmptyBatch W_MetaAfterEnd \
-             W_Timeout W_PassRefused W_Refused464Only W_MetaDropped; do
+             W_Timeout W_PassRefused W_Refused464Only W_MetaDropped W_MetaBeforeBatch; do
       java -XX:+UseParallelGC -cp $TLA tlc2.TLC -workers 8 -config $C.cfg SpecReg.tla
     done
 
