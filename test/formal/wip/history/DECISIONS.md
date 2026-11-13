@@ -1373,3 +1373,13 @@ Runs (cloud, limited: Labels 2, Texts 2, MaxReq 2):
 - **DM_NoSpent**, Seance before #297, breaks ResolvedByResponse on V4Spent, as expected.
 
 **Unchanged results.** Every earlier config sets both switches FALSE. `spent` stays empty unless a note carries its own label, and only `SpentLabel` sends one. Base and LossyTimeout are re-run for equal distinct-state counts.
+
+**After review (v2.4.1).**
+- **What `LabelledEchoes` models.** It models the client after it has learned that the server labels echoes. Seance learns this from the first labelled echo that matches a pending copy, and forgets it on disconnect. Before that point it lets any unlabeled same-text echo settle a copy, which is `Fallback` with `LabelledEchoes` FALSE; Base, BaseFallback and the W_ configs above already cover that client. The spend rule is checked only for the well-formed case: a 301 for the request's own target. Seance also checks the nick; the model's server never sends another target's 301.
+- **`ConfirmedByOwnOrTwin`, tightened.** A twin now confirms a copy only through its unaltered echo, never through a delivered copy (role `deliv`) or an altered text.
+- **Two witnesses for the content fallback's limits.** Both are failures #297 shares, because the fallback matches by content:
+  - **W_SpentSelfDeliv** (SelfMsg). The delivered copy of a message to ourselves looks like an echo, so it settles a spent same-text copy before that copy's own echo arrives. NoCrossFromConfirmedDeliv fails, at 239,963 states.
+  - **W_SpentModify** (Modify). An echo the server altered to another copy's text settles that copy. ConfirmedByOwnOrTwin fails, at 327,087 states.
+
+  Neither limit arises once the server labels its echoes as LR requires.
+- V4Spent still passes with the tightened property: 348,377 states.

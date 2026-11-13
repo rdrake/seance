@@ -6,3 +6,7 @@
   DM_NoSpent V4Spent 27516 distinct states Error: Temporal property ResolvedByResponse was violated.
   Delivery Base 1285641 distinct states pass
   Delivery LossyTimeout 1486609 distinct states pass
+# Delivery v2.4.1 (D40 after review), cloud, limited; 2026-11-13T01:40:45Z
+  Delivery V4Spent 348377 distinct states pass
+  Delivery W_SpentSelfDeliv 239963 distinct states Error: Invariant NoCrossFromConfirmedDeliv is violated.
+  Delivery W_SpentModify 327087 distinct states Error: Invariant ConfirmedByOwnOrTwin is violated.
