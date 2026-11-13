@@ -301,6 +301,13 @@ def check(path):
                     k = "malformed"
             if k == "numeric" and cmd == "301":
                 k = "away"
+            if k in ("fail",) + FEEDBACK:
+                # A standard reply has a command, a code and a description,
+                # and its command names the one it answers ("*": none).
+                if len(params) < 3:
+                    return "malformed", []
+                if params[0].upper() not in (sent_cmd, "*"):
+                    return "othercmd", []
             if k in ("err", "fail"):
                 # What an error is about: the params between its recipient
                 # (a numeric) or its command and code (a FAIL) and its
