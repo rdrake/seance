@@ -314,6 +314,10 @@ CASES = [
     ("a bare WARN to a PING", "@label=L PING :x", ["@label=L :s WARN"], True, "case", True),
     ("a FAIL for JOIN to a PING",
      "@label=L PING :x", ["@label=L :s FAIL JOIN NO_SUCH_CHANNEL bob :Missing"], True, "case", True),
+    ("a 461 with no description",
+     "@label=L PRIVMSG bob :hi", ["@label=L :s 461 me PRIVMSG"], True, "case", True),
+    ("an unknown error numeric with only a description",
+     "@label=L PRIVMSG bob :hi", ["@label=L :s 499 me :Nope"], True, "case", True),
     # accepted shapes
     ("a FAIL for no command in particular",
      "@label=L PRIVMSG bob :hi", ["@label=L :s FAIL * RATE_LIMITED :Slow down"], True, "case", False),

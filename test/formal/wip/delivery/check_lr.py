@@ -88,10 +88,15 @@ _servers = set()
 # and PONG): their bare source is a server.
 SERVER_ONLY = ("ACK", "FAIL", "WARN", "NOTE", "PING", "PONG")
 # How many params name subjects after an error numeric's recipient; the
-# rest is the description (Modern IRC).  Others: every param but the last.
+# rest is the description (Modern IRC, and nefarious2's 485-489 and 716).
+# Any other error: at least one subject, then the description.
 ERR_SUBJECTS = {"401": 1, "402": 1, "403": 1, "404": 1, "405": 1, "406": 1, "407": 1,
-                "411": 0, "412": 0, "413": 1, "414": 1, "421": 1, "442": 1, "476": 1,
-                "477": 1, "486": 1, "489": 1, "492": 1}
+                "411": 0, "412": 0, "413": 1, "414": 1, "421": 1, "431": 0, "432": 1,
+                "433": 1, "436": 1, "437": 1, "441": 2, "442": 1, "443": 2, "451": 0,
+                "461": 1, "462": 0, "464": 0, "465": 0, "471": 1, "473": 1, "474": 1,
+                "475": 1, "476": 1, "477": 1, "481": 0, "482": 1, "483": 0, "485": 1,
+                "486": 1, "487": 1, "489": 1, "491": 0, "492": 1, "501": 0, "502": 0,
+                "716": 1}
 
 
 def set_servers(meta, rows):
@@ -315,7 +320,7 @@ def check(path):
                 # Its position says which param is the description, not
                 # the wire colon: a one-word last param may come without it.
                 if k == "err":
-                    n = ERR_SUBJECTS.get(cmd, max(len(params) - 2, 0))
+                    n = ERR_SUBJECTS.get(cmd, max(len(params) - 2, 1))
                     if len(params) < n + 2:
                         # recipient, subjects and description, all required
                         return "malformed", []
