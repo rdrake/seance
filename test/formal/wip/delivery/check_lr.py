@@ -442,8 +442,9 @@ def check(path):
 
                 # An error about nothing in particular (412, a FAIL with no
                 # context) answers the whole command, but only when the
-                # response is errors alone.
-                wide = bool(kinds) and all(k in ("err", "fail") and not ps for k, ps in its)
+                # response is errors alone, beside any feedback.
+                outcome = [(k, ps) for k, ps in its if k not in FEEDBACK]
+                wide = bool(outcome) and all(k in ("err", "fail") and not ps for k, ps in outcome)
                 for t in targets:
                     covered = drop or wide or any(
                         (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in names(k, ps))
@@ -466,6 +467,8 @@ def check(path):
                 bad = [k for k in kinds if k not in ("ack", "away", "err", "fail", "echo") + FEEDBACK]
                 if bad:
                     fails.append(f"Settles: {bad[0]} does not settle the message")
+                elif kinds and all(k in FEEDBACK for k in kinds):
+                    fails.append("Settles: WARN or NOTE alone does not settle the message")
                 elif "away" in kinds:
                     notes.append("AwayAccepts: 301 answers the message")
             if r["name"] in SELF_SCENES:
