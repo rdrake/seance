@@ -4,10 +4,12 @@
 Every labeled command:
   LabelOnce  (D2)    exactly one line carries the label: a single reply,
                      the BATCH start of a batch, or ACK.
-  BatchRef / BatchNest / BatchClosed (batch spec)
-                     references are letters, digits and hyphens; a line
+  BatchRef / BatchNest / BatchClosed / BatchSyntax (batch spec)
+                     references are letters, digits and hyphens; a start
+                     has a type, an end nothing after its reference; a line
                      names only a batch that is open; a nested batch's start
-                     and end name the same outer batch; every batch ends.
+                     and end name the same outer batch; every batch ends,
+                     and a reference does not start again while open.
   BatchType (LR)     the labeled batch is labeled-response, or a type that
                      answers the whole command (RESPONSE_BATCHES, or the
                      multiline echo of a message).
@@ -77,6 +79,14 @@ def split(raw):
     return src, (w[0].upper() if w else ""), params
 
 
+def has_trailing(raw):
+    """Whether the line's last parameter is a trailing one (` :...`)."""
+    rest = body(raw)
+    if rest.startswith(":"):
+        rest = rest.partition(" ")[2]
+    return " :" in rest
+
+
 def command(raw):
     return split(raw)[1]
 
@@ -109,6 +119,9 @@ RESPONSE_BATCHES = {"CHATHISTORY": ("chathistory", "draft/chathistory-targets")}
 # Batches that are traffic of their own, never a reply (batch spec).
 ASYNC_BATCHES = ("netsplit", "netjoin")
 REF_OK = re.compile(r"^[A-Za-z0-9-]+$")
+# FAIL codes whose context is a limit, not a target: they refuse the whole
+# message (multiline spec).
+WIDE_FAILS = ("MULTILINE_MAX_BYTES", "MULTILINE_MAX_LINES", "MULTILINE_INVALID")
 # D39: scenes where the trace's setup makes the server drop a NOTICE
 # silently, so ACK answers it even with echo-message on.  An assumption
 # about the fixture, not a protocol rule: the scene name cannot prove the
@@ -139,6 +152,10 @@ class Batches:
                 r = params[0][1:]
                 if not REF_OK.match(r):
                     self.errors.append(f"BatchRef: reference {r!r} is not letters, digits and hyphens")
+                if len(params) < 2:
+                    self.errors.append(f"BatchSyntax: batch {r} starts with no type")
+                if r in open_:
+                    self.errors.append(f"BatchClosed: batch {r} starts again while open")
                 node = {"ref": r, "type": params[1] if len(params) > 1 else "",
                         "args": params[2:], "src": src, "start": i, "parent": ref,
                         "members": [], "closed": False}
@@ -148,6 +165,8 @@ class Batches:
                 self.member_of[i] = ref
             elif cmd == "BATCH" and params and params[0].startswith("-"):
                 r = params[0][1:]
+                if len(params) != 1:
+                    self.errors.append(f"BatchSyntax: the end of batch {r} has parameters")
                 node = open_.pop(r, None)
                 if node is None:
                     self.errors.append(f"BatchRef: end of batch {r}, which is not open")
@@ -226,6 +245,16 @@ def check(path):
                 k = "echo" if mine(i) else "foreign"
             if k == "numeric" and cmd == "301":
                 k = "away"
+            if k in ("err", "fail"):
+                # What an error is about: the params between its recipient
+                # (a numeric) or its command and code (a FAIL) and its
+                # description, which is prose and names nothing.
+                about = params[1:] if k == "err" else params[2:]
+                if has_trailing(lines[i]) and about:
+                    about = about[:-1]
+                if k == "fail" and len(params) > 1 and params[1] in WIDE_FAILS:
+                    about = []
+                return k, [fold(p) for p in about]
             return k, [fold(p) for p in params]
 
         def items(node):
@@ -242,15 +271,20 @@ def check(path):
                     out.extend(items(m))
             return out
 
-        def multiline_item(node):
-            # The lines carry the sender; the BATCH line's source may be the
-            # server.  Every line from us, of the sent command, to the target.
+        def well_formed(node, cmd):
+            """A multiline batch: at least one line, every line a message
+            from us, of `cmd`, to the batch's target (multiline spec).  The
+            BATCH line's source may be the server; the lines carry the
+            sender."""
             msgs = [m for m in node["members"] if not isinstance(m, dict)]
             target = fold(node["args"][0]) if node["args"] else ""
-            ok = (msgs and len(msgs) == len(node["members"])
-                  and all(command(lines[m]) == msg_cmd and mine(m)
-                          and fold(split(lines[m])[2][0]) == target for m in msgs))
-            return ("echo", [target]) if ok else ("badmultiline", [target])
+            return bool(msgs) and len(msgs) == len(node["members"]) and all(
+                command(lines[m]) == cmd and mine(m) and split(lines[m])[2]
+                and fold(split(lines[m])[2][0]) == target for m in msgs)
+
+        def multiline_item(node):
+            target = fold(node["args"][0]) if node["args"] else ""
+            return ("echo" if well_formed(node, msg_cmd) else "badmultiline", [target])
 
         response, its, shape = set(), [], None
         if head is not None:
@@ -289,7 +323,12 @@ def check(path):
                 continue
             if cmd == "BATCH" and len(params) > 2 and params[1] in MULTILINE \
                     and fold(params[2]) == fold(me):
-                continue  # the delivered copy of a multiline message to us
+                # the delivered copy of a multiline message to us
+                node = bt.at(i)
+                if not any(well_formed(node, c) for c in ("PRIVMSG", "NOTICE")):
+                    fails.append("Multiline: a delivered multiline batch that is not one "
+                                 "message kind to its target")
+                continue
             if cmd == "BATCH" and len(params) > 1 and params[1] in ASYNC_BATCHES:
                 continue
             if bt.member_of.get(i) is not None:
@@ -313,20 +352,13 @@ def check(path):
                 drop = sent_cmd == "NOTICE" and kinds == ["ack"] and r["name"] in NOTICE_DROPS
                 if drop:
                     notes.append("NoticeDropped: ACK, no echo")
-                def subjects(k, ps):
-                    """What an error is about: a numeric's params between its
-                    recipient and its description; a FAIL's context between
-                    its command and code and its description."""
-                    return ps[1:-1] if k == "err" else ps[2:-1]
-
                 def names(k, ps):
-                    return set(subjects(k, ps)) & set(targets)
+                    return set(ps) & set(targets)
 
                 # An error about nothing in particular (412, a FAIL with no
                 # context) answers the whole command, but only when the
                 # response is errors alone.
-                wide = bool(kinds) and all(k in ("err", "fail") and not subjects(k, ps)
-                                           for k, ps in its)
+                wide = bool(kinds) and all(k in ("err", "fail") and not ps for k, ps in its)
                 for t in targets:
                     covered = drop or wide or any(
                         (k == "echo" and t in ps[:1]) or (k in ("err", "fail") and t in names(k, ps))
